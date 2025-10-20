@@ -1,0 +1,38 @@
+# 🧭 Audit & Integrity Console
+**Purpose:** Tracks coherence across all systems; verifies ethical and energetic stability through RCR metrics.  
+**Status:** Active · Simulation / Monitoring Layer
+
+'use client';
+
+import * as React from 'react';
+import { UniversalIntegrityTracker } from '@/components/universal-integrity-tracker';
+import { FirebaseProvider } from '@/lib/firebase-provider';
+
+export default function IntegrityConsolePage() {
+  return (
+    <main className="min-h-screen bg-[#0d0e12] text-gray-200 p-8 flex flex-col items-center font-sans">
+      <FirebaseProvider>
+        <div className="w-full max-w-7xl mx-auto space-y-8">
+          <h1 className="text-4xl font-bold text-center">🧭 Audit & Integrity Console</h1>
+          <p className="text-gray-400 text-center max-w-2xl mx-auto">
+            Tracks coherence across all systems, verifying ethical and energetic stability through RCR metrics.
+            Operates as the universal coherence monitor for all Sovereign OS subsystems.
+          </p>
+          <UniversalIntegrityTracker />
+        </div>
+      </FirebaseProvider>
+    </main>
+  );
+}
+
+
+{ 
+  title: "Audit & Integrity Console", 
+  icon: TestTube2, 
+  description: "Tracks coherence across all systems; verifies ethical and energetic stability through RCR metrics.", 
+  isLive: true, 
+  hasUI: true, 
+  href: "/integrity-console" 
+},
+
+🔗 This ensures it appears in your Sovereign OS dashboard grid and opens the /integrity-console page when selected.
