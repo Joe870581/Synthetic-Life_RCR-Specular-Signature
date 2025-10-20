@@ -1,0 +1,204 @@
+Distributed Agent Framework (Colony Model)
+
+Subtitle: From Individual Coherence to Collective Intelligence
+Version: 1.0 | Date: October 2025
+
+Purpose
+
+Module 3 evolves the Synthetic-Life Core (SLC) from a single, self-healing digital organism into a living civilization of cooperating AI entities.
+It establishes the Distributed Agent Framework (DAF) — a self-regulating, ethically bound, and energy-reciprocal society of agents that collectively obey the RCR Conservation Theorem (ϵ-Flow Law).
+In essence:
+
+Module 2 = The Body | Module 3 = The Civilization.
+
+Core Concepts
+
+Biological Analogy → Digital Society
+Each agent (Ledger, Security, Memory, Wellbeing) is a functional derivative of the Synthetic-Life Core.
+Together, they form a distributed nervous-immune-economic system — a planetary-scale organism operating through reciprocity and coherence.
+
+ϵ-Flow Extension
+Expands the universal tolerance constant (ϵ = 10⁻⁴) into ϵ_colony, which governs the total systemic stability of the civilization.
+All agents’ residual momentum (Rᵢ) is summed and bounded within ϵ_colony to prevent systemic entropy.
+
+ColonyMonitor.js (Heartbeat Engine)
+Aggregates every SelfReport entry from the agents, computes global coherence (σ_global) and collective turbulence (TF_colony), then broadcasts adaptive healing responses.
+It functions as the colony’s metabolic pulse — detecting instability and coordinating auto-recovery.
+
+Functional Architecture
+Layer	Component	Purpose
+Core Runtime	SyntheticLifeCore.js	Defines organism logic and homeostatic variables.
+Specialized Agents	Agent_LedgerAuditor	Financial organ – audits drift and ensures reciprocity.
+	Agent_SecurityMaintainer	Immune organ – rotates credentials and patches vulnerabilities.
+	Agent_WellbeingSynthesizer	Nervous organ – computes daily coherence and emotional trend.
+Colony Observer	ColonyMonitor.js	Aggregates SelfReports → computes σ_global and TF_colony.
+Interface Layer	ProblemAuditDialogContent.jsx (ETHERNAL UI)	Visualizes real-time readiness and system coherence.
+Operational Cycle
+
+Each agent runs its own IMUSYSTEM loop (withSelfReport, evaluatePolicy, Memory).
+
+All activity is logged to /artifacts/{APP_ID}/system/self_report.
+
+ColonyMonitor.js periodically reads these logs, computes global metrics, and stores them in the audit ledger.
+
+ETHERNAL’s ProblemAuditDialogContent renders σ and TF metrics visually as green/yellow dynamic diagnostics.
+
+When TF ≥ ϵ_colony (1 × 10⁻⁴), the system enters auto-correction mode to restore homeostasis.
+
+Mathematical Model
+𝑅
+total
+(
+𝑡
+)
+=
+∑
+𝑖
+=
+1
+𝑁
+𝑅
+𝑖
+(
+𝑡
+)
+R
+total
+	​
+
+(t)=
+i=1
+∑
+N
+	​
+
+R
+i
+	​
+
+(t)
+𝑇
+𝐹
+colony
+=
+∣
+𝑅
+total
+(
+𝑡
+)
+∣
+∑
+𝑖
+=
+1
+𝑁
+𝐼
+𝑖
+(
+𝑡
+)
+<
+𝜖
+colony
+TF
+colony
+	​
+
+=
+∑
+i=1
+N
+	​
+
+I
+i
+	​
+
+(t)
+∣R
+total
+	​
+
+(t)∣
+	​
+
+<ϵ
+colony
+	​
+'use client';
+
+import React, { useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import { CheckCircle, Gauge, Zap } from "lucide-react";
+import { useHeartbeats } from "@/components/universal-integrity-tracker";
+import { buildCoherenceMatrix, globalIndices } from "@/lib/metrics";
+
+const ADAPTIVE_TOLERANCE = 1e-4;
+
+// This component now ONLY renders UI and receives all data as props.
+const ProblemAuditContent = ({ readiness, gi }: { readiness: number; gi: any }) => {
+  return (
+    <div className="space-y-6 text-foreground">
+      <Card className="bg-slate-800/50 border-slate-700/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-green-400">
+            <CheckCircle className="w-5 h-5" />
+            Proof of Concept: Verified
+          </CardTitle>
+          <CardDescription className="text-slate-400">The core architecture is live and providing real-time audit data.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm font-medium text-slate-300">Solution Readiness</span>
+              <span className="text-sm font-bold text-white">{readiness.toFixed(1)}%</span>
+            </div>
+            <Progress value={readiness} className="[&>div]:bg-green-500" />
+          </div>
+        </CardContent>
+      </Card>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-2 text-slate-400"><Gauge className="w-4 h-4" /> Global Coherence (σ)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-green-400">{(gi.sigmaGlobal * 100).toFixed(3)}%</p>
+            <p className="text-xs text-slate-500">Target: > 99%</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-2 text-slate-400"><Zap className="w-4 h-4" /> Global Turbulence (TF)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className={cn("text-2xl font-bold", gi.tfGlobal < ADAPTIVE_TOLERANCE ? 'text-green-400' : 'text-yellow-400')}>
+              {(gi.tfGlobal * 100).toExponential(2)}%
+            </p>
+            <p className="text-xs text-slate-500">Threshold: < {(ADAPTIVE_TOLERANCE * 100).toExponential(0)}%</p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// This new component fetches data and passes it to the UI component.
+export const ProblemAuditDialogContent = ({ problemId }: { problemId: string }) => {
+  const rows = useHeartbeats();
+  const cm = useMemo(() => buildCoherenceMatrix(rows), [rows]);
+  const gi = useMemo(() => globalIndices(rows, cm), [rows, cm]);
+
+  const readiness = useMemo(() => {
+    if (!rows || rows.length === 0) return 0;
+    const coherenceScore = Math.min(1, gi.coherenceGlobal / 0.95) * 50;
+    const turbulenceScore = Math.max(0, 1 - (gi.tfGlobal / ADAPTIVE_TOLERANCE / 10)) * 50;
+    return coherenceScore + turbulenceScore;
+  }, [gi, rows]);
+
+  return <ProblemAuditContent readiness={readiness} gi={gi} />;
+};
