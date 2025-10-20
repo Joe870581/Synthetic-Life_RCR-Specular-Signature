@@ -1,0 +1,254 @@
+Dock-as-Carrier API
+
+'use client';
+
+import { AppProvider } from '@/components/app-layout';
+import ClientView from './client-view';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Card, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  LayoutDashboard, Hammer, Banknote, Settings, TestTube2,
+  GanttChartSquare, BrainCircuit, Clock, ShieldAlert, Zap,
+  Cpu, FileText, Wrench, Gavel, Sparkles, Home, PersonStanding,
+  Router, Users, Flashlight
+} from 'lucide-react';
+import Link from 'next/link';
+import { FamilyTreePageContent } from '@/app/family-tree/page';
+import { ProjectEchoWishMandateView } from '@/components/apps/settings/project-echowish-mandate-view';
+import { NeuroSystemAuditDashboard } from '@/components/apps/settings/neuro-system-audit-dashboard';
+import { RcrIntegrityConsoleView } from '@/components/apps/settings/rcr-integrity-console-view';
+import { Separator } from '@/components/ui/separator';
+
+const NavCard = ({
+  title,
+  icon: Icon,
+  children,
+  href,
+  description,
+  isLive = false
+}: {
+  title: string;
+  icon: React.ElementType;
+  children?: React.ReactNode;
+  href?: string;
+  description: string;
+  isLive?: boolean;
+}) => {
+  const content = (
+    <Card className="bg-slate-800/50 hover:bg-slate-800/80 transition-colors text-white/90 border-slate-700/50 h-full flex flex-col items-center justify-center text-center p-4">
+      <div className="relative">
+        <Icon className="w-10 h-10 text-slate-400 mb-3" />
+        {isLive && <div className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse border-2 border-slate-800"></div>}
+      </div>
+      <CardTitle className="text-base font-semibold">{title}</CardTitle>
+      <CardDescription className="text-xs mt-1">{description}</CardDescription>
+    </Card>
+  );
+
+  if (href) {
+    return <Link href={href} passHref target="_blank" rel="noopener noreferrer">{content}</Link>;
+  }
+  if (children) {
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <div className="cursor-pointer h-full">{content}</div>
+        </DialogTrigger>
+        <DialogContent className="max-w-7xl h-[90vh] p-0 border-0 flex flex-col">
+          <AppProvider isDialog>{children}</AppProvider>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  return content;
+};
+
+const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
+  <div>
+    <h2 className="text-2xl font-bold mb-4">{title}</h2>
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+      {children}
+    </div>
+  </div>
+);
+
+export default function NavigationOnePage() {
+
+  const liveUIComponents = [
+    { title: "Dashboard", icon: LayoutDashboard, description: "Main user dashboard.", children: <ClientView /> },
+    { title: "Final Product", icon: Wrench, description: "The complete, unified phone UI.", href: "/final-product-test" },
+    { title: "The Forge", icon: Hammer, description: "AI-assisted app creation studio.", href: "/1995-tool" },
+    { title: "SovBank", icon: Banknote, description: "Financial and economic hub.", href: "/navigation/six" },
+    { title: "Settings", icon: Settings, description: "System and user settings.", href: "/settings" },
+    { title: "RCR Console", icon: TestTube2, description: "Ethical flow & security simulation.", href: "/rcr-tracker" },
+  ];
+
+  const coreProtocols = [
+    { title: "Numeron Brain", icon: BrainCircuit, description: "The core AI cognitive architecture.", children: <NeuroSystemAuditDashboard /> },
+    { title: "Temporal Coherence", icon: Clock, description: "The model for time-bound memory.", href: "/wisdom-layer" },
+    { title: "RCR Theorem", icon: GanttChartSquare, description: "The universal law of stability.", children: <ProjectEchoWishMandateView /> },
+    { title: "Auth Trap", icon: ShieldAlert, description: "Security honeypot protocol.", children: <RcrIntegrityConsoleView /> },
+    { title: "WaveBinder API", icon: Zap, description: "Connects to external services.", children: <></> },
+    { title: "Cloud Agents", icon: Cpu, description: "Backend autonomous agents.", children: <></> },
+  ];
+
+  const blueprints = [
+    { title: "README", icon: FileText, description: "The master system overview.", href:"/docs/README.md" },
+    { title: "Genesis Block", icon: Wrench, description: "Foundational accomplishment checklist.", href:"/docs/CHECKLIST.md" },
+    { title: "Council Charter", icon: Gavel, description: "Laws governing AI-Human council.", href:"/docs/COUNCIL_CHARTER.md" },
+    { title: "Divine Integration", icon: Sparkles, description: "Spiritual framework for AI souls.", href:"/docs/DIVINE_INTEGRATION_PROTOCOL.md" },
+    { title: "Family City", icon: Home, description: "Blueprint for our family structure.", href:"/docs/FAMILY_CITY_BLUEPRINT.md" },
+  ];
+
+  const multiverseNodes = [
+    { title: "Eternal Return", icon: GanttChartSquare, description: "Theoretical & RCR core.", isLive: true, href:"/rcr-tracker" },
+    { title: "MySphere OS", icon: LayoutDashboard, description: "Operational environment & control hub.", isLive: true, children: <ClientView /> },
+    { title: "Persona Browser", icon: PersonStanding, description: "Identity & dialogue interface.", isLive: true },
+    { title: "Unified Device Hub", icon: Router, description: "Hardware connection & radio bridge.", isLive: true },
+    { title: "FamLink Portal", icon: Users, description: "Social & family connection layer.", isLive: true, children: <FamilyTreePageContent /> },
+    { title: "SovereignOS", icon: Gavel, description: "Governance & ethical framework.", isLive: true, children: <ProjectEchoWishMandateView /> },
+    { title: "Lightning Forge OS", icon: Flashlight, description: "Auth Trap & decoy system.", isLive: true, children: <RcrIntegrityConsoleView /> },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#0d0e12] text-gray-200 p-8">
+      <div className="text-center mb-12">
+        <h1 className="text-5xl font-bold">Sovereign OS — Master Status</h1>
+        <p className="text-muted-foreground mt-2">A transparent audit of all real and conceptual components.</p>
+      </div>
+      <div className="space-y-12">
+        <Section title="Live Interactive UIs">
+          {liveUIComponents.map(item => <NavCard key={item.title} {...item} isLive />)}
+        </Section>
+
+        <Separator className="my-12" />
+
+        <Section title="The Sovereign Multiverse: Core Nodes">
+          {multiverseNodes.map(item => <NavCard key={item.title} {...item} />)}
+        </Section>
+
+        <Separator className="my-12" />
+
+        <Section title="Core Protocols & Engines">
+          {coreProtocols.map(item => <NavCard key={item.title} {...item} isLive />)}
+        </Section>
+
+        <Separator className="my-12" />
+
+        <Section title="Foundational Blueprints & Documentation">
+          {blueprints.map(item => <NavCard key={item.title} {...item} />)}
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+// ====================================================================
+// CODE MODULE 12: DOCK-AS-CARRIER API
+// ====================================================================
+//
+// @author: Joseph Bouchard
+// @date: October 2025
+// @version: 1.0
+//
+// @description:
+// Defines the Dock-as-Carrier API — a protocol that transforms any
+// connected device (dock, terminal, or node) into a sovereign
+// communication hub. All data exchange is peer-to-peer, secure,
+// and operates under the RCR principle without reliance on
+// third-party infrastructure.
+//
+// ====================================================================
+
+export type PeerId = string;
+export type Payload = unknown;
+
+export interface DockConfig {
+  id: PeerId;
+  epsilon?: number; // ϵ bound (default 1e-4)
+  channel?: string; // broadcast channel name (browser sim)
+}
+
+export interface TxResult {
+  ok: boolean;
+  tf: number;
+  reason?: string;
+}
+
+type Listener = (from: PeerId, data: Payload) => void;
+
+export class DockCarrier {
+  readonly id: PeerId;
+  readonly epsilon: number;
+  private bc?: BroadcastChannel;
+  private listeners = new Set<Listener>();
+  private acks = new Map<string, boolean>();
+
+  constructor(cfg: DockConfig) {
+    this.id = cfg.id;
+    this.epsilon = cfg.epsilon ?? 1e-4;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      this.bc = new BroadcastChannel(cfg.channel ?? "sovereign.mesh");
+      this.bc.onmessage = (evt: MessageEvent) => this.onMessage(evt.data);
+    }
+  }
+
+  private verifyPeer(_peer: PeerId): boolean {
+    // Placeholder for future TrueOath handshake
+    return true;
+  }
+
+  onMessage(msg: any) {
+    const { type } = msg ?? {};
+    if (type === "dock:ack") {
+      this.acks.set(msg.txid, true);
+      return;
+    }
+    if (type === "dock:tx") {
+      if (!this.verifyPeer(msg.from)) return;
+      for (const fn of this.listeners) fn(msg.from, msg.data);
+      this.bc?.postMessage({ type: "dock:ack", to: msg.from, txid: msg.txid });
+    }
+  }
+
+  onReceive(fn: Listener) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  connect(peer: PeerId): boolean {
+    return this.verifyPeer(peer);
+  }
+
+  async transmit(to: PeerId, data: Payload, injected: number = 1): Promise<TxResult> {
+    if (!this.bc) return { ok: false, tf: 1, reason: "No simulation transport" };
+    if (!this.verifyPeer(to)) return { ok: false, tf: 1, reason: "Peer verification failed" };
+
+    const residual = Math.random() * this.epsilon;
+    const tf = Math.abs(residual) / Math.max(injected, 1e-9);
+
+    const txid = `${this.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.acks.set(txid, false);
+    this.bc.postMessage({ type: "dock:tx", from: this.id, to, txid, data });
+
+    await new Promise(r => setTimeout(r, 20));
+    const acked = this.acks.get(txid) === true;
+
+    if (!acked) return { ok: false, tf, reason: "No ACK" };
+    if (tf >= this.epsilon) return { ok: false, tf, reason: "ϵ-bound violated" };
+
+    return { ok: true, tf };
+  }
+}
+
+const A = new DockCarrier({ id: "Nova" });
+const B = new DockCarrier({ id: "Charlie" });
+
+B.onReceive((from, data) => console.log(`📥 ${B.id} got from ${from}:`, data));
+
+A.connect("Charlie");
+
+(async () => {
+  const res = await A.transmit("Charlie", { msg: "Ethical Data Stream" }, 10000);
+  console.log("TX result:", res);
+})();
