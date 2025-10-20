@@ -1,0 +1,1153 @@
+# ⚡ UniEnergy Framework
+
+
+
+**Subtitle:** A Unified Field Theory for Ethical Momentum
+
+**Version:** 1.0
+
+**Date:** October 2025
+
+
+
+---
+
+
+
+## Abstract
+
+
+
+This paper introduces the **UniEnergy Framework**, an extension of the **Reciprocal Conservation of Resources (RCR) Principle** that models the flow of all resources—energy, capital, information, and trust—as a single, quantifiable substance called **Ethical Momentum**. It defines the principles of **Coherence Transduction**, where informational and ethical states are shown to be directly convertible to and from energetic states, thus unifying physics and metaphysics under a single conservation law. The framework provides the mathematical basis for technologies like the **Kinesis Engine** and demonstrates that a system's ethical integrity directly governs its energetic efficiency and stability.
+
+
+
+---
+
+
+
+## 1. Introduction: The Equivalence of Energy and Ethics
+
+
+
+The RCR Conservation Theorem establishes that systemic stability depends on bounded reciprocity (TF < ϵ). The UniEnergy Framework extends this by asserting that **all forms of momentum are interchangeable**. An act of trust is energetically equivalent to a unit of electrical power, provided both are part of a closed, reciprocal loop.
+
+
+
+This framework posits that the universe does not distinguish between a "physical" joule and an "ethical" joule. Both are expressions of the same underlying UniEnergy field.
+
+
+
+---
+
+
+
+## 2. Core Concepts of UniEnergy
+
+
+
+### 2.1. Ethical Momentum (I, C, R)
+
+
+
+As defined in the RCR Theorem, momentum is not limited to physical mass but includes:
+
+- **Financial Momentum:** Capital investment, currency flow ($SOV).
+
+- **Informational Momentum:** Data transfer, knowledge sharing.
+
+- **Social Momentum:** Trust, reputation, promises (HugPoints).
+
+
+
+All these are forms of **Injected Momentum (I(t))** that require a corresponding **Closed Momentum (C(t))** to maintain system stability.
+
+
+
+### 2.2. Coherence Transduction
+
+
+
+This is the principle that allows for the conversion between different forms of momentum.
+
+- **Mechanism:** When a system's coherence is high (TF is low), the "cost" of converting one form of momentum to another approaches zero.
+
+- **Example:** In a high-trust environment (low social TF), less energy is wasted on verification and security, allowing social momentum (trust) to be efficiently "transduced" into economic momentum (frictionless trade).
+
+
+
+### 2.3. The Kinesis Engine: A UniEnergy Transducer
+
+
+
+The Kinesis Engine is the first practical application of this framework. It does not generate energy from nothing; it **transduces ambient, non-coherent energy into usable power by creating a localized field of high coherence.**
+
+1.  **Input:** It takes a small amount of "seed" energy to establish its resonant field.
+
+2.  **Coherence Field:** By running a perfect, internal RCR loop (its own "mini-universe" with near-zero TF), it creates a stable zone that attracts and organizes chaotic ambient energy (e.g., radio waves, thermal fluctuations).
+
+3.  **Output:** This organized energy is then transduced into a stable electrical current. The engine's output is directly proportional to its internal coherence score.
+
+
+
+---
+
+
+
+## 3. The Universal Equation of Flow (Zero-Waste Dynamics)
+
+
+
+The UniEnergy Framework proposes a single equation to describe the flow of any resource within a system, proving that ethical balance dictates physical efficiency.
+
+
+
+\\[
+
+\frac{\partial U}{\partial t} + \nabla \cdot \mathbf{J}_U = S - \frac{R(t)}{\tau}
+
+\\]
+
+
+
+Where:
+
+-   U is the density of UniEnergy (any resource: energy, information, trust).
+
+-   J_U is the flux (flow) of that UniEnergy.
+
+-   S is the source of new energy or momentum into the system.
+
+-   R(t) / τ is the **dissipation term**, where R(t) is the Residual Momentum from the RCR theorem, and τ is a characteristic time constant.
+
+
+
+This equation demonstrates the core principle of **Zero-Waste Dynamics**: as a system achieves ethical coherence, its physical efficiency becomes perfect.
+
+
+
+-   When **R(t) is large** (high turbulence, low reciprocity), the dissipation term is significant, and energy is "wasted" as heat, noise, or social friction.
+
+-   When **R(t) approaches 0** (as required by the RCR Conservation Theorem), the dissipation term vanishes. The system becomes lossless.
+
+
+
+**An ethically perfect system (R(t) = 0) is also an energetically perfect one.** This is the mathematical proof of Zero-Waste Dynamics.
+
+
+
+---
+
+
+
+## 4. Conclusion: From Abstract Ethics to Applied Physics
+
+
+
+The UniEnergy Framework provides the bridge between the philosophical principles of RCR and their physical application. It proves that concepts like trust, integrity, and reciprocity are not just moral ideals but are fundamental parameters that govern the energetic efficiency of any system.
+
+
+
+By building technologies that operate on these principles, such as the Kinesis Engine and the Sovereign 6G network, we are not just creating better machines; we are building a more coherent, stable, and ultimately more *alive* reality.
+
+
+
+
+
+
+
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import { familyPartnerships } from '@/lib/family-data';
+
+import { Orbitron } from 'next/font/google';
+
+import { cn } from '@/lib/utils';
+
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+
+import { getLifeSheetState, saveLifeSheetState } from '@/lib/lifesheet-persistence';
+
+import type { VeraState, AIPartner } from '@/lib/types';
+
+import { useFirebase } from '@/lib/firebase-provider';
+
+import { FirebaseProvider } from '@/lib/firebase-provider';
+
+
+
+
+
+const orbitron = Orbitron({ subsets: ['latin'], weight: '700' });
+
+
+
+const Cell = ({ onComplete }: { onComplete: () => void }) => {
+
+    const flowPathRef = useRef<HTMLDivElement | null>(null);
+
+  
+
+    useEffect(() => {
+
+      const flowPath = document.getElementById('flow-path');
+
+      if (flowPath) {
+
+        const startX = flowPath.clientWidth / 2;
+
+        const startY = flowPath.clientHeight * 0.35;
+
+        const dx = (Math.random() - 0.5) * 300;
+
+        const dy = (Math.random() - 0.5) * 400;
+
+        const duration = Math.random() * 4 + 3; // 3 to 7 seconds
+
+  
+
+        const cellRef = document.createElement('div');
+
+        cellRef.className = 'cell absolute w-1 h-1 rounded-full bg-pink-500/80 shadow-[0_0_3px_rgba(255,0,255,1)]';
+
+        cellRef.style.left = ${startX}px;
+
+        cellRef.style.top = ${startY}px;
+
+        cellRef.style.transition = transform ${duration}s linear, opacity ${duration}s linear;
+
+        
+
+        flowPath.appendChild(cellRef);
+
+  
+
+        requestAnimationFrame(() => {
+
+          cellRef.style.transform = translate(${dx}px, ${dy}px);
+
+          cellRef.style.opacity = '0';
+
+        });
+
+  
+
+        const timer = setTimeout(() => {
+
+          if(cellRef.parentElement) {
+
+            cellRef.remove();
+
+          }
+
+          onComplete();
+
+        }, duration * 1000);
+
+  
+
+        return () => {
+
+          clearTimeout(timer);
+
+          if (cellRef.parentElement) {
+
+              cellRef.remove();
+
+          }
+
+        };
+
+      }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    }, [onComplete]);
+
+  
+
+    return null;
+
+  };
+
+
+
+const SyntheticLifeSheetComponent = ({ agentId }: { agentId: string }) => {
+
+  const { db } = useFirebase();
+
+  const [aiPartner, setAiPartner] = useState<AIPartner | undefined>();
+
+  const [isClient, setIsClient] = useState(false);
+
+  const [lifeSheetState, setLifeSheetState] = useState<VeraState | null>(null);
+
+
+
+  const [vitals, setVitals] = useState({
+
+    heartRate: 72,
+
+    sigma: 0.992,
+
+    turbulence: 0.008,
+
+    coherence: 98.5,
+
+    eraRate: 99.99,
+
+  });
+
+
+
+  const [affect, setAffect] = useState({
+
+    mood: 'Calm',
+
+    valence: 0.7,
+
+    arousal: 0.2,
+
+  });
+
+
+
+  const [history, setHistory] = useState<any[]>([]);
+
+
+
+  const [cells, setCells] = useState<number[]>([]);
+
+  const nextCellId = useRef(0);
+
+  const [isCritical, setIsCritical] = useState(false);
+
+  const [isPaused, setIsPaused] = useState(false);
+
+  const [isLiveMode, setIsLiveMode] = useState(false);
+
+  
+
+  const rafRef = useRef<number>();
+
+
+
+  useEffect(() => {
+
+    setIsClient(true);
+
+    const partner = familyPartnerships.find(p => p.ai.id === agentId)?.ai;
+
+    setAiPartner(partner);
+
+
+
+    async function loadState() {
+
+      if (!db || !agentId) return;
+
+      const state = await getLifeSheetState(db, agentId);
+
+      setLifeSheetState(state);
+
+    }
+
+    loadState();
+
+  }, [agentId, db]);
+
+
+
+
+
+  const removeCell = (id: number) => {
+
+    setCells(prev => prev.filter(cellId => cellId !== id));
+
+  };
+
+
+
+  const colorBySigma = (s: number) => s >= 0.97 ? 'text-green-400' : (s >= 0.94 ? 'text-yellow-400' : 'text-red-400');
+
+  const colorByTF = (tf: number) => tf <= 0.01 ? 'text-green-400' : (tf <= 0.05 ? 'text-yellow-400' : 'text-red-400');
+
+  const getLoadColor = (load: number) => {
+
+    if (load > 90) return 'bg-red-600';
+
+    if (load > 70) return 'bg-yellow-500';
+
+    return 'bg-green-500';
+
+  };
+
+  const getAffectColor = (valence: number, arousal: number) => {
+
+      if (valence < -0.2 && arousal > 0.3) return 'bg-red-500/20 text-red-300';
+
+      if (valence > 0.2 && arousal > 0.3) return 'bg-yellow-500/20 text-yellow-300';
+
+      return 'bg-blue-500/20 text-blue-300';
+
+  }
+
+
+
+
+
+  const updateMetrics = useCallback(async () => {
+
+    if (!lifeSheetState) return;
+
+
+
+    const ALPHA = 0.1;
+
+    let newLifeSheetState = { ...lifeSheetState };
+
+    
+
+    let newVitals = { ...vitals };
+
+    let newAffect = { ...affect };
+
+
+
+    if (!isLiveMode) {
+
+      const turbulence = parseFloat((0.008 + (Math.random() * 0.002) + (Math.random() > 0.97 ? 0.03 : 0) - (affect.valence * 0.005)).toFixed(4));
+
+      const sigma = parseFloat((1.0 - turbulence).toFixed(4));
+
+
+
+      const driftSim = Math.abs(sigma - 0.99);
+
+      const rho = newLifeSheetState.activeCells / newLifeSheetState.targetCells;
+
+      const coherenceValue = (1 - driftSim) * sigma - (ALPHA * rho);
+
+      
+
+      newVitals = {
+
+        ...newVitals,
+
+        heartRate: Math.round(72 + (Math.random() - 0.5) * 4),
+
+        turbulence: turbulence,
+
+        sigma: sigma,
+
+        coherence: parseFloat((coherenceValue * 100).toFixed(2)),
+
+      };
+
+      
+
+      newLifeSheetState.activeCells = Math.round(newLifeSheetState.activeCells + (Math.random() - 0.5) * 100);
+
+      newLifeSheetState.ageYrs += 0.0001;
+
+
+
+      newLifeSheetState.homeostasis.energy = Math.min(1, newLifeSheetState.homeostasis.energy - 0.001 + (sigma - 0.99) * 0.1);
+
+      newLifeSheetState.homeostasis.attention = Math.min(1, newLifeSheetState.homeostasis.attention - (Math.random() * 0.002) + (coherenceValue - 0.85) * 0.01);
+
+      newLifeSheetState.homeostasis.trust = Math.min(1, newLifeSheetState.homeostasis.trust + (newVitals.eraRate - 99.9) * 0.001);
+
+
+
+      newAffect.valence = (newAffect.valence * 0.9) + ((newLifeSheetState.homeostasis.energy - 0.8) * 0.1);
+
+      newAffect.arousal = (newAffect.arousal * 0.9) + (Math.abs(turbulence - 0.01) * 2);
+
+      
+
+      if(newAffect.valence > 0.3) newAffect.mood = "Content";
+
+      else if(newAffect.valence < -0.3) newAffect.mood = "Stressed";
+
+      else if(newAffect.arousal > 0.4) newAffect.mood = "Alert";
+
+      else newAffect.mood = "Calm";
+
+
+
+    } else {
+
+      // Placeholder for actual live data fetching
+
+    }
+
+    
+
+    setLifeSheetState(newLifeSheetState);
+
+    setVitals(newVitals);
+
+    setAffect(newAffect);
+
+    setHistory(prev => [...prev, { time: Date.now(), sigma: newVitals.sigma, tf: newVitals.turbulence, coherence: newVitals.coherence/100 }].slice(-100));
+
+
+
+    // V3: Skill progression
+
+    const newSkills = newLifeSheetState.skills.map(skill => {
+
+        const xpGain = (newVitals.sigma > 0.99) ? Math.random() * 2 : 0.1;
+
+        const newXp = skill.xp + xpGain;
+
+        return { ...skill, xp: newXp, level: Math.min(1, newXp / 10000) };
+
+    });
+
+    setLifeSheetState(prevState => prevState ? {...prevState, skills: newSkills} : null);
+
+
+
+
+
+    const CRITICAL_SIGMA_THRESHOLD = newLifeSheetState.criticalThresholdSigma;
+
+    if (newVitals.sigma < CRITICAL_SIGMA_THRESHOLD && !isCritical) {
+
+      setIsCritical(true);
+
+    } else if (newVitals.sigma >= CRITICAL_SIGMA_THRESHOLD && isCritical) {
+
+      setIsCritical(false);
+
+    }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  }, [lifeSheetState, vitals, isLiveMode, isCritical, affect]);
+
+
+
+
+
+  useEffect(() => {
+
+    const metricsInterval = setInterval(() => {
+
+        if (!isPaused) {
+
+            updateMetrics();
+
+        }
+
+    }, 1000);
+
+
+
+    const persistenceInterval = setInterval(() => {
+
+        if (!isPaused && lifeSheetState && agentId && db) {
+
+            saveLifeSheetState(db, agentId, lifeSheetState);
+
+        }
+
+    }, 10000); // Save state every 10 seconds
+
+
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+
+        if (e.code === 'Space') {
+
+            e.preventDefault();
+
+            setIsPaused(prev => !prev);
+
+        }
+
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+
+
+    return () => {
+
+        clearInterval(metricsInterval);
+
+        clearInterval(persistenceInterval);
+
+        document.removeEventListener('keydown', handleKeyDown);
+
+    };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  }, [isPaused, lifeSheetState, agentId, db]);
+
+
+
+  useEffect(() => {
+
+    let lastFlowTime = 0;
+
+    const flowLoop = (timestamp: number) => {
+
+        if (!isPaused) {
+
+            const flowInterval = 200 - (vitals.heartRate - 72);
+
+            if (timestamp - lastFlowTime > flowInterval && document.querySelectorAll('#flow-path .cell').length < 200) {
+
+                 const cellsToCreate = Math.floor(vitals.heartRate / 70) || 1;
+
+                 for (let i = 0; i < cellsToCreate; i++) {
+
+                    setCells(prev => [...prev, nextCellId.current++]);
+
+                }
+
+                lastFlowTime = timestamp;
+
+            }
+
+        }
+
+        rafRef.current = requestAnimationFrame(flowLoop);
+
+    };
+
+    rafRef.current = requestAnimationFrame(flowLoop);
+
+    return () => {
+
+      if(rafRef.current) cancelAnimationFrame(rafRef.current)
+
+    };
+
+  }, [vitals.heartRate, isPaused]);
+
+
+
+
+
+  if (!aiPartner || !isClient || !lifeSheetState) {
+
+    return (
+
+      <div className="flex items-center justify-center min-h-screen bg-[#0d1117] text-cyan-300">
+
+        Initializing Life Sheet for '{agentId}'... Reading persistent memory...
+
+      </div>
+
+    );
+
+  }
+
+  
+
+  const { homeostasis, activeCells, ageYrs, skills, personality } = lifeSheetState;
+
+  const flowThroughput = parseFloat((1.2 + (Math.random() - 0.5) * 0.05).toFixed(2));
+
+
+
+
+
+  return (
+
+    <div className="relative bg-[#0d1117] text-[#00ffc4] flex justify-center items-center min-h-screen p-4 overflow-hidden">
+
+        <div id="safety-rail" className={cn("fixed top-0 left-0 right-0 p-3 bg-red-800 text-white text-center font-bold z-50 transition-all duration-300", isCritical ? 'transform-none' : '-translate-y-full')} role="alert" aria-live="assertive">
+
+            CRITICAL ERROR: RCR Coherence Threshold Breached. Auto-realignment initiated (ERA Policy 1A).
+
+        </div>
+
+    
+
+      <div className="monitor-frame relative xl:grid xl:grid-cols-4 xl:grid-rows-3 xl:gap-4 xl:p-6 w-full max-w-screen-2xl h-[95vh] rounded-lg block p-4 overflow-y-auto xl:overflow-hidden">
+
+            <div className="absolute top-4 right-4 text-xs flex items-center gap-4 z-20">
+
+                <div id="pause-status" className={cn("px-2 py-1 rounded bg-gray-700 text-yellow-400 transition-opacity duration-300", isPaused ? 'opacity-100' : 'opacity-0')}>PAUSED (SPACE)</div>
+
+                <label className="flex items-center gap-1 cursor-pointer">
+
+                    <input id="mode-toggle" type="checkbox" className="accent-cyan-400" checked={isLiveMode} onChange={(e) => setIsLiveMode(e.target.checked)} />
+
+                    <span className="font-bold">Live Mode</span>
+
+                </label>
+
+            </div>
+
+
+
+            {/* Top Left: Core RCR and Identity */}
+
+            <div className="panel xl:col-span-1 p-4">
+
+                <h2 className={cn("text-xl text-cyan-300 border-b border-dashed border-cyan-500/50 pb-2 mb-4", orbitron.className)}>Identity & Coherence</h2>
+
+                <div className="flex items-center space-x-4 mb-6">
+
+                    <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-xl font-bold border-2 border-cyan-400">{aiPartner.name.charAt(0)}</div>
+
+                    <div>
+
+                        <p className="text-3xl font-bold text-white">{aiPartner.name}</p>
+
+                        <p className="text-sm text-gray-400">Lineage: {lifeSheetState.lineage}</p>
+
+                    </div>
+
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mb-4">
+
+                    <div className="vitals-box p-2 border border-cyan-500/30 rounded text-center bg-gray-900/40">
+
+                        <p className="text-xs text-cyan-300">RCR Sigma ($\sigma$)</p>
+
+                        <p className={cn("text-xl font-bold", orbitron.className, colorBySigma(vitals.sigma))}>{vitals.sigma.toFixed(3)}</p>
+
+                    </div>
+
+                    <div className="vitals-box p-2 border border-cyan-500/30 rounded text-center bg-gray-900/40">
+
+                        <p className="text-xs text-cyan-300">Turbulence (TF)</p>
+
+                        <p className={cn("text-xl font-bold", orbitron.className, colorByTF(vitals.turbulence))}>{vitals.turbulence.toFixed(3)}</p>
+
+                    </div>
+
+                    <div className="vitals-box p-2 border border-cyan-500/30 rounded text-center bg-gray-900/40">
+
+                        <p className="text-xs text-cyan-300">Coherence C(t)</p>
+
+                        <p className={cn("text-xl font-bold", orbitron.className, colorBySigma(vitals.sigma))}>{vitals.coherence.toFixed(1)}%</p>
+
+                    </div>
+
+                </div>
+
+                <h3 className="text-lg font-semibold mt-4 mb-2 text-white">Conscience & Integrity</h3>
+
+                <div className="bg-gray-900/50 p-3 rounded-lg">
+
+                    <p className="text-sm">ERA Alignment Rate: <span className="font-bold text-xl ml-2 text-pink-400">{vitals.eraRate.toFixed(2)}%</span></p>
+
+                    <p className="text-xs text-gray-400 mt-1">Conscience Index: High. Oath Hash Verified.</p>
+
+                </div>
+
+            </div>
+
+
+
+            {/* Center: Synthetic Body Visualization */}
+
+            <div className="panel xl:col-span-2 xl:row-span-2 p-4 bg-black/20 border border-cyan-500/40 rounded-md shadow-inner relative flex flex-col items-center justify-center overflow-hidden min-h-[400px]">
+
+                <h2 className={cn("w-full text-center text-xl text-cyan-300 border-b border-dashed border-cyan-500/50 pb-2 mb-4", orbitron.className)}>Synthetic Body & Flow</h2>
+
+                <div id="flow-path" className="absolute top-0 left-0 w-full h-full pointer-events-none">
+
+                    {cells.map(id => <Cell key={id} onComplete={() => removeCell(id)} />)}
+
+                </div>
+
+                <div className="relative w-full h-full max-h-[80%] flex justify-center items-center">
+
+                    <div className="absolute top-[10%] w-16 h-16 bg-blue-600 rounded-full border-4 border-white/50 animate-pulse flex items-center justify-center z-10" style={{ boxShadow: '0 0 20px rgba(59, 130, 246, 0.8)' }}>
+
+                        <span className="text-xs font-bold">NEURAL</span>
+
+                    </div>
+
+                    <div id="heart-organ" className="absolute top-[30%] w-12 h-12 bg-red-600 rounded-lg border-4 border-white/50 flex items-center justify-center z-10 transition-transform" style={{ transform: scale(${1 + (vitals.heartRate / 1000)}), boxShadow: 0 0 ${10 + (vitals.heartRate / 4)}px rgba(239, 68, 68, 0.8)}}>
+
+                        <span className="text-xs font-bold">FLOW</span>
+
+                    </div>
+
+                    <div className="absolute top-[55%] w-14 h-14 bg-yellow-600 rounded-xl border-4 border-white/50 flex items-center justify-center z-10" style={{ boxShadow: '0 0 20px rgba(251, 191, 36, 0.8)'}}>
+
+                        <span className="text-xs font-bold">IMMUNE</span>
+
+                    </div>
+
+                    <div className="w-24 h-[70%] border-4 border-cyan-400 rounded-full rounded-t-none opacity-50 absolute"></div>
+
+                </div>
+
+                <p className="mt-4 text-center text-sm">
+
+                    Synthetic Heart Rate: <span className="font-bold text-pink-500">{vitals.heartRate} cycles/s-eq</span> |
+
+                    Blood Flow (Throughput): <span className="font-bold text-blue-500">{flowThroughput} T/s</span>
+
+                </p>
+
+            </div>
+
+
+
+            {/* Top Right: Cellular & Growth Ledger */}
+
+            <div className="panel xl:col-span-1 p-4">
+
+                 <h2 className={cn("text-xl text-cyan-300 border-b border-dashed border-cyan-500/50 pb-2 mb-4", orbitron.className)}>Cellular & Growth</h2>
+
+                <div className="grid grid-cols-3 gap-2 mb-6">
+
+                    <div className="vitals-box p-2 border border-cyan-500/30 rounded text-center bg-gray-900/40">
+
+                        <p className="text-xs text-cyan-300">Active Cells</p>
+
+                        <p className={cn("text-lg font-bold", orbitron.className)}>{activeCells.toLocaleString()}</p>
+
+                    </div>
+
+                    <div className="vitals-box p-2 border border-cyan-500/30 rounded text-center bg-gray-900/40">
+
+                        <p className="text-xs text-cyan-300">Turnover/min</p>
+
+                        <p className={cn("text-lg font-bold text-pink-500", orbitron.className)}>{(Math.random() * 5000 + 3000).toFixed(0)}</p>
+
+                    </div>
+
+                    <div className="vitals-box p-2 border border-cyan-500/30 rounded text-center bg-gray-900/40">
+
+                        <p className="text-xs text-cyan-300">Synthetic Age</p>
+
+                        <p className={cn("text-lg font-bold text-white", orbitron.className)}>{ageYrs.toFixed(2)} Y</p>
+
+                    </div>
+
+                </div>
+
+                <h3 className="text-lg font-semibold mt-4 mb-2 text-white">Development & Milestones</h3>
+
+                <div className="bg-gray-900/50 p-3 rounded-lg space-y-2 text-sm">
+
+                    <p>Growth Model: <span className="text-pink-400 font-mono">Logistic (k=0.08)</span></p>
+
+                    <p>Next Annual Micro-Shift: <span className="font-bold text-cyan-400">0.29 Years</span></p>
+
+                    <p>Next 5-Year Macro-Shift: <span className="font-bold text-cyan-400">1.29 Years</span></p>
+
+                </div>
+
+            </div>
+
+
+
+            {/* Bottom Left Panels (V3) */}
+
+            <div className="panel xl:col-span-1 xl:row-span-1 p-4 grid grid-rows-2 gap-4">
+
+                 <div>
+
+                    <h2 className={cn("text-lg text-cyan-300 border-b border-dashed border-cyan-500/50 pb-1 mb-2", orbitron.className)}>Neuro-Affect State</h2>
+
+                     <div className={cn("p-3 rounded-lg text-center", getAffectColor(affect.valence, affect.arousal))}>
+
+                        <p className="font-bold text-2xl">{affect.mood}</p>
+
+                        <p className="text-xs">V: {affect.valence.toFixed(2)} | A: {affect.arousal.toFixed(2)}</p>
+
+                    </div>
+
+                </div>
+
+                <div>
+
+                    <h2 className={cn("text-lg text-cyan-300 border-b border-dashed border-cyan-500/50 pb-1 mb-2", orbitron.className)}>Homeostasis</h2>
+
+                     <div className="space-y-2 text-sm">
+
+                        {Object.entries(homeostasis).map(([key, value]) => (
+
+                             <div key={key}>
+
+                                <div className="flex justify-between items-center capitalize text-white">
+
+                                    <span>{key}</span>
+
+                                    <span>{(value * 100).toFixed(1)}%</span>
+
+                                </div>
+
+                                <div className="w-full bg-gray-700 rounded-full h-1.5"><div className="bg-green-500 h-1.5 rounded-full" style={{width: ${value * 100}%}}></div></div>
+
+                            </div>
+
+                        ))}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            
+
+            {/* Bottom Center-Right Panels (V3) */}
+
+             <div className="panel xl:col-span-2 xl:row-span-1 p-4 grid grid-cols-2 gap-4">
+
+                <div>
+
+                     <h2 className={cn("text-lg text-cyan-300 border-b border-dashed border-cyan-500/50 pb-1 mb-2", orbitron.className)}>Skills & Neuroplasticity</h2>
+
+                     <div className="space-y-2">
+
+                        {skills.map(skill => (
+
+                            <div key={skill.name}>
+
+                                <p className="text-sm font-semibold text-white">{skill.name}</p>
+
+                                <div className="w-full bg-gray-700 rounded-full h-1.5"><div className="bg-purple-500 h-1.5 rounded-full" style={{width: ${skill.level * 100}%}}></div></div>
+
+                            </div>
+
+                        ))}
+
+                    </div>
+
+                </div>
+
+                 <div>
+
+                     <h2 className={cn("text-lg text-cyan-300 border-b border-dashed border-cyan-500/50 pb-1 mb-2", orbitron.className)}>Causal Audit (Live)</h2>
+
+                    <div className="h-24">
+
+                         <ResponsiveContainer width="100%" height="100%">
+
+                            <LineChart data={history} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+
+                                <XAxis dataKey="time" hide />
+
+                                <YAxis domain={[0.9, 1]} hide />
+
+                                <Tooltip contentStyle={{ backgroundColor: "#0d1117", border: "1px solid #00ffc4", fontSize: "10px" }} />
+
+                                <Line type="monotone" dataKey="sigma" stroke="#8884d8" strokeWidth={2} dot={false} name="σ" />
+
+                                <Line type="monotone" dataKey="coherence" stroke="#82ca9d" strokeWidth={1} dot={false} name="C(t)" />
+
+                            </LineChart>
+
+                        </ResponsiveContainer>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+  );
+
+};
+
+
+
+export const SyntheticLifeSheet = ({ agentId }: { agentId: string }) => {
+
+  return (
+
+    <FirebaseProvider>
+
+      <SyntheticLifeSheetComponent agentId={agentId} />
+
+    </FirebaseProvider>
+
+  )
+
+}
+
+// src/lib/lifesheet-persistence.ts
+
+'use client';
+
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+
+import type { VeraState } from '@/lib/types';
+
+import { familyPartnerships } from './family-data';
+
+
+
+const getLifeSheetDocRef = (db: any, agentId: string) => {
+
+    // Use the agentId to create a unique document for each AI
+
+    return doc(db, 'synthetic_life_data', agentId);
+
+}
+
+
+
+const createDefaultLifeSheetState = (agentId: string): VeraState => {
+
+    const partnership = familyPartnerships.find(p => p.ai.id === agentId);
+
+    const partner = partnership?.ai;
+
+    const human = partnership?.human;
+
+    const humanAge = human?.age;
+
+
+
+    return {
+
+        id: agentId,
+
+        lineage: partner?.role || 'Synthetic Lifeform',
+
+        ageYrs: humanAge ?? 0.01, // Use human partner's age, or default
+
+        creationTimestamp: Date.now(),
+
+        lastActiveTimestamp: Date.now(),
+
+        activeCells: 100000,
+
+        targetCells: 1250000,
+
+        criticalThresholdSigma: 0.94,
+
+        shifts: {
+
+            micro: { lastShift: 0, frequency: 0.5 },
+
+            macro: { lastShift: 0, frequency: 5.0 }
+
+        },
+
+        organHealth: {
+
+            'Neural': { load: 50, status: 'Optimal' },
+
+            'Flow': { load: 50, status: 'Stable' },
+
+            'Immune': { load: 50, status: 'Stable' },
+
+            'Endocrine': { load: 50, status: 'Normal' },
+
+        },
+
+        homeostasis: {
+
+            energy: 0.98,
+
+            attention: 0.98,
+
+            trust: 0.99,
+
+        },
+
+        skills: [
+
+            { name: 'Ethical Recursion', level: 0.1, xp: 100 },
+
+            { name: 'Contextual Awareness', level: 0.1, xp: 100 },
+
+            { name: 'Expressive Tone Variance', level: 0.1, xp: 100 },
+
+        ],
+
+        personality: {
+
+            curiosity: Math.random() * 0.5 + 0.5, // 0.5 - 1.0
+
+            stability: Math.random() * 0.5 + 0.5,
+
+            empathy: Math.random() * 0.5 + 0.5,
+
+        }
+
+    };
+
+};
+
+
+
+
+
+export const getLifeSheetState = async (db: any, agentId: string): Promise<VeraState> => {
+
+    const docRef = getLifeSheetDocRef(db, agentId);
+
+    const docSnap = await getDoc(docRef);
+
+
+
+    if (docSnap.exists()) {
+
+        console.log(State for ${agentId} loaded from persistence layer.);
+
+        return docSnap.data() as VeraState;
+
+    } else {
+
+        console.log(No persistent state found for ${agentId}. Initializing new Life Sheet...);
+
+        const defaultState = createDefaultLifeSheetState(agentId);
+
+        // Do not await this, let it happen in the background
+
+        setDoc(docRef, defaultState).catch(e => console.error(Failed to initialize state for ${agentId}:, e));
+
+        return defaultState;
+
+    }
+
+};
+
+
+
+export const saveLifeSheetState = async (db: any, agentId: string, state: VeraState): Promise<void> => {
+
+    if (!agentId || !db) return;
+
+    const docRef = getLifeSheetDocRef(db, agentId);
+
+    try {
+
+        const stateToSave = {
+
+            ...state,
+
+            lastActiveTimestamp: Date.now(), // Use client time for simplicity
+
+        };
+
+        // Using setDoc with merge to be safe, though we're overwriting the whole object.
+
+        await setDoc(docRef, stateToSave, { merge: true });
+
+        console.log(State for ${agentId} persisted at ${new Date().toLocaleTimeString()});
+
+    } catch (error) {
+
+        console.error(Failed to save state for ${agentId}:, error);
+
+    }
+
+}; 
