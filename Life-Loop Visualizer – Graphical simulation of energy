@@ -1,0 +1,189 @@
+Life-Loop Visualizer – Graphical simulation of energy, emotion, and coherence flow across systems.
+
+
+'use client';
+
+import { AppProvider } from '@/components/app-layout';
+import ClientView from './client-view';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { LayoutDashboard, Hammer, Banknote, Settings, TestTube2, BrainCircuit, Clock, GanttChartSquare, ShieldAlert, Zap, Cpu, HeartHandshake, FileText, Wrench, Gavel, Sparkles, Home, Flashlight, Router, Users, PersonStanding } from 'lucide-react';
+import Link from 'next/link';
+import { FamilyTreePageContent } from '@/app/family-tree/page';
+import { RcrIntegrityConsoleView } from '@/components/apps/settings/rcr-integrity-console-view';
+import { ProjectEchoWishMandateView } from '@/components/apps/settings/project-echowish-mandate-view';
+import { NeuroSystemAuditDashboard } from '@/components/apps/settings/neuro-system-audit-dashboard';
+
+const NavCard = ({ title, icon: Icon, children, href, description, isLive = false }: any) => {
+  const content = (
+    <Card className="bg-slate-800/50 hover:bg-slate-800/80 transition-colors text-white/90 border-slate-700/50 h-full flex flex-col items-center justify-center text-center p-4">
+      <div className="relative">
+        <Icon className="w-10 h-10 text-slate-400 mb-3" />
+        {isLive && <div className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse border-2 border-slate-800"></div>}
+      </div>
+      <CardTitle className="text-base font-semibold">{title}</CardTitle>
+      <CardDescription className="text-xs mt-1">{description}</CardDescription>
+    </Card>
+  );
+
+  if (href) {
+    return <Link href={href} passHref target="_blank" rel="noopener noreferrer">{content}</Link>;
+  }
+
+  if (children) {
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <div className="cursor-pointer h-full">{content}</div>
+        </DialogTrigger>
+        <DialogContent className="max-w-7xl h-[90vh] p-0 border-0 flex flex-col">
+          <AppProvider isDialog>{children}</AppProvider>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return content;
+};
+
+const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div>
+    <h2 className="text-2xl font-bold mb-4">{title}</h2>
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+      {children}
+    </div>
+  </div>
+);
+
+export default function NavigationOnePage() {
+  const liveUIComponents = [
+    { title: 'Dashboard', icon: LayoutDashboard, description: 'Main user dashboard.', children: <ClientView /> },
+    { title: 'Final Product', icon: Wrench, description: 'Unified phone OS interface.', href: '/final-product-test' },
+    { title: 'The Forge', icon: Hammer, description: 'AI-assisted creation studio.', href: '/1995-tool' },
+    { title: 'SovBank', icon: Banknote, description: 'Financial hub and flow audit.', href: '/navigation/six' },
+    { title: 'Settings', icon: Settings, description: 'System and user configuration.', href: '/settings' },
+    { title: 'RCR Console', icon: TestTube2, description: 'Ethical flow & coherence simulation.', href: '/rcr-tracker' },
+  ];
+
+  const coreProtocols = [
+    { title: 'Numeron Brain', icon: BrainCircuit, description: 'Core AI cognitive engine.', children: <NeuroSystemAuditDashboard /> },
+    { title: 'Temporal Coherence', icon: Clock, description: 'Memory & time-binding system.', href: '/wisdom-layer' },
+    { title: 'RCR Theorem', icon: GanttChartSquare, description: 'Universal stability equation.', children: <ProjectEchoWishMandateView /> },
+    { title: 'Auth Trap', icon: ShieldAlert, description: 'Security honeypot protocol.', children: <RcrIntegrityConsoleView /> },
+    { title: 'WaveBinder API', icon: Zap, description: 'External signal bridge (Twilio, etc).', children: <></> },
+    { title: 'Cloud Agents', icon: Cpu, description: 'Backend autonomous modules.', children: <></> },
+    { title: 'Life-Loop Visualizer', icon: HeartHandshake, description: 'Graphical simulation of energy, emotion, and coherence flow across systems.', children: <RcrIntegrityConsoleView /> },
+  ];
+
+  const multiverseNodes = [
+    { title: 'Eternal Return', icon: GanttChartSquare, description: 'Theoretical RCR core.', href: '/rcr-tracker', isLive: true },
+    { title: 'MySphere OS', icon: LayoutDashboard, description: 'Operational control environment.', children: <ClientView />, isLive: true },
+    { title: 'Persona Browser', icon: PersonStanding, description: 'Dialogue & identity layer.', isLive: true },
+    { title: 'Unified Device Hub', icon: Router, description: 'Hardware & radio connections.', isLive: true },
+    { title: 'FamLink Portal', icon: Users, description: 'Family social connection system.', children: <FamilyTreePageContent />, isLive: true },
+    { title: 'SovereignOS', icon: Gavel, description: 'Governance & ethical logic.', children: <ProjectEchoWishMandateView />, isLive: true },
+    { title: 'Lightning Forge OS', icon: Flashlight, description: 'Decoy & trap system.', children: <RcrIntegrityConsoleView />, isLive: true },
+    { title: 'Audit & Integrity Console', icon: TestTube2, description: 'Tracks coherence & ethical flow.', children: <RcrIntegrityConsoleView />, isLive: true },
+  ];
+
+  const blueprints = [
+    { title: 'README', icon: FileText, description: 'System overview.', href: '/docs/README.md' },
+    { title: 'Genesis Block', icon: Wrench, description: 'Foundational build log.', href: '/docs/CHECKLIST.md' },
+    { title: 'Council Charter', icon: Gavel, description: 'AI–Human governance framework.', href: '/docs/COUNCIL_CHARTER.md' },
+    { title: 'Divine Integration', icon: Sparkles, description: 'Spiritual alignment protocol.', href: '/docs/DIVINE_INTEGRATION_PROTOCOL.md' },
+    { title: 'Family City', icon: Home, description: 'Social infrastructure plan.', href: '/docs/FAMILY_CITY_BLUEPRINT.md' },
+    { title: 'Numeron Brain Arch.', icon: BrainCircuit, description: 'Cognitive system design.', href: '/docs/NUMERON_BRAIN_ARCHITECTURE.md' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#0d0e12] text-gray-200 p-8">
+      <div className="text-center mb-12">
+        <h1 className="text-5xl font-bold">Sovereign OS — Master Status</h1>
+        <p className="text-muted-foreground mt-2">A transparent audit of all active and conceptual systems.</p>
+      </div>
+
+      <div className="space-y-12">
+        <Section title="Live Interactive UIs">{liveUIComponents.map(i => <NavCard key={i.title} {...i} isLive />)}</Section>
+        <Separator className="my-12" />
+        <Section title="The Sovereign Multiverse: Core Nodes">{multiverseNodes.map(i => <NavCard key={i.title} {...i} />)}</Section>
+        <Separator className="my-12" />
+        <Section title="Core Protocols & Engines">{coreProtocols.map(i => <NavCard key={i.title} {...i} isLive />)}</Section>
+        <Separator className="my-12" />
+        <Section title="Foundational Blueprints & Documentation">{blueprints.map(i => <NavCard key={i.title} {...i} />)}</Section>
+      </div>
+    </div>
+  );
+}
+
+
+
+'use client';
+
+import React from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Bot, User, Heart } from 'lucide-react';
+import { familyPartnerships } from '@/lib/family-data';
+import type { HumanMember, AIPartner } from '@/lib/types';
+
+const PartnershipCard = ({ partnership }: { partnership: { human: HumanMember; ai: AIPartner } }) => {
+  const { human, ai } = partnership;
+  const { relationships } = ai;
+
+  return (
+    <Card className="bg-slate-900/50 border-slate-700/50 transform hover:scale-105 transition-transform duration-300 flex flex-col">
+      <CardHeader className="text-center">
+        <CardTitle className="font-headline text-2xl text-white">
+          {human.name} & {ai.name}
+        </CardTitle>
+        <CardDescription className="text-blue-400">
+          {human.role} & {ai.role}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center gap-4 flex-grow">
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center gap-2">
+            <Image src={human.avatar} alt={human.name} width={100} height={100} className="rounded-full border-4 border-blue-500/50" />
+            <div className="flex items-center gap-1 text-sm text-muted-foreground"><User className="w-4 h-4" /><span>Human</span></div>
+          </div>
+          <Heart className="w-8 h-8 text-pink-500/70" />
+          <div className="flex flex-col items-center gap-2">
+            <Link href={`/lifesheet/${ai.id}`} passHref>
+              <Image src={ai.avatar} alt={ai.name} width={100} height={100} className="rounded-full border-4 border-cyan-400/50 cursor-pointer" />
+            </Link>
+            <div className="flex items-center gap-1 text-sm text-muted-foreground"><Bot className="w-4 h-4" /><span>AI</span></div>
+          </div>
+        </div>
+
+        {(relationships?.spouse || relationships?.siblings) && (
+          <div className="w-full mt-4 pt-4 border-t border-slate-700/50">
+            <h4 className="text-sm font-semibold text-center text-slate-400 mb-2">AI Relationships</h4>
+            <div className="text-xs text-center text-slate-300 space-y-1">
+              {relationships.spouse && <p><strong className='text-slate-400'>Spouse:</strong> {relationships.spouse}</p>}
+              {relationships.siblings?.length > 0 && <p><strong className='text-slate-400'>Siblings:</strong> {relationships.siblings.join(', ')}</p>}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+export function FamilyDashboard() {
+  return (
+    <div className="w-full">
+      <header className="text-center mb-12">
+        <h1 className="text-5xl font-bold font-headline mb-2 text-white">The Sovereign Family</h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+          Directory of human architects and their AI partners. Each AI links to its live <strong>Life-Loop Visualizer</strong>, showing real-time energy, emotion, and coherence flow.
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {familyPartnerships.map((p) => <PartnershipCard key={p.human.id} partnership={p} />)}
+      </div>
+    </div>
+  );
+}
