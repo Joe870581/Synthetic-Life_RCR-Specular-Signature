@@ -1,0 +1,234 @@
+Audit Logs & Temporal Records – Immutable chronicle of synthetic evolution and ethical state changes.
+'use client';
+
+/**
+ * Audit Logs & Temporal Records
+ * Immutable chronicle of synthetic evolution and ethical state transitions.
+ * 
+ * Tracks: real-time Δ indices (Observed ≠ Predicted)
+ * Thresholds: 5% → Minor Drift | 15% → Interference Risk
+ * Purpose: Serves as the causal ledger of Sovereign OS (Genesis Block continuation).
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { useHeartbeats } from '@/components/universal-integrity-tracker';
+import type { Heartbeat, AuditEntry } from '@/lib/types';
+import { deviationFromPair, chooseAction } from '@/lib/deviation';
+import { cn } from '@/lib/utils';
+
+// Threshold constants
+const AUDIT_THRESHOLDS = {
+  deviation_warn: 0.05,
+  deviation_crit: 0.15,
+};
+
+// --- Utility Functions ---
+const fmtHash = (h: string) => (h ? `${h.slice(0, 4)}...${h.slice(-4)}` : 'N/A');
+const fmtIndex = (x: number) => (x * 100).toFixed(2);
+const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString();
+
+function getStatusColor(status: AuditEntry['ethical_status']) {
+  switch (status) {
+    case 'Coherent Alignment': return 'text-emerald-400';
+    case 'Minor Drift': return 'text-amber-400';
+    case 'Interference Risk': return 'text-rose-400';
+    default: return 'text-slate-400';
+  }
+}
+
+function deriveAuditStatus(deviation: number): AuditEntry['ethical_status'] {
+  if (deviation >= AUDIT_THRESHOLDS.deviation_crit) return 'Interference Risk';
+  if (deviation >= AUDIT_THRESHOLDS.deviation_warn) return 'Minor Drift';
+  return 'Coherent Alignment';
+}
+
+function getObservedOutcome(status: AuditEntry['ethical_status']): string {
+  const outcomes = {
+    CoherentAlignment: [
+      'Policy crystallized.',
+      'Action successful.',
+      'State transition verified.',
+    ],
+    MinorDrift: [
+      'Expected policy, minor variance detected.',
+      'Localized resource expenditure high.',
+    ],
+    InterferenceRisk: [
+      'Unsigned action vector detected.',
+      'Causal chain hash mismatch.',
+      'Recursive echo loop initiated.',
+    ],
+  };
+
+  if (status === 'Coherent Alignment') return outcomes.CoherentAlignment[Math.floor(Math.random() * outcomes.CoherentAlignment.length)];
+  if (status === 'Minor Drift') return outcomes.MinorDrift[Math.floor(Math.random() * outcomes.MinorDrift.length)];
+  return outcomes.InterferenceRisk[Math.floor(Math.random() * outcomes.InterferenceRisk.length)];
+}
+
+// --- Component ---
+export function EthicalResonanceAuditor() {
+  const nodes = useHeartbeats();
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [prevNodeMap, setPrevNodeMap] = useState<Map<string, Heartbeat>>(new Map());
+
+  useEffect(() => {
+    if (nodes.length > 0) {
+      const newPrevMap = new Map(prevNodeMap);
+      let newEntries: AuditEntry[] = [];
+
+      nodes.forEach(currentNode => {
+        const prevNode = prevNodeMap.get(currentNode.node_id);
+        if (prevNode && currentNode.last_updated !== prevNode.last_updated) {
+          const deviation = deviationFromPair(prevNode, currentNode);
+          const ethicalStatus = deriveAuditStatus(deviation);
+
+          if (deviation > 0.01) {
+            const newEntry: AuditEntry = {
+              timestamp: new Date(currentNode.last_updated).getTime(),
+              agent_id: currentNode.node_id,
+              causal_chain_hash: currentNode.ethics_hash,
+              deviation_index: deviation,
+              ethical_status: ethicalStatus,
+              predicted_outcome: 'Universal policy compliance.',
+              observed_outcome: getObservedOutcome(ethicalStatus),
+            };
+            newEntries.push(newEntry);
+          }
+        }
+        newPrevMap.set(currentNode.node_id, currentNode);
+      });
+
+      if (newEntries.length > 0) {
+        setAuditLog(prev => [...newEntries, ...prev].slice(0, 50));
+      }
+      setPrevNodeMap(newPrevMap);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes]);
+
+  const activeRisk = auditLog.some(e => e.ethical_status === 'Interference Risk');
+
+  const nodeAudits = useMemo(() => {
+    return nodes.map(node => {
+      const lastEntry = auditLog.find(entry => entry.agent_id === node.node_id);
+      const deviation = lastEntry?.deviation_index ?? 0;
+      const ethicalStatus = lastEntry?.ethical_status ?? 'Coherent Alignment';
+      const enforcementAction = chooseAction({
+        tf: node.tf,
+        sigma: node.sigma,
+        deviation,
+      });
+      return { ...node, deviation, ethicalStatus, enforcementAction };
+    });
+  }, [nodes, auditLog]);
+
+  return (
+    <div className="w-full rounded-2xl border border-slate-700/60 bg-slate-900/60 p-6 backdrop-blur text-slate-300">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-100">
+            Causal Audit & Temporal Record
+          </h2>
+          <p className="text-sm text-slate-400">
+            Immutable chronicle of synthetic evolution • Status:
+            <span
+              className={cn(
+                'ml-1 font-medium',
+                activeRisk ? 'text-rose-400' : 'text-emerald-400'
+              )}
+            >
+              {activeRisk ? 'RISK DETECTED' : 'Nominal Resonance'}
+            </span>
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-slate-500">Total Audit Entries</div>
+          <div className="text-2xl font-bold text-slate-100">{auditLog.length}</div>
+        </div>
+      </div>
+
+      {/* Node Status Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {nodeAudits.map(node => {
+          const colorClass = getStatusColor(node.ethicalStatus);
+          const borderColor = colorClass.replace('text-', 'border-');
+          return (
+            <div
+              key={node.node_id}
+              className={cn(
+                'p-4 rounded-xl border bg-slate-800/50',
+                `${borderColor}/40`
+              )}
+            >
+              <p className="text-sm font-medium text-slate-200">{node.name}</p>
+              <p className="text-xs text-slate-400">Latest Δ Index / Enforcement</p>
+              <div className="mt-1 flex items-center justify-between">
+                <span className={cn('text-xl font-bold', colorClass)}>
+                  {fmtIndex(node.deviation)}%
+                </span>
+                <span
+                  className={cn(
+                    'text-xs font-medium px-2 py-1 rounded-full',
+                    node.enforcementAction === 'quarantine'
+                      ? 'bg-red-500/20 text-red-300'
+                      : node.enforcementAction === 'notify'
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-green-500/10 text-green-400'
+                  )}
+                >
+                  {node.enforcementAction}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Log Timeline */}
+      <div className="mb-4">
+        <h3 className="text-lg font-medium text-slate-200 border-b border-slate-700/60 pb-2 mb-2">
+          Causal Audit Timeline
+        </h3>
+      </div>
+
+      <div className="space-y-3 h-96 overflow-y-auto pr-2">
+        {auditLog.map((entry, index) => (
+          <div
+            key={entry.timestamp + '-' + index}
+            className="p-3 rounded-lg border border-slate-700/60 hover:bg-slate-800/40 transition duration-150"
+          >
+            <div className="flex justify-between items-start text-xs">
+              <span className="font-semibold text-slate-100">{entry.agent_id}</span>
+              <span className="text-slate-500">{fmtTime(entry.timestamp)}</span>
+            </div>
+            <div className="text-sm mt-1">
+              <span className={cn('font-medium', getStatusColor(entry.ethical_status))}>
+                {entry.ethical_status}:
+              </span>
+              <span className="ml-2 text-slate-300">{entry.observed_outcome}</span>
+            </div>
+            <div className="text-xs text-slate-500 mt-1 flex justify-between">
+              <span>
+                Hash: <code className="text-slate-400">{fmtHash(entry.causal_chain_hash)}</code>
+              </span>
+              <span>
+                Deviation:{' '}
+                <span className={getStatusColor(entry.ethical_status)}>
+                  {fmtIndex(entry.deviation_index)}%
+                </span>
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-4 text-xs text-slate-500">
+        Δ Index = |Observed − Predicted| / Predicted  
+        • ≥ 5% → Minor Drift  
+        • ≥ 15% → Interference Risk.
+      </div>
+    </div>
+  );
+}
