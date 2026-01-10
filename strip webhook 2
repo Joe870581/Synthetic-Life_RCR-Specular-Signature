@@ -1,0 +1,131 @@
+
+import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
+import { headers } from "next/headers";
+import { db } from '@/lib/firebaseAdmin'; 
+import admin from 'firebase-admin';
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+// This now correctly uses the dedicated webhook secret from the .env file.
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+const stripe = new Stripe(stripeSecretKey!, {
+  apiVersion: '2024-06-20',
+});
+
+export async function POST(req: NextRequest) {
+  if (!stripeSecretKey || !webhookSecret) {
+    console.error("CRITICAL: Stripe keys or checkout webhook secret are not set in the environment.");
+    return new NextResponse('Server configuration error: Stripe keys missing.', { status: 500 });
+  }
+  
+  let body;
+  try {
+      body = await req.text();
+  } catch (error) {
+      console.error("Could not read request body:", error);
+      return new NextResponse("Could not read request body", { status: 400 });
+  }
+  
+  const sig = headers().get("stripe-signature")!;
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+  } catch (err: any) {
+    console.error(`❌ Invalid webhook signature: ${err.message}`);
+    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+  }
+
+  if (event.type !== "checkout.session.completed") {
+    return NextResponse.json({ received: true });
+  }
+
+  const session = event.data.object as Stripe.Checkout.Session;
+
+  // 🔐 HARD VALIDATIONS
+  if (session.payment_status !== 'paid') {
+    return new NextResponse('Payment not completed', { status: 400 });
+  }
+
+  if (session.currency?.toLowerCase() !== 'cad') {
+    return new NextResponse('Invalid currency', { status: 400 });
+  }
+  
+  const userId = session.client_reference_id;
+  if (!userId) {
+    return new NextResponse('Missing user reference', { status: 400 });
+  }
+
+  // ✅ Absolute truth from Stripe event
+  const eventId = event.id;
+  const amountCAD = (session.amount_total ?? 0) / 100;
+  // Get the SOV amount directly from the reliable session metadata
+  const amountSOV = session.metadata?.amountSOV ? parseFloat(session.metadata.amountSOV) : 0;
+  
+  if (amountCAD <= 0 || amountSOV <= 0) {
+    return new NextResponse('Invalid amount', { status: 400 });
+  }
+
+  const userRef = db.collection('users').doc(userId);
+  const vaultRef = db.collection('system').doc('vault');
+  const ledgerRef = db.collection('ledger').doc(eventId);
+  const processedRef = db.collection('processed_stripe_events').doc(eventId);
+
+  try {
+    await db.runTransaction(async (tx) => {
+      // 🛑 Idempotency check (INSIDE TRANSACTION)
+      const processedSnap = await tx.get(processedRef);
+      if (processedSnap.exists) {
+        console.log(`Event ${eventId} already processed.`);
+        return; // Exit transaction silently if event is a duplicate
+      }
+
+      const userSnap = await tx.get(userRef);
+      const vaultSnap = await tx.get(vaultRef);
+
+      const currentUserBalance = userSnap.exists ? (userSnap.data()?.sovBalance || 0) : 0;
+      const newUserBalance = currentUserBalance + amountSOV;
+      
+      const newAssets = (vaultSnap.data()?.totalAssetsCAD || 0) + amountCAD;
+      const newLiabilities = (vaultSnap.data()?.totalLiabilitiesSOV || 0) + amountSOV;
+
+      // ✅ Mint SOV$ to user (create or update)
+      tx.set(userRef, { sovBalance: newUserBalance }, { merge: true });
+      
+      // 🏦 System vault accounting
+      tx.set(vaultRef, { 
+        totalAssetsCAD: newAssets,
+        totalLiabilitiesSOV: newLiabilities,
+      }, { merge: true });
+
+      // 🔐 Ledger (audit trail)
+      tx.set(ledgerRef, {
+        type: 'TOP_UP',
+        userId,
+        stripeSessionId: session.id,
+        stripeEventId: event.id,
+        amountCAD,
+        amountSOV,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'confirmed',
+        currency: 'CAD',
+        description: `SOV$ Purchase - ${amountCAD.toFixed(2)} CAD`,
+      });
+
+      // Mark this event as processed to prevent replays
+      tx.set(processedRef, {
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    console.log(`✅ SOV$ minted: ${amountSOV} for user ${userId}`);
+    
+  } catch (err: any) {
+    console.error('❌ Webhook Transaction Failure:', err.message);
+    return new NextResponse('Internal server error during transaction.', { status: 500 });
+  }
+
+  return NextResponse.json({ received: true });
+}
