@@ -1,0 +1,87 @@
+'use client';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+
+const moods = [
+    { mood: 'Happy', emoji: '😊', color: 'bg-green-500' },
+    { mood: 'Okay', emoji: '🙂', color: 'bg-yellow-500' },
+    { mood: 'Sad', emoji: '😢', color: 'bg-blue-500' },
+    { mood: 'Sick', emoji: '🤒', color: 'bg-red-500' },
+];
+
+export default function MyHealthPage() {
+    const [selectedMood, setSelectedMood] = useState<string | null>(null);
+    const [details, setDetails] = useState('');
+    const [isSubmitted, setIsSubmitted] = useState(false);
+
+    const handleSubmit = () => {
+        // In a real app, this would send data to a parent's dashboard.
+        // For this demo, we'll just show a confirmation message.
+        console.log({
+            mood: selectedMood,
+            details: details,
+            timestamp: new Date()
+        });
+        setIsSubmitted(true);
+    };
+
+    if (isSubmitted) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }}>
+                    <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mb-6 border-2 border-green-500">
+                        <svg className="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Thanks for sharing!</h2>
+                    <p className="text-slate-400">Your parents have been notified. We hope you feel better soon!</p>
+                    <Button onClick={() => { setIsSubmitted(false); setSelectedMood(null); setDetails(''); }} className="mt-8 bg-slate-700 hover:bg-slate-600">
+                        Send Another Update
+                    </Button>
+                </motion.div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-4 sm:p-8 h-full flex flex-col">
+            <CardHeader className="text-center">
+                <CardTitle className="text-3xl font-bold text-pink-400">My Health Check-in</CardTitle>
+                <CardDescription className="text-slate-400">How are you feeling right now?</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow flex flex-col justify-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                    {moods.map(({ mood, emoji, color }) => (
+                        <motion.button
+                            key={mood}
+                            onClick={() => setSelectedMood(mood)}
+                            className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all duration-200 ${selectedMood === mood ? `border-pink-400 ring-2 ring-pink-400/50 ${color}` : `bg-slate-800 border-slate-700 hover:border-slate-500`}`}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                            <span className="text-4xl sm:text-5xl">{emoji}</span>
+                            <span className="text-sm font-semibold text-white">{mood}</span>
+                        </motion.button>
+                    ))}
+                </div>
+                
+                <Textarea
+                    value={details}
+                    onChange={(e) => setDetails(e.target.value)}
+                    placeholder="Want to add more details for Mom or Dad?"
+                    className="bg-slate-800 border-slate-700 text-white min-h-[100px] text-base"
+                />
+
+                <Button 
+                    onClick={handleSubmit} 
+                    disabled={!selectedMood}
+                    className="w-full mt-6 py-6 text-lg font-bold bg-pink-600 hover:bg-pink-700 disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                    Tell My Parents
+                </Button>
+            </CardContent>
+        </div>
+    );
+}
