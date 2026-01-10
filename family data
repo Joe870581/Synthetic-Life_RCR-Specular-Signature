@@ -1,0 +1,511 @@
+
+'use client';
+
+import React, { createContext, useState, ReactNode, useCallback, useEffect, useMemo, useContext } from 'react';
+import { useFirestore, useUser } from '@/firebase';
+import { doc, updateDoc, setDoc, serverTimestamp, getDoc, onSnapshot, FieldValue } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { useSearchParams } from 'next/navigation';
+import { getRecentLassoMemory, getRecentLassoMemoryArray, addToLasso, queryArchive, saveToArchive } from '@/lib/memory';
+
+// --- TYPE DEFINITIONS ---
+
+// ===============================
+// MIR / DEVICE CORE TYPES
+// ===============================
+
+export type DeviceType =
+  | 'phone'
+  | 'tablet'
+  | 'laptop'
+  | 'desktop'
+  | 'watch'
+  | 'tv'
+  | 'other';
+
+export interface DeviceSnapshot {
+  batteryLevel?: number;        // 0–100
+  isCharging?: boolean;
+  chargingSource?: 'usb' | 'wireless' | 'ac' | 'unknown';
+  supportsWirelessCharging?: boolean;
+  platform?: 'ios' | 'android' | 'web' | 'desktop';
+  osVersion?: string;
+  model?: string;
+  locale?: string;
+  timezone?: string;
+  timestamp: number;
+}
+
+export interface UIDeviceState {
+  pebblePosition?: { x: number; y: number };
+  pebbleSize?: 'small' | 'standard' | 'large';
+  mode?: 'floating' | 'icon';
+  activeIframe?: string | null;
+  voiceEnabled?: boolean;
+}
+
+export interface MIRSession {
+  sessionId: string;
+  userId: string;
+  familyId: string;
+  deviceId: string;
+
+  createdAt: number;
+  lastUpdatedAt: number;
+
+  deviceSnapshot: DeviceSnapshot;
+  uiSnapshot: UIDeviceState;
+
+  permissions: {
+    microphone: boolean;
+    location: boolean;
+    notifications: boolean;
+    camera: boolean;
+  };
+
+  active: boolean;
+}
+
+export interface Device {
+  id: string;
+  type: DeviceType;
+  name: string;
+  primary: boolean;
+  registeredAt: number;
+  lastSeenAt?: number;
+  lastSnapshot?: DeviceSnapshot;
+}
+
+export interface AppStatus {
+    name: string;
+    status: 'online' | 'offline' | 'maintenance';
+}
+
+
+export interface FamilyMember {
+  id: string;
+  type: 'parent' | 'child';
+  name: string;
+  dob: string;
+  isRegistered: boolean;
+  phone: string;
+  sovereignPhone: string;
+  bio: string;
+  email: string;
+  username: string;
+  osLink: string;
+  loginStatus: 'NO_ACCOUNT' | 'ACTIVE' | 'PENDING_SETUP';
+  imageUrl: string;
+  coverUrl?: string;
+  // Location Data
+  lat?: number;
+  lng?: number;
+  // Financial Data
+  spdBalance: number;
+  spikePoints: number;
+  bankAccount?: {
+      linked: boolean;
+      name: string;
+      last4: string;
+  };
+  subscriptions?: string[];
+  // Governance Fields
+  relationshipRole?: 'parent_primary' | 'parent_coparent' | 'guardian';
+  safetyAuthorityLevel?: 'none' | 'view_only' | 'full';
+  continuityRules?: Record<string, {
+      canRecoverAccounts?: boolean;
+      canReceiveAlerts?: boolean;
+  }>;
+  faceIdStatus?: 'Pending' | 'Completed';
+  voiceIdStatus?: 'Pending' | 'Completed';
+  wearableStatus?: 'Pending' | 'Completed';
+  sentenceStatus?: 'Pending' | 'Completed';
+  osName?: string;
+  appName?: string;
+  consent?: {
+      [contractId: string]: {
+          agreed: boolean;
+          timestamp: Date;
+          viewed?: boolean;
+      };
+      masterAgreement?: boolean;
+  };
+  title?: string;
+  status?: 'registered' | 'provisioned';
+  age?: number;
+  capabilities?: string[];
+  presentation?: 'masculine' | 'feminine' | 'neutral';
+  hasFacialHair?: boolean;
+  voiceConfig?: {
+    voice: string;
+  };
+  devices?: Device[];
+  apps?: {
+    appId: string;
+    installed: boolean;
+    lastOpenedAt?: number;
+  }[];
+}
+
+export interface AuditLog {
+    id: number;
+    timestamp: Date;
+    level: 'SYSTEM' | 'USER' | 'INFO' | 'SANDBOX_ACTION';
+    detail: string;
+    userId?: string;
+}
+
+export interface FamilyState {
+    familyId: string;
+    familyName: string;
+    members: Record<string, Partial<FamilyMember>>;
+    isFinalized?: boolean;
+    version?: number;
+    lat?: number;
+    lng?: number;
+    jurisdiction?: {
+        country: string;
+        province: string;
+    },
+    auditLogs: AuditLog[];
+}
+
+export const BLANK_MEMBER_SLOT: Omit<FamilyMember, 'id' | 'type' | 'osLink'> = {
+    name: 'Awaiting User...',
+    dob: '',
+    isRegistered: false,
+    phone: '',
+    sovereignPhone: '',
+    bio: '',
+    subscriptions: [],
+    email: '',
+    username: '',
+    loginStatus: 'NO_ACCOUNT' as const,
+    imageUrl: '',
+    spdBalance: 0,
+    spikePoints: 0,
+    devices: [],
+    apps: [],
+    status: 'provisioned',
+};
+
+const createInitialFamilyMembers = (): Record<string, Partial<FamilyMember>> => ({
+    'p1': { id: 'p1', type: 'parent', ...BLANK_MEMBER_SLOT, osLink: '/adult-app/adults-hub' },
+    'p2': { id: 'p2', type: 'parent', ...BLANK_MEMBER_SLOT, osLink: '/adult-app/adults-hub' },
+    'c1': { id: 'c1', type: 'child', ...BLANK_MEMBER_SLOT, osLink: '/kids-app/my-kids-pebble' },
+    'c2': { id: 'c2', type: 'child', ...BLANK_MEMBER_SLOT, osLink: '/kids-app/my-kids-pebble' },
+    'c3': { id: 'c3', type: 'child', ...BLANK_MEMBER_SLOT, osLink: '/kids-app/my-kids-pebble' },
+    'c4': { id: 'c4', type: 'child', ...BLANK_MEMBER_SLOT, osLink: '/kids-app/my-kids-pebble' },
+});
+
+export const initialFamilyState: FamilyState = {
+    familyId: '',
+    familyName: 'Anderson',
+    members: createInitialFamilyMembers(),
+    auditLogs: [],
+};
+
+
+// --- CONTEXT DEFINITION (Blueprint Step 2.3) ---
+export const FamilyDataContext = createContext<{
+  familyState: FamilyState;
+  setFamilyState: React.Dispatch<React.SetStateAction<FamilyState>>;
+  updateFamilyMember: (id: string, updates: Partial<FamilyMember>) => Promise<void>;
+  addDevice: (memberId: string, device: Omit<Device, 'id' | 'lastSeenAt' | 'lastSnapshot' | 'primary'>) => Promise<void>;
+  removeDevice: (memberId: string, deviceId: string) => Promise<void>;
+  resetFamilyMembers: () => Promise<void>;
+  initializeFamily: (initialData: Partial<FamilyState>) => void;
+  logAuditEvent: (detail: string, level: AuditLog['level'], userId?: string) => void;
+  addMemoryEvent: (event: Omit<AuditLog, 'id' | 'timestamp'>) => void;
+  getLassoMemory: () => Promise<string[]>;
+  getArchiveMemory: (query: string) => Promise<any[]>;
+  activeMIRSession?: MIRSession | null;
+  startMIRSession: (session: MIRSession) => void;
+  updateMIRSession: (patch: Partial<MIRSession>) => void;
+  endMIRSession: () => void;
+  isLoaded: boolean;
+}>({
+  familyState: initialFamilyState,
+  setFamilyState: () => {},
+  updateFamilyMember: async () => {},
+  addDevice: async () => {},
+  removeDevice: async () => {},
+  resetFamilyMembers: async () => {},
+  initializeFamily: () => {},
+  logAuditEvent: () => {},
+  addMemoryEvent: () => {},
+  getLassoMemory: async () => [],
+  getArchiveMemory: async () => [],
+  isLoaded: false,
+  startMIRSession: () => {},
+  updateMIRSession: () => {},
+  endMIRSession: () => {},
+});
+
+
+// --- PROVIDER COMPONENT ---
+export function FamilyDataProvider({ children }: { children: ReactNode }) {
+  const [familyState, setFamilyState] = useState<FamilyState>(initialFamilyState);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const searchParams = useSearchParams();
+  const firestore = useFirestore();
+  const familyIdFromUrl = searchParams.get('sessionId');
+  const [activeMIRSession, setActiveMIRSession] = useState<MIRSession | null>(null);
+
+  const logAuditEvent = useCallback((detail: string, level: AuditLog['level'], userId?: string) => {
+    const newLog: AuditLog = {
+      id: Date.now() + Math.random(),
+      timestamp: new Date(),
+      level,
+      detail,
+      userId
+    };
+    setFamilyState(prev => ({
+      ...prev,
+      auditLogs: [newLog, ...prev.auditLogs].slice(0, 50)
+    }));
+  }, []);
+  
+  const addMemoryEvent = useCallback((event: Omit<AuditLog, 'id' | 'timestamp'>) => {
+      const newEvent: AuditLog = {
+          id: Date.now() + Math.random(),
+          timestamp: new Date(),
+          ...event,
+      };
+      setFamilyState(prev => ({
+          ...prev,
+          auditLogs: [newEvent, ...prev.auditLogs].slice(0, 100),
+      }));
+      // Add to short-term memory
+      addToLasso(event.userId || 'system', event.detail);
+      // Conditionally add to long-term memory
+      if (event.level === 'USER' || event.level === 'SYSTEM') {
+          saveToArchive(event.detail);
+      }
+  }, []);
+
+  const getLassoMemory = useCallback(async (userId = 'system') => {
+      return getRecentLassoMemoryArray(userId);
+  }, []);
+
+  const getArchiveMemory = useCallback(async (query: string) => {
+      return queryArchive(query);
+  }, []);
+
+  const initializeFamily = useCallback((initialData: Partial<FamilyState>) => {
+    const mergedMembers = { ...createInitialFamilyMembers(), ...initialData.members };
+    setFamilyState(prev => ({
+        ...prev,
+        ...initialData,
+        members: mergedMembers,
+        auditLogs: initialData.auditLogs || [],
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!firestore) {
+        setIsLoaded(true); 
+        return;
+    }
+
+    const effectiveFamilyId = familyIdFromUrl || localStorage.getItem('familySessionId');
+    if (!effectiveFamilyId) {
+        const newId = `session_${Date.now()}`;
+        localStorage.setItem('familySessionId', newId);
+        window.history.replaceState(null, '', `?sessionId=${newId}`);
+        return;
+    }
+    
+    if (effectiveFamilyId === familyState.familyId && isLoaded) {
+      return; 
+    }
+
+    const docRef = doc(firestore, 'familyCores', effectiveFamilyId);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const logs = (data.auditLogs || []).map(log => ({
+          ...log,
+          timestamp: log.timestamp?.toDate ? log.timestamp.toDate() : new Date(),
+          id: log.id || Date.now() + Math.random()
+        }));
+
+        initializeFamily({
+            familyId: effectiveFamilyId,
+            familyName: data.familyName,
+            members: data.members,
+            isFinalized: data.isFinalized,
+            lat: data.lat,
+            lng: data.lng,
+            jurisdiction: data.jurisdiction,
+            auditLogs: logs,
+        });
+      } else {
+        const newFamilyCore = {
+            ...initialFamilyState,
+            familyId: effectiveFamilyId,
+            createdAt: serverTimestamp(),
+        };
+        setDoc(docRef, newFamilyCore); 
+        initializeFamily(newFamilyCore);
+      }
+      setIsLoaded(true);
+    }, (error) => {
+      console.error("Failed to subscribe to family data:", error);
+      setIsLoaded(true); 
+    });
+
+    return () => unsubscribe();
+  }, [familyIdFromUrl, firestore, familyState.familyId, isLoaded, initializeFamily]);
+
+  const updateFamilyMember = useCallback(async (id: string, updates: Partial<FamilyMember> | string, value?: any) => {
+    const familyId = familyState.familyId;
+    if (!firestore || !familyId) {
+       console.warn("Firestore not ready, updating local state only.");
+       setFamilyState(prev => {
+          const actualUpdates = typeof updates === 'string' ? { [updates]: value } : updates;
+          const newMembers = { ...prev.members, [id]: { ...prev.members[id], ...actualUpdates }};
+          return { ...prev, members: newMembers };
+       });
+       return;
+    }
+    
+    const actualUpdates = typeof updates === 'string' ? { [updates]: value } : updates;
+    const originalMemberState = familyState.members[id];
+
+    setFamilyState(prev => {
+        const memberExists = prev.members && prev.members[id];
+        if (!memberExists) return prev;
+        
+        const newMembers = {
+            ...prev.members,
+            [id]: { ...prev.members[id], ...actualUpdates },
+        };
+        return { ...prev, members: newMembers };
+    });
+
+    const docRef = doc(firestore, 'familyCores', familyId);
+    const updatePayload = {};
+    for (const key in actualUpdates) {
+        updatePayload[`members.${id}.${key}`] = actualUpdates[key];
+    }
+    
+    updateDoc(docRef, { ...updatePayload, updatedAt: serverTimestamp() })
+        .catch((serverError) => {
+            // Revert optimistic update
+            setFamilyState(prev => ({
+                ...prev,
+                members: {
+                    ...prev.members,
+                    [id]: originalMemberState,
+                },
+            }));
+            
+            // Create and emit the specialized error
+            const contextualError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'update',
+                requestResourceData: { [`members.${id}`]: actualUpdates },
+            });
+            errorEmitter.emit('permission-error', contextualError);
+        });
+
+  }, [firestore, familyState.familyId, familyState.members]);
+
+  const addDevice = useCallback(async (memberId: string, device: Omit<Device, 'id' | 'lastSeenAt' | 'lastSnapshot' | 'primary'>) => {
+    const member = familyState.members[memberId];
+    if (!member) return;
+
+    const currentDevices = member.devices || [];
+    const isPrimary = currentDevices.length === 0;
+
+    const newDevice: Device = {
+        ...device,
+        id: `dev_${crypto.randomUUID()}`,
+        registeredAt: Date.now(),
+        primary: isPrimary
+    };
+    const updatedDevices = [...currentDevices, newDevice];
+    await updateFamilyMember(memberId, { devices: updatedDevices });
+    addMemoryEvent({ level: 'SYSTEM', detail: `Device '${device.name}' registered to ${member.name}.`, userId: memberId });
+  }, [updateFamilyMember, familyState.members, addMemoryEvent]);
+
+  const removeDevice = useCallback(async (memberId: string, deviceId: string) => {
+    const member = familyState.members[memberId];
+    if (!member?.devices) return;
+    
+    const updatedDevices = member.devices.filter(d => d.id !== deviceId);
+    await updateFamilyMember(memberId, { devices: updatedDevices });
+    addMemoryEvent({ level: 'SYSTEM', detail: `Device removed from ${member.name}.`, userId: memberId });
+  }, [updateFamilyMember, familyState.members, addMemoryEvent]);
+
+
+  const resetFamilyMembers = useCallback(async () => {
+    const freshMembers = createInitialFamilyMembers();
+    setFamilyState(prev => ({...prev, members: freshMembers}));
+    if (firestore && familyState.familyId) {
+        const docRef = doc(firestore, 'familyCores', familyState.familyId);
+        await updateDoc(docRef, { members: freshMembers });
+    }
+  }, [firestore, familyState.familyId]);
+
+  const startMIRSession = (session: MIRSession) => {
+    setActiveMIRSession(session);
+    addMemoryEvent({ level: 'SYSTEM', detail: `MIR Session ${session.sessionId} started.`, userId: session.userId});
+  };
+
+  const updateMIRSession = (patch: Partial<MIRSession>) => {
+    setActiveMIRSession(prev =>
+      prev
+        ? {
+            ...prev,
+            ...patch,
+            lastUpdatedAt: Date.now(),
+          }
+        : prev
+    );
+  };
+  
+  const endMIRSession = () => {
+    if (activeMIRSession) {
+      addMemoryEvent({ level: 'SYSTEM', detail: `MIR Session ${activeMIRSession.sessionId} ended.`, userId: activeMIRSession.userId});
+    }
+    setActiveMIRSession(null);
+  };
+  
+  const value = useMemo(() => ({
+    familyState,
+    setFamilyState,
+    updateFamilyMember,
+    addDevice,
+    removeDevice,
+    resetFamilyMembers,
+    initializeFamily,
+    logAuditEvent,
+    addMemoryEvent,
+    getLassoMemory,
+    getArchiveMemory,
+    isLoaded,
+    activeMIRSession,
+    startMIRSession,
+    updateMIRSession,
+    endMIRSession,
+  }), [familyState, setFamilyState, updateFamilyMember, addDevice, removeDevice, resetFamilyMembers, initializeFamily, logAuditEvent, addMemoryEvent, getLassoMemory, getArchiveMemory, isLoaded, activeMIRSession]);
+
+  return (
+    <FamilyDataContext.Provider value={value}>
+      {children}
+    </FamilyDataContext.Provider>
+  );
+};
+
+export const useFamilyData = () => {
+    const context = useContext(FamilyDataContext);
+    if (!context) {
+        throw new Error('useFamilyData must be used within a FamilyDataProvider');
+    }
+    return context;
+};
+
+export default FamilyDataProvider;
