@@ -1,0 +1,37 @@
+
+'use client';
+import { ArrowDownLeft, ArrowUpRight, Loader2, XCircle } from 'lucide-react';
+import { Timestamp } from 'firebase/firestore';
+
+export const TransactionRow = ({ tx }) => {
+    const isDeposit = tx.type === 'TOP_UP' || tx.type === 'revenue' || tx.type === 'earn';
+    const date = tx.timestamp instanceof Timestamp ? tx.timestamp.toDate() : new Date();
+
+    const statusConfig = {
+        pending: { color: 'text-yellow-400', icon: <Loader2 size={12} className="animate-spin" /> },
+        confirmed: { color: isDeposit ? 'text-emerald-400' : 'text-rose-400', icon: isDeposit ? <ArrowUpRight size={12} /> : <ArrowDownLeft size={12} /> },
+        failed: { color: 'text-red-400', icon: <XCircle size={12} /> }
+    };
+    const currentStatus = statusConfig[tx.status || 'confirmed'];
+    
+    const amountSOV = tx.amountSOV || tx.amount || 0;
+    const amountCAD = tx.amountCAD || (amountSOV * 1.00); // Assuming 1:1 for display
+
+    return (
+        <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-800/70 transition-colors">
+            <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${isDeposit ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}>
+                   {currentStatus.icon}
+                </div>
+                <div>
+                    <p className="font-semibold text-sm text-slate-100">{tx.description || tx.type}</p>
+                    <p className="text-xs text-slate-500 font-mono">{date.toLocaleString()}</p>
+                </div>
+            </div>
+            <div className={`text-sm font-bold font-mono text-right ${currentStatus.color}`}>
+                <p>{isDeposit ? '+' : '-'}{amountSOV.toLocaleString()} SOV</p>
+                <p className="text-xs text-slate-500 font-normal">≈ {amountCAD.toLocaleString('en-US', {style: 'currency', currency: 'CAD'})}</p>
+            </div>
+        </div>
+    );
+};
