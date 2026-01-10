@@ -1,0 +1,149 @@
+'use client';
+
+import { RoleProvider, useRole } from '@/contexts/role-context';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import AppSidebar from '@/components/dashboard/app-sidebar';
+import AppHeader from '@/components/dashboard/app-header';
+import { Skeleton } from '@/components/ui/skeleton';
+
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
+  const { role, isLoading } = useRole();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full">
+        <Skeleton className="hidden md:block w-72 h-full" />
+        <div className="flex-1 flex flex-col">
+          <Skeleton className="h-16 w-full" />
+          <div className="flex-1 p-8">
+            <Skeleton className="w-1/4 h-8 mb-6" />
+            <Skeleton className="w-full h-64" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!role) {
+    return null; // RoleProvider handles redirect
+  }
+
+  return (
+    <div className="flex min-h-screen w-full bg-muted/40">
+      <AppSidebar role={role} />
+      <div className="flex flex-col w-full sm:gap-4 sm:py-4 sm:pl-14">
+        <AppHeader />
+        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <RoleProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </RoleProvider>
+  );
+}
+
+
+
+'use client';
+
+import { useRole } from '@/contexts/role-context';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import Link from 'next/link';
+import {
+  Calendar,
+  MessageSquare,
+  ClipboardList,
+  Sparkles,
+  Users,
+  Settings,
+  type LucideIcon,
+  Route,
+  Cpu,
+  Code,
+  UserPlus,
+  Wifi,
+  Phone,
+  Cloud,
+  Binary,
+  Satellite,
+  HardHat,
+  Landmark,
+  BookOpen,
+  Baby,
+  User as UserIcon,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+type App = {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  icon: LucideIcon;
+};
+
+// Admin-specific apps
+const adminApps: App[] = [
+    {
+        id: 'pedlle-tts',
+        title: 'PEDLLE TTS Engine',
+        description: 'Client-facing sandbox and registry link.',
+        href: '/admin/dashboard/pedlle-tts',
+        icon: Cpu,
+    },
+    {
+        id: 'settings-family',
+        title: 'System Settings',
+        description: 'Configure global FamilyOS settings.',
+        href: '/admin/dashboard/system-settings',
+        icon: Settings,
+    },
+];
+
+
+export default function DashboardPage() {
+  const { role } = useRole();
+
+  if (!role) {
+    return null;
+  }
+  
+  const availableApps = role === 'admin' ? adminApps : [];
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold mb-6 font-headline">
+        Welcome, <span className="capitalize">{role}</span>!
+      </h1>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {availableApps.map(app => (
+          <Link href={app.href} key={app.id}>
+            <Card className="hover:bg-card hover:shadow-lg transition-all h-full hover:border-primary">
+              <CardHeader>
+                <div className="flex items-center gap-4">
+                  <app.icon className="size-8 text-primary" />
+                  <div>
+                    <CardTitle>{app.title}</CardTitle>
+                    <CardDescription>{app.description}</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
