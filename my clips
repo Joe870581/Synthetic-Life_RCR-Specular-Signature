@@ -1,0 +1,365 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { 
+  Heart, MessageCircle, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon,
+  BarChart3, FolderKanban
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Link from 'next/link';
+
+// --- UTILITY & HELPER FUNCTIONS ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- INITIAL DATA & CONFIG ---
+const FEED_DATA = [
+  {
+    id: 1,
+    type: 'video',
+    url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-lighting-in-the-city-at-night-21895-large.mp4',
+    user: '@cyber_nina',
+    desc: 'Exploring the neon grid in the alpha district. #cyberpunk #6G',
+    music: 'Original Sound - CyberNina',
+    likes: '24.5K',
+    commentsCount: '1.2K'
+  },
+  {
+    id: 2,
+    type: 'news',
+    title: 'Sovereign Nodes Reach 1M Connections',
+    excerpt: 'The decentralized mesh network has officially surpassed its primary growth target for Q4. Citizens are reporting 0ms latency in the core...',
+    user: '@global_pulse',
+    category: 'TECH',
+    readTime: '2 min',
+    likes: '10K',
+    commentsCount: '450'
+  },
+  {
+    id: 3,
+    type: 'live',
+    url: 'https://assets.mixkit.co/videos/preview/mixkit-digital-animation-of-a-blue-and-purple-energy-field-23425-large.mp4',
+    user: '@vibe_engine',
+    desc: 'LIVE: Synthetic Audio Generation Demo',
+    viewerCount: '12.4K',
+    likes: '89.2K',
+    commentsCount: '4.5K'
+  }
+];
+
+const FRIENDS = [
+  { id: 1, name: 'Jax', active: true, story: true, missed: 1, type: 'text' },
+  { id: 3, name: 'Kael', active: false, story: true, missed: 1, type: 'voicemail' },
+  { id: 4, name: 'Sora', active: true, story: true, missed: 2, type: 'missed' },
+];
+
+const STICKERS = [
+  { id: 1, name: 'Glow', price: 0.01 },
+  { id: 2, name: 'Hype', price: 1.50 },
+  { id: 3, name: 'Elite', price: 10.00 },
+  { id: 4, name: 'King', price: 100.00 },
+];
+
+const HeaderNav = ({ onSearchToggle, isSearchOpen }) => {
+    const searchParams = useSearchParams();
+    const userId = searchParams.get('userId');
+
+    const navLinks = [
+        { href: `/shared-app/myclips?userId=${userId}`, icon: HomeIcon, label: 'MyClips' },
+        { href: `/adult-app/adult-socialpost-view?userId=${userId}`, icon: ImageIcon, label: 'Editorial' },
+        { href: `/shared-app/video-posting?userId=${userId}`, icon: Video, label: 'Video Hub' },
+        { href: `/family-shared/media-vault?userId=${userId}`, icon: FolderKanban, label: 'Media Vault' },
+        { href: `/adult-app/my-work?userId=${userId}`, icon: BarChart3, label: 'Analytics' },
+    ];
+    
+    return (
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+        <div className="flex flex-col items-center gap-2">
+            <motion.div 
+                layout
+                className="flex items-center gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/[0.05] rounded-3xl"
+            >
+                <motion.button
+                    layout
+                    onClick={onSearchToggle}
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isSearchOpen ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+                >
+                    <Search />
+                </motion.button>
+                <AnimatePresence>
+                    {isSearchOpen && (
+                        <motion.div
+                            layout
+                            initial={{opacity: 0, width: 0}}
+                            animate={{opacity: 1, width: 'auto'}}
+                            exit={{opacity: 0, width: 0}}
+                            className="flex items-center gap-2 overflow-hidden"
+                        >
+                            <div className="w-px h-8 bg-white/10" />
+                            {navLinks.map((link) => (
+                                <Link key={link.href} href={link.href} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center" title={link.label}>
+                                    <link.icon className="text-white/70"/>
+                                </Link>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </motion.div>
+        </div>
+      </div>
+    );
+};
+
+const VideoItem = ({ item, isActive, onHug, hugLevel, onOpenComments, onSave, uiVisible }) => {
+  const videoRef = useRef(null);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    if (videoRef.current && (item.type === 'video' || item.type === 'live')) {
+      if (isActive) videoRef.current.play().catch(() => {});
+      else { videoRef.current.pause(); videoRef.current.currentTime = 0; }
+    }
+  }, [isActive, item.type, item.url]);
+
+  const renderContent = () => {
+    if (item.type === 'news') {
+      return (
+        <div className="h-full w-full bg-neutral-900 flex items-center justify-center p-12">
+          <div className="max-w-md w-full space-y-6">
+            <div className="flex items-center gap-2 text-cyan-400">
+              <Newspaper size={20} />
+              <span className="text-[10px] font-black tracking-[0.3em] uppercase">{item.category} • {item.readTime}</span>
+            </div>
+            <h2 className="text-4xl font-black leading-tight italic">{item.title}</h2>
+            <p className="text-white/60 text-lg leading-relaxed">{item.excerpt}</p>
+            <button className="bg-white text-black px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-cyan-400 transition-colors">Read Full Article</button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <video ref={videoRef} loop playsInline muted className="h-full w-full object-cover" src={item.url} />
+        {item.type === 'live' && (
+          <div className="absolute top-10 left-10 flex items-center gap-2 bg-rose-600 px-4 py-1.5 rounded-xl animate-pulse">
+            <Radio size={14} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Live: {item.viewerCount}</span>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <div className="relative h-screen w-full flex-shrink-0 bg-black overflow-hidden snap-start">
+      {renderContent()}
+      
+      {/* Interaction Overlay (The First Layer) */}
+      <div className={`absolute inset-0 transition-opacity duration-500 ${uiVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/80" />
+        <div className="absolute inset-0 flex flex-col justify-end p-10 pb-16 text-white">
+          <div className="flex justify-between items-end">
+            <div className="max-w-[70%] space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl border-2 border-cyan-400 overflow-hidden shadow-[0_0_15px_rgba(34,211,238,0.4)]">
+                  <img src={`https://i.pravatar.cc/150?u=${item.user}`} alt="user" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h3 className="font-black text-2xl tracking-tighter">{item.user}</h3>
+                  <p className="text-[10px] text-white/50 font-bold tracking-[0.2em] uppercase">Sovereign Node</p>
+                </div>
+              </div>
+              <p className="text-sm text-white/90 leading-relaxed font-medium">{item.desc || item.title}</p>
+            </div>
+
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex flex-col items-center gap-2">
+                <button onClick={() => onHug(item.id)} className={`w-16 h-16 rounded-[2rem] flex items-center justify-center transition-all backdrop-blur-3xl border ${hugLevel > 0 ? 'bg-rose-500 border-rose-300' : 'bg-white/5 border-white/10'}`}>
+                  <Heart fill={hugLevel > 0 ? "white" : "none"} size={32} />
+                  {hugLevel > 0 && <span className="absolute -top-2 -right-2 w-8 h-8 bg-white text-black rounded-full flex items-center justify-center font-black text-xs shadow-xl">{hugLevel}</span>}
+                </button>
+                <p className="text-[10px] font-black tracking-widest uppercase text-white/40">Hug</p>
+              </div>
+
+              <div className="flex flex-col items-center gap-2">
+                <button onClick={onOpenComments} className="w-16 h-16 rounded-[2rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex items-center justify-center">
+                  <MessageCircle size={32} />
+                </button>
+                <p className="text-[10px] font-black tracking-widest uppercase text-white/40">{item.commentsCount}</p>
+              </div>
+
+              <button onClick={() => { setIsSaved(!isSaved); onSave(item); }} className={`w-16 h-16 rounded-[2rem] backdrop-blur-3xl border transition-all flex items-center justify-center ${isSaved ? 'bg-cyan-500 border-cyan-300' : 'bg-white/5 border-white/10'}`}>
+                <Bookmark fill={isSaved ? "white" : "none"} size={32} />
+              </button>
+
+              <button className="w-16 h-16 rounded-[2rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex items-center justify-center">
+                <Share2 size={32} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const VibeStream = () => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [uiVisible, setUiVisible] = useState(true);
+  const [showHub, setShowHub] = useState(false);
+  const [showStickers, setShowStickers] = useState(false);
+  const [activeChat, setActiveChat] = useState(null);
+  const [hugLevels, setHugLevels] = useState({});
+  const [savedVideos, setSavedVideos] = useState([]);
+  const containerRef = useRef(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  const handleHug = (vId) => {
+    setHugLevels(prev => ({ ...prev, [vId]: ((prev[vId] || 0) % 3) + 1 }));
+  };
+
+  const handleSave = (item) => {
+    setSavedVideos(prev => {
+      if (prev.find(v => v.id === item.id)) return prev.filter(v => v.id !== item.id);
+      return [...prev, item];
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black flex justify-center text-white overflow-hidden font-sans">
+      
+      <HeaderNav onSearchToggle={() => setIsSearchOpen(p => !p)} isSearchOpen={isSearchOpen} />
+
+      {/* UI TOGGLE ARROW (Close/Open First Layer) */}
+      <button 
+        onClick={() => setUiVisible(!uiVisible)}
+        className={`absolute right-0 top-1/2 -translate-y-1/2 z-[200] w-12 h-24 bg-white/10 backdrop-blur-2xl border-l border-y border-white/10 rounded-l-3xl flex items-center justify-center transition-all ${uiVisible ? 'translate-x-0' : 'translate-x-6 hover:translate-x-0 bg-cyan-500/20'}`}
+      >
+        {uiVisible ? <ChevronRight size={24} className="text-white/40"/> : <ChevronLeft size={24} className="text-cyan-400"/>}
+      </button>
+
+      {/* FLOATING COMMS IFRAME */}
+      {activeChat && (
+        <div className="absolute inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-[450px] h-[650px] bg-white/10 backdrop-blur-3xl border border-white/20 rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="p-10 flex justify-between items-center border-b border-white/10">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl border border-white/20 overflow-hidden">
+                  <img src={`https://i.pravatar.cc/100?u=${activeChat.name}`} className="w-full h-full object-cover" alt="" />
+                </div>
+                <div>
+                  <h4 className="font-black text-2xl uppercase italic">{activeChat.name}</h4>
+                  <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest">Translucent Link Pad</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveChat(null)} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="flex-1 p-10 overflow-y-auto space-y-6">
+               <div className="bg-white/5 p-6 rounded-3xl rounded-tl-none border border-white/10 max-w-[85%]">
+                 <p className="text-sm opacity-80 italic leading-relaxed">Initializing Sovereign communication protocol...</p>
+               </div>
+            </div>
+            <div className="p-8 bg-black/40 border-t border-white/5 flex gap-4">
+              <input type="text" placeholder="Type message..." className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm outline-none" />
+              <button className="w-14 h-14 bg-white text-black rounded-2xl flex items-center justify-center"><Send size={24} /></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RIGHT HUB: VAULT & NOTIFICATIONS */}
+      <div className={`absolute right-0 top-0 bottom-0 w-[450px] bg-black/90 backdrop-blur-3xl z-[120] border-l border-white/10 transition-transform duration-500 p-10 ${showHub ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="flex justify-between items-center mb-12">
+          <h2 className="text-3xl font-black italic uppercase">Vault</h2>
+          <button onClick={() => setShowHub(false)} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center"><X size={24}/></button>
+        </div>
+        <div className="space-y-12">
+           <div>
+            <p className="text-[10px] font-black tracking-widest text-cyan-400 mb-6 uppercase">Active Comms</p>
+            <div className="space-y-4">
+              {FRIENDS.filter(f => f.missed > 0).map(f => (
+                <div key={f.id} onClick={() => setActiveChat(f)} className="flex gap-4 items-center bg-white/5 p-5 rounded-3xl border border-white/10 cursor-pointer hover:bg-white/10">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-500/20 flex items-center justify-center text-rose-400">
+                    {f.type === 'missed' ? <PhoneMissed size={24}/> : f.type === 'voicemail' ? <Mic size={24}/> : <Mail size={24}/>}
+                  </div>
+                  <div className="flex-1 font-black italic uppercase">{f.name}</div>
+                  <div className="w-3 h-3 bg-rose-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(244,63,94,1)]" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* STICKER SHOP (SOV MARKET) */}
+      <div className={`absolute bottom-32 left-1/2 -translate-x-1/2 w-full max-w-md bg-black/80 backdrop-blur-3xl z-[110] border border-white/10 rounded-[3rem] p-8 transition-all duration-500 ${showStickers ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+        <div className="flex justify-between items-center mb-6">
+          <p className="text-xs font-black uppercase tracking-widest italic flex items-center gap-2">SOV Market</p>
+          <button onClick={() => setShowStickers(false)} className="text-white/40"><X size={20}/></button>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          {STICKERS.map(s => (
+            <button key={s.id} className="flex flex-col items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-cyan-500/20">
+              <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center"><Sticker size={24} /></div>
+              <p className="text-[10px] font-black text-cyan-400">${s.price}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* FEED CONTAINER */}
+      <div 
+        ref={containerRef}
+        onScroll={() => { if (containerRef.current) setActiveIndex(Math.round(containerRef.current.scrollTop / window.innerHeight)); }}
+        className="relative w-full h-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide no-scrollbar"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {FEED_DATA.map((item, idx) => (
+          <VideoItem 
+            key={item.id} 
+            item={item} 
+            isActive={idx === activeIndex} 
+            onHug={handleHug}
+            hugLevel={hugLevels[item.id] || 0}
+            onOpenComments={() => setShowStickers(true)}
+            onSave={handleSave}
+            uiVisible={uiVisible}
+          />
+        ))}
+
+        {/* TOP ICONS (Persistent but subtle) */}
+        {uiVisible && (
+          <div className="fixed top-0 left-0 right-0 p-12 flex justify-between items-center z-50 pointer-events-none transition-opacity duration-300">
+            <div className="pointer-events-auto">
+              {/* This space is reserved for a future search/home button cluster */}
+            </div>
+            <div className="pointer-events-auto">
+              <div onClick={() => setShowHub(true)} className="relative w-16 h-16 bg-white/5 backdrop-blur-3xl rounded-[1.5rem] flex items-center justify-center border border-white/10 cursor-pointer">
+                <Bell size={24} />
+                <div className="absolute top-0 right-0 w-4 h-4 bg-rose-500 rounded-full border-2 border-black" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        video { filter: contrast(1.1) brightness(0.9); }
+      `}} />
+    </div>
+  );
+};
+
+export default VibeStream;
+
+    
