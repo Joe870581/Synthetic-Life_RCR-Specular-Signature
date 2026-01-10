@@ -1,0 +1,643 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { 
+  Heart, MessageCircle, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon,
+  Gamepad2, BarChart3, FileText, PlusCircle, Settings, ArrowRight, Upload, Tv,
+  Save, UploadCloud, Folder, Palette, Globe, SkipBack, SkipForward, Layers, Star, Wallet,
+  ArrowDown, ArrowUpRight, DollarSign, TrendingUp, Briefcase, Wand2, Clock, Activity, Cpu, Coins, Lock,
+  Target, ShieldCheck,
+  Sheet,
+  Calculator
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { FamilyDataContext, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+import { useParams, useSearchParams } from 'next/navigation';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+// --- UTILITY & HELPER FUNCTIONS ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- INITIAL DATA & CONFIG ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'nexus-universal';
+
+const studioApps = [
+    { id: 'art', title: 'Art Studio', href: '/shared-app/art-studio', icon: Palette },
+    { id: 'video', title: 'Video Creator', href: '/shared-app/video-creator', icon: Video },
+    { id: 'audio', title: 'Audio Studio', href: '/shared-app/audio-studio', icon: Music },
+    { id: 'live', title: 'Live Studio', href: '/shared-app/live-studio', icon: Radio },
+    { id: 'tuner', title: 'MyTuner', href: '/family-shared/my-tuner', icon: Disc },
+    { id: 'gamerzoner', title: 'GamerZoner', href: '/shared-app/gamerzoner', icon: Gamepad2 },
+    { id: 'word', title: 'Word Processor', href: '/shared-app/word-processor', icon: FileText },
+    { id: 'spreadsheet', title: 'Spreadsheet', href: '/shared-app/spreadsheet', icon: Sheet },
+    { id: 'calculator', title: 'Calculator', href: '/shared-app/calculator', icon: Calculator },
+    { id: 'social', title: 'Social Posting', href: '/shared-app/social-posting', icon: MessageSquare },
+];
+
+const initialContent = [
+    { id: 1, type: 'video', title: "Summer Vacation '24", status: 'sandbox', cover: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400&q=80" },
+    { id: 2, type: 'short', title: "First Day of School!", status: 'published', cover: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80" },
+    { id: 3, type: 'music', title: "Chill Beats to Study To", status: 'published', cover: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400&q=80" },
+    { id: 4, type: 'video', title: "Soccer Game Highlights", status: 'sandbox', cover: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=400&q=80" },
+];
+
+const MOCK_DATA = [
+  { id: 1, type: 'audio', title: 'Midnight Echoes', author: '@SynthWizard', duration: '4:12', img: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=400&q=80' },
+  { id: 2, type: 'cinema', title: 'Neo-Tokyo 2099', author: 'Visual Studio X', duration: '1:45:20', img: 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?auto=format&fit=crop&w=400&q=80' },
+  { id: 3, type: 'live', title: 'Global News Feed', author: 'Reuters Universal', duration: 'LIVE', img: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=400&q=80' },
+  { id: 4, type: 'audio', title: 'Hyper Drive', author: 'Nexus Community', duration: '3:50', img: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=400&q=80' },
+  { id: 5, type: 'cinema', title: 'The Silent Void', author: 'Astral Media', duration: '12:45', img: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=400&q=80' },
+  { id: 6, type: 'audio', title: 'Vapor Memories', author: 'RetroFlow', duration: '5:02', img: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=400&q=80' },
+];
+
+const mockWalletHistory = [
+  { date: 'Jan', balance: 3200, cad: 1280 },
+  { date: 'Feb', balance: 3100, cad: 1240 },
+  { date: 'Mar', balance: 3800, cad: 1520 },
+  { date: 'Apr', balance: 3500, cad: 1400 },
+  { date: 'May', balance: 4100, cad: 1640 },
+  { date: 'Jun', balance: 4520.50, cad: 1808.20 },
+];
+
+const mockPurchasedAssets = [
+    { id: 'asset1', name: 'Cyberpunk Theme', type: 'Website Template', status: 'Claimed' },
+    { id: 'asset2', name: 'Quantum Visualizer', type: 'Music Video FX', status: 'Claimed' },
+];
+
+const AppContent = () => {
+  const { familyMembers } = useContext(FamilyDataContext);
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const userId = params.userId as string || searchParams.get('userId');
+  const sessionId = searchParams.get('sessionId');
+
+  const activeUser = useMemo(() => {
+    return familyMembers.find(m => m.id === userId) || familyMembers[0];
+  }, [userId, familyMembers]);
+
+  const [activeTab, setActiveTab] = useState('explore');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSignal, setActiveSignal] = useState(null);
+  
+  // Forge State
+  const [songName, setSongName] = useState('');
+  const [artistName, setArtistName] = useState('');
+  const [description, setDescription] = useState('');
+  const [contentType, setContentType] = useState('song');
+  const [coverImage, setCoverImage] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showAssetSourceModal, setShowAssetSourceModal] = useState(false);
+  const [createdAlbums, setCreatedAlbums] = useState([]);
+
+  // Studio Modal State
+  const [activeStudio, setActiveStudio] = useState(null);
+
+  // Saved/Published Modals
+  const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
+  const [isPublishedModalOpen, setIsPublishedModalOpen] = useState(false);
+
+  // Wallet
+  const [stats] = useState({ viewers: '1.2k', sov: '4,520.50', growth: '+12%' });
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (f) => {
+        setCoverImage(f.target.result as string);
+        setShowAssetSourceModal(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCreateAlbum = () => {
+      if (!songName || !artistName || !coverImage) return;
+      const newAlbum = {
+          id: Date.now(),
+          title: songName,
+          artist: artistName,
+          image: coverImage,
+          description
+      };
+      setCreatedAlbums(prev => [newAlbum, ...prev]);
+      // Reset form
+      setSongName('');
+      setArtistName('');
+      setDescription('');
+      setCoverImage(null);
+  }
+
+  const StudioView = () => (
+    <div className="p-8 max-w-7xl mx-auto w-full space-y-12">
+      <div className="text-center">
+        <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-2">Creation Suite</h2>
+        <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Select a studio to begin your next project</p>
+      </div>
+      
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        {studioApps.map(app => (
+          <div key={app.id} onClick={() => setActiveStudio(app)} className="group aspect-square bg-zinc-900/50 border border-white/5 rounded-3xl flex flex-col items-center justify-center gap-4 hover:bg-zinc-900 hover:border-cyan-500/50 cursor-pointer transition-all hover:-translate-y-2">
+            <div className="p-4 rounded-full bg-black/30 border border-white/5 text-cyan-400 group-hover:scale-110 transition-transform">
+              <app.icon size={32} />
+            </div>
+            <span className="text-xs font-black text-zinc-400 uppercase tracking-widest text-center">{app.title}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-6">
+        <button onClick={() => setIsSavedModalOpen(true)} className="flex-1 p-8 bg-zinc-800/40 border border-white/5 rounded-3xl flex items-center gap-6 hover:bg-zinc-800 transition-all">
+          <Folder size={32} className="text-emerald-400" />
+          <div>
+              <h4 className="text-lg font-black uppercase tracking-tighter text-left">Saved Sandbox Content</h4>
+              <p className="text-xs text-zinc-500 font-bold text-left">Access your drafts and unfinished projects</p>
+          </div>
+        </button>
+        <button onClick={() => setIsPublishedModalOpen(true)} className="flex-1 p-8 bg-zinc-800/40 border border-white/5 rounded-3xl flex items-center gap-6 hover:bg-zinc-800 transition-all">
+          <UploadCloud size={32} className="text-purple-400" />
+          <div>
+              <h4 className="text-lg font-black uppercase tracking-tighter text-left">Publish Live Content</h4>
+              <p className="text-xs text-zinc-500 font-bold text-left">Finalize and release your content to the public</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+
+  const ForgeView = () => (
+    <div className="max-w-7xl mx-auto w-full p-8">
+        <div className="text-center mb-12">
+            <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-2">The Creative Forge</h2>
+            <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Manifest your signal identity</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Panel: Album Creator */}
+            <div className="bg-zinc-900/50 border border-white/10 p-6 rounded-3xl space-y-4">
+                <h3 className="font-bold text-lg mb-2">Album Creator</h3>
+                <input type="text" placeholder="Title" value={songName} onChange={e => setSongName(e.target.value)} className="w-full bg-zinc-800 border border-white/10 rounded-lg p-3 text-lg font-bold italic" />
+                <input type="text" placeholder="Artist / Creator" value={artistName} onChange={e => setArtistName(e.target.value)} className="w-full bg-zinc-800 border border-white/10 rounded-lg p-3 text-sm" />
+                <textarea placeholder="Description..." value={description} onChange={e => setDescription(e.target.value)} className="w-full h-20 bg-zinc-800 border border-white/10 rounded-lg p-3 text-sm resize-none" />
+                <button onClick={() => setShowAssetSourceModal(true)} className="w-full h-24 border-2 border-dashed border-white/10 rounded-xl flex items-center justify-center text-zinc-500 hover:bg-white/5 hover:text-white transition-colors">
+                    {coverImage ? <img src={coverImage} className="w-20 h-20 object-cover rounded-lg" alt="Cover preview"/> : <><UploadCloud size={20} className="mr-2" /> Upload Cover Art</>}
+                </button>
+                <button onClick={handleCreateAlbum} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold">Forge Album</button>
+            </div>
+            {/* Right Panel: Display Created Albums */}
+            <div className="bg-zinc-900/50 border border-white/10 p-6 rounded-3xl">
+                <h3 className="font-bold text-lg mb-4">Forged Content</h3>
+                <div className="grid grid-cols-2 gap-4 h-[400px] overflow-y-auto">
+                    {createdAlbums.map(album => (
+                        <div key={album.id} className="aspect-square bg-zinc-800 rounded-lg overflow-hidden">
+                            <img src={album.image} alt={album.title} className="w-full h-full object-cover" />
+                        </div>
+                    ))}
+                    {createdAlbums.length === 0 && <p className="text-zinc-500 text-sm col-span-2 text-center mt-10">Your created albums will appear here.</p>}
+                </div>
+            </div>
+        </div>
+    </div>
+  );
+
+  const ExploreView = () => (
+      <div className="max-w-7xl mx-auto w-full p-8">
+          <div className="text-center mb-12">
+              <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-2">Explore Your Creations</h2>
+              <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Search and review all your saved content</p>
+          </div>
+          <div className="max-w-2xl mx-auto mb-8">
+            <input type="search" placeholder="Search all your saved videos, music, and projects..." className="w-full bg-zinc-800 border border-white/10 rounded-full p-4 text-center" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {[...initialContent, ...createdAlbums].map(item => (
+                   <div key={item.id} className="aspect-square bg-zinc-800 rounded-lg overflow-hidden relative group">
+                        <img src={item.cover || item.image} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <h4 className="text-white font-bold text-center p-4">{item.title}</h4>
+                        </div>
+                   </div>
+              ))}
+          </div>
+      </div>
+  );
+  
+  const WalletView = () => (
+    <div className="max-w-5xl mx-auto w-full p-8">
+      <div className="text-center mb-12">
+        <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-2">SOV$ Wallet</h2>
+        <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Your balance and transaction history</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-zinc-900/50 border border-cyan-500/30 rounded-3xl p-8 text-center">
+            <p className="text-zinc-400 font-bold uppercase text-xs tracking-widest">Current Balance</p>
+            <p className="text-6xl font-extrabold text-cyan-400 tracking-tighter my-2">{stats.sov}</p>
+            <p className={`font-bold flex items-center justify-center gap-2 text-green-400`}><ArrowUpRight size={16}/> {stats.growth}</p>
+          </div>
+          <div className="space-y-3">
+             <Link href="/admin/dashboard/system-settings/banking" className="w-full block">
+                <button className="w-full py-4 bg-green-600 hover:bg-green-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                    <ArrowDown size={16}/> Cash Out
+                </button>
+             </Link>
+             <Link href="/admin/dashboard/system-settings/banking" className="w-full block">
+                <button className="w-full py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                    <ArrowUpRight size={16}/> Fund Wallet
+                </button>
+             </Link>
+             <Link href="/adult-app/my-work" className="w-full block">
+                 <button className="w-full py-3 bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/30 rounded-xl text-xs font-bold">
+                    Go to Burn Store
+                </button>
+             </Link>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 bg-zinc-900/50 border border-white/10 rounded-3xl p-6">
+           <h3 className="font-bold text-lg mb-4">Balance History (6 Months)</h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={mockWalletHistory} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                <defs>
+                    <linearGradient id="colorSOV" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorCAD" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="date" tick={{ fill: '#a1a1aa' }} axisLine={{ stroke: '#a1a1aa' }} />
+                <YAxis tick={{ fill: '#a1a1aa' }} axisLine={{ stroke: '#a1a1aa' }} />
+                <Tooltip contentStyle={{ backgroundColor: 'rgba(5,5,5,0.8)', border: '1px solid #333' }} />
+                <Area type="monotone" dataKey="balance" name="SOV$" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorSOV)" />
+                <Area type="monotone" dataKey="cad" name="CAD" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorCAD)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+       <div className="mt-8 bg-zinc-900/50 border border-white/10 rounded-3xl p-6">
+          <h3 className="font-bold text-lg mb-4">Purchased Assets</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {mockPurchasedAssets.map(asset => (
+                  <div key={asset.id} className="bg-zinc-800 p-4 rounded-xl flex justify-between items-center border border-zinc-700">
+                    <div>
+                        <p className="font-bold text-white">{asset.name}</p>
+                        <p className="text-xs text-zinc-400">{asset.type}</p>
+                    </div>
+                    <div className="px-3 py-1 bg-green-500/10 text-green-300 text-xs font-black rounded-full border border-green-500/20">
+                        {asset.status}
+                    </div>
+                  </div>
+              ))}
+          </div>
+       </div>
+    </div>
+  );
+
+  const EconomyView = () => {
+    const [step, setStep] = useState(0);
+    
+    const STEPS = [
+      { id: 'vision', title: 'SOV Sovereign Core', subtitle: 'A closed-loop value protocol', body: 'SOV is not currency. It is a controlled value layer where effort, consistency, and progress are the only minting mechanisms.', icon: Zap, accent: 'from-amber-500/20', glow: 'shadow-amber-500/20' },
+      { id: 'earn', title: 'Spike Accumulation', subtitle: 'Effort becomes signal', body: 'Learners generate Spike Points through focus, streaks, and completion. No purchase. No shortcuts. Every point is a proof-of-work.', icon: Target, accent: 'from-blue-500/20', glow: 'shadow-blue-500/20' },
+      { id: 'burn', title: 'Deflationary Burn', subtitle: 'Progress → Access', body: 'Spike Points convert into SOV through controlled burn events. This "burn" destroys the effort-points to crystallize them into spending power.', icon: Flame, accent: 'from-orange-600/30', glow: 'shadow-orange-500/20' },
+      { id: 'pebbles', title: 'Pebbles Intelligence', subtitle: 'AI-first, human-earned', body: 'Pebbles mixes content dynamically. It escalates to a human tutor only when a student has burned enough SOV to earn the privilege.', icon: Cpu, accent: 'from-fuchsia-500/20', glow: 'shadow-fuchsia-500/20' },
+      { id: 'bundles', title: 'Outcome Bundles', subtitle: 'Transformation, not time', body: 'Families purchase outcome stacks: content paths, tutor access, and momentum. We sell the destination, not the vehicle.', icon: Layers, accent: 'from-emerald-500/20', glow: 'shadow-emerald-500/20' },
+    ];
+    
+    const active = useMemo(() => STEPS[step], [step]);
+    const Icon = active.icon;
+
+    return (
+      <div className="relative z-10 max-w-7xl mx-auto px-8 py-20 min-h-[70vh] flex items-center">
+        <div className="grid lg:grid-cols-2 gap-16 items-center w-full">
+          <section className="space-y-12 animate-in fade-in slide-in-from-left-8 duration-700">
+            <div className="space-y-8">
+              <h1 className="text-7xl md:text-8xl font-black tracking-tighter leading-[0.85] italic transition-all">
+                {active.title.split(' ')[0]} <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-white/30">{active.title.split(' ').slice(1).join(' ')}</span>
+              </h1>
+              <div className="flex items-center gap-4 text-orange-500">
+                <div className="h-px w-8 bg-orange-500/50" />
+                <h2 className="text-xl font-bold tracking-tight uppercase">{active.subtitle}</h2>
+              </div>
+              <p className="text-xl text-gray-400 leading-relaxed max-w-lg font-light">{active.body}</p>
+            </div>
+            <div className="flex items-center gap-8 pt-4">
+              <button
+                onClick={() => setStep((step + 1) % STEPS.length)}
+                className="group relative flex items-center gap-4 px-10 py-5 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-500 hover:text-white transition-all duration-300"
+              >
+                Execute Next <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+              <Link href={`/adult-app/my-work?sessionId=${sessionId}&userId=${userId}`} passHref>
+                <button
+                    className="group relative flex items-center gap-4 px-10 py-5 bg-red-600/80 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-500 transition-all duration-300"
+                  >
+                    <Flame size={16} /> Enter Burn Store
+                  </button>
+              </Link>
+            </div>
+          </section>
+          <section className="relative group">
+            <div className={cn("absolute inset-0 blur-[100px] opacity-20 transition-all duration-1000", active.glow.replace('shadow-', 'bg-'))} />
+            <div className="relative aspect-square rounded-[4rem] border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent backdrop-blur-2xl flex items-center justify-center overflow-hidden shadow-2xl">
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px]" />
+              <div className="relative z-10 flex flex-col items-center gap-12 text-center scale-110">
+                <div className="relative">
+                  <div className="absolute inset-[-40px] border border-white/5 rounded-full animate-[spin_10s_linear_infinite]" />
+                  <div className="absolute inset-[-60px] border border-dashed border-white/10 rounded-full animate-[spin_20s_linear_infinite_reverse]" />
+                  <div className={cn("w-40 h-40 rounded-[2.5rem] border border-white/20 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-all duration-700 shadow-2xl", active.glow)}><Icon size={72} className="text-white" /></div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-center gap-1">{[1,2,3,4,5].map(i => (<div key={i} className={cn("w-1 h-6 transition-all duration-500 rounded-full", i <= (step + 1) ? "bg-white" : "bg-white/10")} />))}</div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40 italic">{active.id} processing</div>
+                </div>
+              </div>
+              {active.id === 'burn' && (<div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-orange-500/20 to-transparent animate-pulse" />)}
+              {active.id === 'earn' && (<div className="absolute inset-0 flex items-center justify-center opacity-20"><div className="w-[120%] h-[120%] bg-[radial-gradient(circle,rgba(59,130,246,0.2)_0%,transparent_70%)]" /></div>)}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  };
+  
+  const AnalyticsView = () => {
+    const kpiData = [
+        { label: 'Monthly SOV$ Earned', value: '850.50', change: '+15.2%', icon: DollarSign, color: 'text-green-400' },
+        { label: 'Estimated CAD Payout', value: '$340.20', change: '+15.2%', icon: Wallet, color: 'text-green-400' },
+        { label: 'Avg. SOV$ / Hour', value: '12.50', change: '+2.1%', icon: Clock, color: 'text-green-400' },
+        { label: 'Platform Fee (Studio Use)', value: '§ 85.05', change: '10% Tier', icon: Activity, color: 'text-yellow-400' }
+    ];
+    const recentEarnings = [
+        { type: 'Asset Sale', name: '"Quantum Visualizer"', amount: 250, time: '2h ago' },
+        { type: 'Live Stream Donation', name: 'from @viewer42', amount: 50, time: '8h ago' },
+        { type: 'Studio Use Royalty', name: 'Project "Nebula"', amount: 120, time: '1d ago' },
+    ];
+    
+    return (
+        <div className="max-w-7xl mx-auto w-full p-8">
+            <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-4 text-center">Creator Analytics</h2>
+            <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest mb-12 text-center">Your Financial Performance & Metrics</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {kpiData.map(item => (<div key={item.label} className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6"><div className="flex items-center gap-3 mb-2"><item.icon size={16} className={item.color} /><h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">{item.label}</h4></div><p className="text-4xl font-black tracking-tighter text-white">{item.value}</p><p className={`text-xs font-bold mt-1 ${item.color}`}>{item.change}</p></div>))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-zinc-900/50 border border-white/10 rounded-3xl p-6"><h3 className="font-bold text-lg mb-4">Balance History (6 Months)</h3><div className="h-80"><ResponsiveContainer width="100%" height="100%"><AreaChart data={mockWalletHistory} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><defs><linearGradient id="colorSOV" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient><linearGradient id="colorCAD" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" /><XAxis dataKey="date" tick={{ fill: '#a1a1aa' }} axisLine={{ stroke: '#a1a1aa' }} /><YAxis tick={{ fill: '#a1a1aa' }} axisLine={{ stroke: '#a1a1aa' }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(5,5,5,0.8)', border: '1px solid #333' }} /><Area type="monotone" dataKey="balance" name="SOV$" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorSOV)" /><Area type="monotone" dataKey="cad" name="CAD" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorCAD)" /></AreaChart></ResponsiveContainer></div></div>
+                <div className="bg-zinc-900/50 border border-white/10 rounded-3xl p-6"><h3 className="font-bold text-lg mb-4">Recent Earnings Log</h3><div className="space-y-3">{recentEarnings.map((item, index) => (<div key={index} className="flex justify-between items-center bg-black/30 p-3 rounded-xl border border-white/5"><div><p className="text-xs font-bold text-zinc-300">{item.type}</p><p className="text-[10px] text-zinc-500 truncate">{item.name}</p></div><p className="text-sm font-bold text-green-400 font-mono">+ {item.amount.toFixed(2)}</p></div>))}</div></div>
+            </div>
+        </div>
+    );
+  };
+  
+  return (
+    <div className="min-h-screen bg-[#020202] text-[#fafafa] font-sans selection:bg-cyan-500/50 flex flex-col overflow-hidden">
+      <div className="absolute inset-0 z-0 opacity-[0.03] mix-blend-overlay pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+      
+      <header className="h-16 border-b border-white/5 bg-black/40 backdrop-blur-xl px-6 flex items-center justify-between shrink-0 z-50">
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('explore')}>
+            <div className="w-6 h-6 bg-cyan-500 rounded-sm rotate-45 flex items-center justify-center">
+              <div className="w-2 h-2 bg-black -rotate-45" />
+            </div>
+            <h1 className="text-sm font-black tracking-[0.2em] uppercase italic">Nexus.OS</h1>
+          </div>
+          
+          <nav className="hidden md:flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/5">
+            <NavBtn active={activeTab === 'explore'} icon={Globe} label="Explore" onClick={() => setActiveTab('explore')} />
+            <NavBtn active={activeTab === 'forge'} icon={Sparkles} label="Forge" onClick={() => setActiveTab('forge')} />
+            <NavBtn active={activeTab === 'studio'} icon={Layers} label="Studio" onClick={() => setActiveTab('studio')} />
+            <NavBtn active={activeTab === 'wallet'} icon={Wallet} label="Wallet" onClick={() => setActiveTab('wallet')} />
+            <NavBtn active={activeTab === 'economy'} icon={DollarSign} label="Economy" onClick={() => setActiveTab('economy')} />
+            <NavBtn active={activeTab === 'analytics'} icon={BarChart3} label="Analytics" onClick={() => setActiveTab('analytics')} />
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-purple-600 border border-white/20 overflow-hidden">
+            {activeUser && activeUser.imageUrl && <Image src={activeUser.imageUrl} alt={activeUser.name} width={32} height={32} className="w-full h-full object-cover" />}
+          </div>
+        </div>
+      </header>
+      
+      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+        <AnimatePresence mode="wait">
+          {activeTab === 'explore' && <ExploreView />}
+          {activeTab === 'forge' && <ForgeView />}
+          {activeTab === 'studio' && <StudioView />}
+          {activeTab === 'wallet' && <WalletView />}
+          {activeTab === 'economy' && <EconomyView />}
+          {activeTab === 'analytics' && <AnalyticsView />}
+        </AnimatePresence>
+      </main>
+      
+      <AnimatePresence>
+        {activeStudio && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => setActiveStudio(null)} />
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full h-[90vh] max-w-6xl bg-black border border-cyan-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900/50">
+                        <div className="flex items-center gap-3">
+                           {activeStudio.icon && <activeStudio.icon size={18} className="text-cyan-400" />}
+                           <span className="text-sm font-bold text-white">{activeStudio.title}</span>
+                        </div>
+                        <button onClick={() => setActiveStudio(null)} className="p-1 rounded-full text-zinc-500 hover:bg-white/10 hover:text-white"><X size={16} /></button>
+                    </div>
+                    <iframe src={activeStudio.href} className="w-full h-full border-none" title={activeStudio.title} />
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAssetSourceModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-lg">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-lg bg-zinc-900 border border-white/10 rounded-3xl p-8 space-y-6">
+              <h3 className="text-xl font-black text-center">Select Asset Source</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="p-8 bg-white/5 rounded-2xl flex flex-col items-center justify-center gap-3 text-center cursor-pointer hover:bg-white/10 border border-white/10">
+                  <Upload size={32} />
+                  <span className="text-xs font-bold uppercase">Upload New File</span>
+                  <input type="file" onChange={handleFileUpload} className="hidden" />
+                </label>
+                 <button className="p-8 bg-white/5 rounded-2xl flex flex-col items-center justify-center gap-3 text-center cursor-pointer hover:bg-white/10 border border-white/10">
+                  <Folder size={32} />
+                  <span className="text-xs font-bold uppercase">From Media Vault</span>
+                </button>
+              </div>
+              <button onClick={() => setShowAssetSourceModal(false)} className="w-full py-3 bg-zinc-700/50 rounded-lg text-sm font-bold mt-4 hover:bg-zinc-700">Cancel</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      
+      <ContentModal 
+        isOpen={isSavedModalOpen} 
+        onClose={() => setIsSavedModalOpen(false)} 
+        title="Saved Sandbox"
+        icon={Folder}
+      />
+      <ContentModal 
+        isOpen={isPublishedModalOpen} 
+        onClose={() => setIsPublishedModalOpen(false)} 
+        title="Published Content"
+        icon={UploadCloud}
+        published
+      />
+      
+      <footer className="h-28 bg-[#050505] border-t border-white/10 shrink-0 relative z-[60] flex flex-col justify-end">
+        <div className="absolute top-0 left-0 right-0 h-12 flex items-center justify-center gap-[2px] pointer-events-none opacity-40">
+           {Array.from({ length: 120 }).map((_, i) => (
+             <WaveBar key={i} active={isPlaying} />
+           ))}
+        </div>
+
+        <div className="relative px-8 pb-4 flex items-center justify-between">
+          <div className="w-1/3 flex items-center gap-4">
+            {activeSignal ? (
+              <>
+                <div className="w-12 h-12 bg-zinc-900 rounded border border-white/10 overflow-hidden relative">
+                   <img src={activeSignal.img} className="w-full h-full object-cover" alt="" />
+                </div>
+                <div>
+                  <h5 className="font-black text-xs uppercase italic tracking-tighter">{activeSignal.title}</h5>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase">{activeSignal.author}</p>
+                </div>
+              </>
+            ) : (
+              <p className="text-[10px] text-zinc-700 font-black uppercase italic">No Active Signal</p>
+            )}
+          </div>
+
+          <div className="w-1/3 flex flex-col items-center gap-1">
+            <div className="flex items-center gap-8">
+              <TransportBtn icon={SkipBack} />
+              <button 
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+              >
+                {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
+              </button>
+              <TransportBtn icon={ChevronRight} />
+            </div>
+          </div>
+
+          <div className="w-1/3 flex justify-end items-center gap-6">
+             <div className="flex items-center gap-4">
+               <span className="text-[9px] font-black text-zinc-600 uppercase">0:42 / 5:12</span>
+               <div className="w-32 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                  <motion.div animate={{ width: isPlaying ? '60%' : '40%' }} className="h-full bg-cyan-500" />
+               </div>
+             </div>
+             <button className="text-zinc-500 hover:text-white"><Layers size={18} /></button>
+          </div>
+        </div>
+      </footer>
+      
+      <style>{`.custom-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+    </div>
+  );
+};
+
+
+// --- SUBCOMPONENTS ---
+
+const ContentModal = ({ isOpen, onClose, title, icon: Icon, published = false }) => {
+  const [activeTab, setActiveTab] = useState('art');
+
+  if (!isOpen) return null;
+
+  const renderContent = () => {
+    if(activeTab === 'live') {
+      return (
+        <div className="space-y-4"><h4 className="font-bold text-lg mb-4">{published ? "Past Broadcasts" : "Scheduled Live Events"}</h4><div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700"><p className="font-semibold text-white">August 28, 2024 - Live Q&A</p><p className="text-sm text-zinc-400">Duration: 45:12</p><div className="mt-2 flex gap-2"><button className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg">Watch Replay</button><button className="px-3 py-1 bg-purple-600 text-white text-xs rounded-lg">Get Audio</button></div></div><div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 opacity-60"><p className="font-semibold text-white">September 05, 2024 - Studio Session</p><p className="text-sm text-zinc-400">Scheduled for 8:00 PM EST</p></div></div>
+      );
+    }
+    
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="group aspect-square bg-zinc-800 rounded-xl flex flex-col items-center justify-center p-2 relative">
+            <p className="font-bold text-xs text-zinc-400">{activeTab.slice(0, 1).toUpperCase() + activeTab.slice(1)} Project {i+1}</p>
+            <p className="text-[10px] text-zinc-500">{published ? "Published" : "Draft"}</p>
+            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-black ${published ? 'bg-emerald-500' : 'bg-yellow-500'}`} />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={onClose} />
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full h-[90vh] max-w-4xl bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-2xl font-black text-white flex items-center gap-3"><Icon size={24} className="text-purple-400"/> {title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full bg-white/5 hover:bg-white/10"><X size={20} /></button>
+        </div>
+        <div className="flex gap-2 mb-4 p-1 bg-black/40 rounded-xl border border-white/10 self-start">
+          {studioApps.map(app => (
+             <button key={app.id} onClick={() => setActiveTab(app.id)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab === app.id ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/10'}`}>{app.title}</button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+          {renderContent()}
+        </div>
+      </motion.div>
+    </div>
+  )
+};
+
+
+const NavBtn = ({ active, icon: Icon, label, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${active ? 'bg-white text-black shadow-lg shadow-white/5' : 'text-zinc-500 hover:text-white'}`}
+  >
+    <Icon size={14} /> {label}
+  </button>
+);
+
+const TransportBtn = ({ icon: Icon, onClick }) => (
+  <button onClick={onClick} className="text-zinc-500 hover:text-white transition-colors active:scale-90">
+    <Icon size={20} fill="none" />
+  </button>
+);
+
+const WaveBar = ({ active }) => {
+  const height = active ? Math.random() * 30 + 5 : 4;
+  return (
+    <motion.div animate={{ height: `${height}px` }} transition={{ duration: 0.15, repeat: Infinity, repeatType: 'reverse' }} className={`w-1 rounded-full ${active ? 'bg-cyan-500/60' : 'bg-zinc-800'}`} />
+  );
+};
+
+const AppWithProvider = (props) => (
+    <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading User Data...</div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default function App() {
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+            body { font-family: 'Inter', sans-serif; background: #020202; color: #fafafa; margin: 0; }
+        `;
+        document.head.appendChild(style);
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
+
+    return <AppWithProvider />;
+}
