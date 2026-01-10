@@ -1,0 +1,391 @@
+
+'use client';
+
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { 
+    DollarSign, Loader2, ArrowUpRight, ArrowRightLeft, XCircle, QrCode, X, Users,
+    Wallet, Activity, Settings, Send, CheckCircle, Nfc, User as UserIcon, Plus, ArrowUp, ArrowDown, Banknote,
+    Webhook, GitBranch, Terminal, Shield, AlertTriangle, Flame, Gift, CreditCard, Landmark, Eye, EyeOff
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useFirebase, useCollection, useDoc, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy, limit, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+// --- Utility & Constants ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+const SOV_TO_CAD_RATE = 1.00; // 1 SOV$ = 1 CAD for display purposes
+
+const initialTransactions = [
+    { id: 1, desc: 'Initial Balance', amount: 50 },
+];
+
+// --- Transaction Row Component ---
+const TransactionRow = ({ tx }) => {
+    const isDeposit = tx.type === 'TOP_UP' || tx.type === 'revenue' || tx.type === 'earn';
+    const date = tx.timestamp?.toDate ? tx.timestamp.toDate() : new Date();
+
+    const statusConfig = {
+        pending: { color: 'text-yellow-400', icon: <Loader2 size={12} className="animate-spin" /> },
+        confirmed: { color: isDeposit ? 'text-emerald-400' : 'text-rose-400', icon: isDeposit ? <ArrowUpRight size={12} /> : <ArrowRightLeft size={12} /> },
+        failed: { color: 'text-red-400', icon: <XCircle size={12} /> }
+    };
+    const currentStatus = statusConfig[tx.status || 'confirmed'];
+    
+    const amountSOV = tx.amountSOV || tx.amount || 0;
+    const amountCAD = tx.amountCAD || (amountSOV * SOV_TO_CAD_RATE);
+
+    return (
+        <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-800/70 transition-colors">
+            <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${isDeposit ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}>
+                   {currentStatus.icon}
+                </div>
+                <div>
+                    <p className="font-semibold text-sm text-slate-100">{tx.description || tx.type}</p>
+                    <p className="text-xs text-slate-500 font-mono">{date.toLocaleString()}</p>
+                </div>
+            </div>
+            <div className={`text-sm font-bold font-mono text-right ${currentStatus.color}`}>
+                <p>{isDeposit ? '+' : '-'}{amountSOV.toLocaleString()} SOV</p>
+                <p className="text-xs text-slate-500 font-normal">≈ {amountCAD.toLocaleString('en-US', {style: 'currency', currency: 'CAD'})}</p>
+            </div>
+        </div>
+    );
+};
+
+const SovDebitCard = ({ cardDetails, member }) => {
+    const [revealed, setRevealed] = useState(false);
+    
+    if (!cardDetails) {
+        return (
+             <div className="w-full max-w-sm aspect-[1.586] bg-slate-800/30 rounded-2xl border-2 border-dashed border-slate-700 flex flex-col items-center justify-center p-8 text-center">
+                <CreditCard className="w-16 h-16 text-slate-700 mb-4" />
+                <p className="text-slate-500 font-semibold">No Card Issued</p>
+                <p className="text-xs text-slate-700 mt-1">Create a cardholder and issue a card to this user.</p>
+            </div>
+        );
+    }
+    
+    const { last4, brand, exp_month, exp_year, number, cvc } = cardDetails;
+
+    return (
+        <div className="w-full max-w-sm aspect-[1.586] bg-gradient-to-br from-slate-800 via-slate-900 to-indigo-900 rounded-2xl p-6 flex flex-col justify-between shadow-2xl border border-white/10 relative overflow-hidden text-white">
+            <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] bg-[size:30px_30px]" />
+            <div className="flex justify-between items-start">
+                <span className="font-black text-xl italic tracking-tighter">SOV$</span>
+                <Nfc className="text-white/70" />
+            </div>
+            <div className="space-y-2">
+                <div className="font-mono text-xl sm:text-2xl tracking-widest">
+                    {revealed ? number.match(/.{1,4}/g).join(' ') : `•••• •••• •••• ${last4}`}
+                </div>
+                <div className="flex justify-between items-end">
+                    <div>
+                        <p className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">HOLDER</p>
+                        <p className="font-mono text-base uppercase tracking-wider">{member.name}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">Expires</p>
+                        <p className="font-mono text-sm">{String(exp_month).padStart(2, '0')}/{String(exp_year).slice(-2)}</p>
+                    </div>
+                </div>
+            </div>
+             <div className="flex justify-between items-end">
+                <p className="text-xl font-bold uppercase text-white/50">{brand}</p>
+                 <div className="text-right">
+                    <p className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">CVV</p>
+                    <p className="font-mono text-lg tracking-widest">{revealed ? cvc : '•••'}</p>
+                </div>
+            </div>
+             <button onClick={() => setRevealed(!revealed)} className="absolute bottom-4 right-4 p-2 bg-white/10 rounded-full text-white/70 hover:text-white">
+                {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+        </div>
+    );
+};
+
+function FamilyBankingPage() {
+    const { familyState, setFamilyState } = useFamilyData();
+    const [transactions, setTransactions] = useState([]);
+    const [selectedMember, setSelectedMember] = useState(null);
+
+    const totalSov = useMemo(() => Object.values(familyState.members).reduce((sum, m) => sum + (m.spdBalance || 0), 0), [familyState.members]);
+    const totalReal = useMemo(() => Object.values(familyState.members).reduce((sum, m) => sum + (m.realBalance || 0), 0), [familyState.members]);
+
+    const handleDeposit = (memberId, amount) => {
+        setFamilyState(prev => {
+            const newMembers = { ...prev.members };
+            const member = newMembers[memberId];
+            if (member) {
+                member.spdBalance = (member.spdBalance || 0) + amount;
+                member.realBalance = (member.realBalance || 0) + amount;
+            }
+            return { ...prev, members: newMembers };
+        });
+        setTransactions(prev => [{ id: `tx${Date.now()}`, desc: `Parent Deposit`, amount }, ...prev]);
+    };
+
+    return (
+        <>
+            <div className="min-h-screen bg-slate-950 text-white relative p-4 md:p-8 overflow-y-auto">
+                <div className="absolute inset-0 -z-10 opacity-30 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.3),rgba(255,255,255,0))]"/>
+                <div className="space-y-12">
+                    <header>
+                        <h1 className="text-4xl font-extrabold text-white flex items-center gap-3">
+                            <Landmark className="w-8 h-8 text-sky-400"/> Family Banking Hub
+                        </h1>
+                        <p className="text-slate-400 mt-2">Manage your family's shared balances, cards, and transactions.</p>
+                    </header>
+                    <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card className="bg-slate-900 border-slate-800"><CardContent className="p-4 text-center"><p className="text-xs font-bold text-slate-400">Total Family SOV$</p><p className="text-4xl font-black text-sky-400">{totalSov.toFixed(2)}</p></CardContent></Card>
+                        <Card className="bg-slate-900 border-slate-800"><CardContent className="p-4 text-center"><p className="text-xs font-bold text-slate-400">Real Money Backing</p><p className="text-4xl font-black text-green-400">${totalReal.toFixed(2)}</p></CardContent></Card>
+                        <Card className="bg-slate-900 border-slate-800"><CardContent className="p-4 text-center"><p className="text-xs font-bold text-slate-400">Active Members</p><p className="text-4xl font-black">{Object.values(familyState.members).filter(m => m.name !== 'Awaiting User...').length}</p></CardContent></Card>
+                    </section>
+
+                    <section>
+                         <h2 className="text-2xl font-bold text-white mb-4">Family Roster</h2>
+                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                            {Object.values(familyState.members).map((member) => (
+                                <Card key={member.id} className="bg-slate-900 border-slate-800">
+                                     <CardContent className="p-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center">
+                                                <UserIcon className="w-6 h-6 text-indigo-400"/>
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-white">{member.name}</p>
+                                                <p className="text-xs text-slate-400 capitalize">{member.type} {member.age ? `(Age ${member.age})` : ''}</p>
+                                            </div>
+                                        </div>
+                                        <Button size="sm" variant="outline" onClick={() => setSelectedMember(member)}>
+                                            Sandbox
+                                        </Button>
+                                     </CardContent>
+                                </Card>
+                            ))}
+                         </div>
+                    </section>
+                    
+                    <WebhookFeed />
+                    
+                    <IssueSandboxModal member={selectedMember} isOpen={!!selectedMember} onClose={() => setSelectedMember(null)} onDeposit={handleDeposit} transactions={transactions} />
+                </div>
+            </div>
+        </>
+    );
+}
+
+const IssueSandboxModal = ({ member, isOpen, onClose, onDeposit, transactions }) => {
+    const { authUser, firestore } = useFirebase();
+    const { toast } = useToast();
+    
+    const [cardholder, setCardholder] = useState(null);
+    const [card, setCard] = useState(null);
+    const [isLoading, setIsLoading] = useState({ cardholder: false, card: false });
+
+    useEffect(() => {
+        // Reset state when member changes
+        setCardholder(null);
+        setCard(null);
+    }, [member]);
+
+    if (!isOpen) return null;
+
+    const canDeposit = member.type === 'parent' || (member.age && member.age >= 16);
+    
+    const createCardholder = async () => {
+        setIsLoading(p => ({ ...p, cardholder: true }));
+        try {
+            const response = await fetch('/api/stripe/issuing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'create_cardholder',
+                    name: member.name,
+                    email: member.email,
+                    phone_number: member.phone,
+                    billing: { address: { line1: '123 Main St', city: 'Sudbury', state: 'ON', postal_code: 'P3A 2B9', country: 'CA' } },
+                    metadata: { firebaseUID: user?.uid || member.id }
+                }),
+            });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            setCardholder(data.cardholder);
+            toast({ title: "Stripe Cardholder Created!" });
+        } catch (error) {
+            toast({ title: "Cardholder Creation Failed", description: error.message, variant: 'destructive' });
+        } finally {
+            setIsLoading(p => ({ ...p, cardholder: false }));
+        }
+    };
+
+    const issueCard = async (type: 'virtual' | 'physical') => {
+        if (!cardholder) { toast({ title: "Create a cardholder first.", variant: 'destructive' }); return; }
+        setIsLoading(p => ({ ...p, card: true }));
+        try {
+            const issueResponse = await fetch('/api/stripe/issuing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'issue_card', cardholderId: cardholder.id, type, currency: 'cad' }),
+            });
+            const issueData = await issueResponse.json();
+            if (issueData.error) throw new Error(issueData.error);
+            
+            const detailsResponse = await fetch(`/api/stripe/issuing?action=get_card_details&cardId=${issueData.card.id}`);
+            const detailsData = await detailsResponse.json();
+            if (detailsData.error) throw new Error(detailsData.error);
+
+            setCard(detailsData.card);
+            toast({ title: "Card Issued!", description: `Card ending in ${detailsData.card.last4} is active.` });
+        } catch (error) {
+            toast({ title: "Card Issuing Failed", description: error.message, variant: 'destructive' });
+        } finally {
+            setIsLoading(p => ({ ...p, card: false }));
+        }
+    };
+
+    return (
+        <AnimatePresence>
+        {isOpen && (
+             <motion.div initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+                <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9}} className="relative bg-slate-950 p-8 rounded-2xl border border-indigo-500/30 w-full max-w-4xl h-[90vh] flex flex-col">
+                    <Button variant="ghost" size="icon" onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                        <X size={18}/>
+                    </Button>
+                    <div className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
+                        <CreditCard className="text-indigo-400" />
+                        {member.name}'s Issue Sandbox
+                    </div>
+                    <p className="text-slate-400 mb-6 text-sm">Manage digital card and balances.</p>
+                    
+                    <div className="flex-1 grid md:grid-cols-2 gap-6 overflow-y-auto">
+                        <div className="flex flex-col items-center space-y-6">
+                           <SovDebitCard cardDetails={card} member={member} />
+                           
+                            <div className="w-full space-y-3">
+                                <Button onClick={createCardholder} disabled={!!cardholder || isLoading.cardholder} className="w-full h-12 bg-slate-700 hover:bg-slate-600">
+                                    {isLoading.cardholder ? <Loader2 className="mr-2 animate-spin"/> : <UserIcon className="mr-2"/>}
+                                    {cardholder ? 'Cardholder Created' : '1. Create Cardholder'}
+                                </Button>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Button onClick={() => issueCard('virtual')} disabled={!cardholder || !!card || isLoading.card} className="w-full h-12 bg-slate-700 hover:bg-slate-600">
+                                        {isLoading.card ? <Loader2 className="mr-2 animate-spin"/> : <Nfc className="mr-2"/>}
+                                        2. Issue Virtual
+                                    </Button>
+                                    <Button onClick={() => issueCard('physical')} disabled={true} className="w-full h-12 bg-slate-800 text-slate-500 cursor-not-allowed">
+                                        Issue Physical
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-col">
+                            <h3 className="font-bold text-slate-300 mb-4">Account Balances</h3>
+                            <div className="p-6 bg-slate-900/70 rounded-2xl border border-slate-700 space-y-4">
+                                <div>
+                                    <p className="text-sm text-indigo-400 font-bold">SOV$ Balance</p>
+                                    <p className="text-4xl font-black">{(member.spdBalance || 0).toFixed(2)} SOV$</p>
+                                </div>
+                                <div className="border-t border-slate-700 pt-4">
+                                    <p className="text-sm text-slate-400">Real Money Value (Backed by Stripe)</p>
+                                    <p className="text-2xl font-bold text-green-400">${(member.realBalance || 0).toFixed(2)} CAD</p>
+                                </div>
+                            </div>
+                            <h3 className="font-bold text-slate-300 mt-6 mb-4">Recent Transactions</h3>
+                             <div className="flex-1 bg-slate-900/70 rounded-2xl border border-slate-700 p-4 space-y-2 overflow-y-auto">
+                                {(transactions || []).map(tx => (
+                                    <div key={tx.id} className="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg text-sm">
+                                        <span className="font-mono text-slate-400">{tx.desc}</span>
+                                        <span className="font-mono font-bold text-green-400">+{tx.amount.toFixed(2)}</span>
+                                    </div>
+                                ))}
+                             </div>
+                        </div>
+                    </div>
+                </motion.div>
+            </motion.div>
+        )}
+        </AnimatePresence>
+    );
+};
+
+const WebhookFeed = () => {
+    const [events, setEvents] = useState([]);
+    
+    useEffect(() => {
+        const eventTypes = [
+            { type: 'stripe.issuing_authorization', icon: CreditCard, color: 'text-blue-400' },
+            { type: 'creator.donation', icon: Gift, color: 'text-yellow-400' },
+            { type: 'stripe.checkout.session', icon: Banknote, color: 'text-green-400' },
+            { type: 'system.burn', icon: Flame, color: 'text-red-400'},
+        ];
+
+        const interval = setInterval(() => {
+            const randomEvent = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+            const newEvent = {
+                id: Date.now(),
+                ...randomEvent,
+                timestamp: new Date(),
+            };
+            setEvents(prev => [newEvent, ...prev.slice(0, 10)]);
+        }, 3500);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <section>
+            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <Webhook className="w-6 h-6 text-cyan-400"/>
+                Universe Webhook Feed
+            </h2>
+            <Card className="bg-slate-900 border-slate-800">
+                <CardContent className="p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <Link href="/api/stripe-checkout" passHref>
+                            <Button variant="outline" className="w-full justify-start gap-2">
+                                <GitBranch className="text-green-400"/> stripe-checkout
+                            </Button>
+                        </Link>
+                        <Link href="/api/stripe-issuing-webhook" passHref>
+                             <Button variant="outline" className="w-full justify-start gap-2">
+                                <GitBranch className="text-blue-400"/> stripe-issuing-webhook
+                            </Button>
+                        </Link>
+                    </div>
+                    {events.length > 0 ? (
+                        events.map(event => {
+                            const Icon = event.icon;
+                            return (
+                                <div key={event.id} className="flex items-center gap-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                                    <Icon className={`w-5 h-5 flex-shrink-0 ${event.color}`} />
+                                    <div className="flex-1 font-mono text-xs">
+                                        <p className="text-slate-300 truncate">{event.type}</p>
+                                        <p className="text-slate-500">{event.timestamp.toLocaleTimeString()}</p>
+                                    </div>
+                                    <Terminal className="w-4 h-4 text-slate-600" />
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <p className="text-slate-500 text-center py-8">Awaiting webhook events...</p>
+                    )}
+                </CardContent>
+            </Card>
+        </section>
+    )
+};
+
+export default function WrappedFamilyBankingPage() {
+    return (
+        <FamilyDataProvider>
+            <FamilyBankingPage />
+        </FamilyDataProvider>
+    );
+}
