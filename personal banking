@@ -1,0 +1,331 @@
+
+'use client';
+
+import React, { useState, useMemo, Suspense, useEffect } from 'react';
+import { 
+    DollarSign, Loader2, ArrowUpRight, ArrowRightLeft, XCircle, QrCode, X, Users,
+    Wallet, Activity, Settings, Send, CheckCircle, Nfc, User as UserIcon, Plus, ArrowUp, ArrowDown, Banknote,
+    Webhook, GitBranch, Terminal, Shield, AlertTriangle, Flame, Gift, CreditCard, Landmark, Eye, EyeOff
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useFirebase, useUser, useMemoFirebase, useCollection } from '@/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Timestamp, query, collection, where, orderBy, limit } from 'firebase/firestore';
+
+// --- Utility & Constants ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+const SOV_TO_CAD_RATE = 1.00; // 1 SOV$ = 1 CAD for display purposes
+
+// --- Mock Data to prevent crash ---
+const mockTransactions = [
+    { id: 'tx1', type: 'TOP_UP', description: 'Stripe Top-Up', amountSOV: 50, timestamp: Timestamp.now(), status: 'confirmed' },
+    { id: 'tx2', type: 'SPEND', description: 'Merchant Purchase', amountSOV: 15.50, timestamp: Timestamp.now(), status: 'confirmed' },
+    { id: 'tx3', type: 'earn', description: 'Creator Hub Reward', amountSOV: 100, timestamp: Timestamp.now(), status: 'confirmed' },
+];
+
+// --- Transaction Row Component ---
+const TransactionRow = ({ tx }) => {
+    const isDeposit = tx.type === 'TOP_UP' || tx.type === 'revenue' || tx.type === 'earn' || tx.type === 'Sticker Gift';
+    const date = tx.timestamp?.toDate ? tx.timestamp.toDate() : new Date();
+
+    const statusConfig = {
+        pending: { color: 'text-yellow-400', icon: <Loader2 size={12} className="animate-spin" /> },
+        confirmed: { color: isDeposit ? 'text-emerald-400' : 'text-rose-400', icon: isDeposit ? <ArrowUpRight size={12} /> : <ArrowRightLeft size={12} /> },
+        failed: { color: 'text-red-400', icon: <XCircle size={12} /> }
+    };
+    const currentStatus = statusConfig[tx.status || 'confirmed'];
+    
+    const amountSOV = tx.amountSOV || tx.amount || 0;
+    const amountCAD = tx.amountCAD || (amountSOV * SOV_TO_CAD_RATE);
+
+    return (
+        <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-800/70 transition-colors">
+            <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${isDeposit ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}>
+                   {currentStatus.icon}
+                </div>
+                <div>
+                    <p className="font-semibold text-sm text-slate-100">{tx.description || tx.type}</p>
+                    <p className="text-xs text-slate-500 font-mono">{date.toLocaleString()}</p>
+                </div>
+            </div>
+            <div className={`text-sm font-bold font-mono text-right ${currentStatus.color}`}>
+                <p>{isDeposit ? '+' : '-'}{amountSOV.toLocaleString()} SOV</p>
+                <p className="text-xs text-slate-500 font-normal">≈ {amountCAD.toLocaleString('en-US', {style: 'currency', currency: 'CAD'})}</p>
+            </div>
+        </div>
+    );
+};
+
+const SovDebitCard = ({ member }) => {
+    const hasCard = member?.card && Object.keys(member.card).length > 0;
+    const last4 = useMemo(() => {
+        if (hasCard) return member.card.last4;
+        return Math.floor(1000 + Math.random() * 9000).toString();
+    }, [member?.card, hasCard]);
+
+    if (!hasCard) {
+        return (
+             <div className="w-full max-w-sm aspect-[1.586] bg-slate-800/30 rounded-2xl border-2 border-dashed border-slate-700 flex flex-col items-center justify-center p-8 text-center">
+                <CreditCard className="w-16 h-16 text-slate-700 mb-4" />
+                <p className="text-slate-500 font-semibold">No Card Issued</p>
+                 <Link href="/admin/dashboard/card-management">
+                    <Button variant="link" className="text-xs mt-2">Go to Card Management</Button>
+                </Link>
+            </div>
+        );
+    }
+
+    const { brand, exp_month, exp_year, number, cvc } = member.card;
+    const [revealed, setRevealed] = useState(false);
+
+    return (
+    <div className="w-full max-w-sm aspect-[1.586] bg-gradient-to-br from-slate-800 via-slate-900 to-indigo-900 rounded-2xl p-6 flex flex-col justify-between shadow-2xl border border-white/10 relative overflow-hidden text-white">
+        <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] bg-[size:30px_30px]" />
+        <div className="flex justify-between items-start">
+            <span className="font-black text-xl italic tracking-tighter">SOV$</span>
+            <Nfc className="text-white/70" />
+        </div>
+        <div className="space-y-2">
+            <div className="font-mono text-xl sm:text-2xl tracking-widest">
+                {revealed ? number.match(/.{1,4}/g).join(' ') : `•••• •••• •••• ${last4}`}
+            </div>
+            <div className="flex justify-between items-end">
+                <div>
+                    <p className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">HOLDER</p>
+                    <p className="font-mono text-base uppercase tracking-wider">{member.name}</p>
+                </div>
+                <div className="text-right">
+                    <p className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">Expires</p>
+                    <p className="font-mono text-sm">{String(exp_month).padStart(2, '0')}/{String(exp_year).slice(-2)}</p>
+                </div>
+            </div>
+        </div>
+         <div className="flex justify-between items-end">
+            <p className="text-xl font-bold uppercase text-white/50">{brand}</p>
+             <div className="text-right">
+                <p className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">CVV</p>
+                <p className="font-mono text-lg tracking-widest">{revealed ? cvc : '•••'}</p>
+            </div>
+        </div>
+         <button onClick={() => setRevealed(!revealed)} className="absolute bottom-4 right-4 p-2 bg-white/10 rounded-full text-white/70 hover:text-white">
+            {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+    </div>
+)};
+
+// --- Screen Wrapper ---
+const Screen = ({ title, subtitle, children }) => (
+    <div className="space-y-6">
+        <div className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur-md pb-2 pt-2">
+            <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+            {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
+        </div>
+        {children}
+    </div>
+);
+
+// --- MAIN PAGE ---
+function MyPersonalBankPage() {
+    const { familyState, isLoaded } = useFamilyData();
+    const searchParams = useSearchParams();
+    const userId = searchParams.get('userId') || 'p1';
+    const currentUser = useMemo(() => familyState.members[userId], [userId, familyState.members]);
+
+    const [activeTab, setActiveTab] = useState('wallet');
+    const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+    
+    // Using local mock data instead of Firestore query
+    const userTransactions = mockTransactions;
+    const isLoadingLedger = false;
+    
+    const { toast } = useToast();
+
+    if (!isLoaded || !currentUser) {
+        return (
+            <div className="flex h-full w-full items-center justify-center">
+                <Loader2 className="animate-spin text-slate-400" />
+            </div>
+        );
+    }
+    
+    const renderView = () => {
+        switch (activeTab) {
+            case 'wallet':
+                return <WalletView user={currentUser} onFund={() => setIsCheckoutModalOpen(true)} transactions={userTransactions} />;
+            case 'activity':
+                return <ActivityView transactions={userTransactions} isLoading={isLoadingLedger} />;
+            case 'settings':
+                return <SettingsView />;
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <>
+            <div className="h-full w-full bg-slate-900 text-white flex flex-col font-sans overflow-hidden">
+                <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -15 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            {renderView()}
+                        </motion.div>
+                    </AnimatePresence>
+                </main>
+                <nav className="flex-shrink-0 bg-slate-950/80 backdrop-blur-md border-t border-slate-800 p-2 flex justify-around">
+                    <BottomNavItem icon={Wallet} label="Wallet" isActive={activeTab === 'wallet'} onClick={() => setActiveTab('wallet')} />
+                    <BottomNavItem icon={Activity} label="Activity" isActive={activeTab === 'activity'} onClick={() => setActiveTab('activity')} />
+                    <BottomNavItem icon={Settings} label="Settings" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+                </nav>
+            </div>
+             {isCheckoutModalOpen && <CheckoutModal onClose={() => setIsCheckoutModalOpen(false)} />}
+        </>
+    );
+}
+
+const CheckoutModal = ({ onClose }) => {
+    return (
+        <AnimatePresence>
+            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+                <motion.div initial={{scale: 0.9}} animate={{scale: 1}} exit={{scale: 0.9}} className="relative bg-slate-900 p-8 rounded-2xl border border-slate-700 w-full max-w-sm text-center">
+                    <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={18}/></button>
+                    <h3 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3"><QrCode /> Your QR Code</h3>
+                    <p className="text-slate-400 mb-6 text-sm">Use this payment link to add funds to the Sovereign reserve.</p>
+                    <div className="p-4 bg-white rounded-lg">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=https://buy.stripe.com/test_9B628s9Nj2su3ceayhds401" alt="Stripe Payment Link QR Code" className="w-full h-full" />
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
+
+// --- Sub-components ---
+const BottomNavItem = ({ icon: Icon, label, isActive, onClick }) => (
+    <button
+        onClick={onClick}
+        className={cn(
+            "flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition",
+            isActive ? "text-blue-400 bg-blue-500/10" : "text-slate-500 hover:bg-slate-800"
+        )}
+    >
+        <Icon size={22} />
+        <span className="text-[11px] font-semibold">{label}</span>
+    </button>
+);
+
+const WalletView = ({ user, onFund, transactions }) => {
+    const sovValue = parseFloat((user?.spdBalance || 0).toFixed(2));
+    const cadValue = (sovValue * SOV_TO_CAD_RATE).toFixed(2);
+    
+    return (
+        <Screen title="Wallet" subtitle="Your stored value inside Sovereign OS">
+            <div className="grid lg:grid-cols-2 gap-8 items-center">
+                <motion.div
+                    initial={{ scale: 0.96, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                    className="relative p-8 rounded-3xl bg-gradient-to-br from-indigo-600 via-blue-600 to-sky-500 shadow-2xl text-white"
+                >
+                    <div className="absolute inset-0 rounded-3xl ring-1 ring-white/20" />
+                    <p className="text-xs uppercase tracking-widest opacity-80">Available SOV$</p>
+                    <p className="text-6xl font-black tracking-tighter my-2">{(sovValue || 0).toFixed(2)}</p>
+                    <p className="text-sm opacity-80">= ${cadValue} CAD - Closed-loop value</p>
+                </motion.div>
+                <div className="flex flex-col items-center">
+                     <SovDebitCard member={user} />
+                </div>
+            </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button onClick={onFund} className="h-16 text-base font-bold bg-blue-600 hover:bg-blue-500">
+                    <ArrowUp className="mr-2" /> Tap to Fund (Stripe)
+                </Button>
+                <Link href="/admin/dashboard/system-settings/banking">
+                    <Button className="w-full h-16 text-base font-bold bg-green-600 hover:bg-green-500" variant="secondary">
+                        <ArrowDown className="mr-2" /> Creator Payouts
+                    </Button>
+                </Link>
+            </div>
+            
+            <Card className="bg-slate-800/50 border-slate-700 mt-4">
+               <CardHeader>
+                    <CardTitle>Recent Transactions</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <div className="max-h-60 overflow-y-auto">
+                        {transactions?.length > 0 ? (
+                            transactions.slice(0, 5).map((tx, i) => <TransactionRow key={tx.id || i} tx={tx} />)
+                        ) : (
+                            <p className="text-sm text-slate-500 text-center py-8">No recent activity for this user.</p>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+        </Screen>
+    );
+};
+
+
+const ActivityView = ({ transactions, isLoading }) => (
+    <Screen title="Activity" subtitle="System-wide value movement">
+        <Card className="bg-slate-800/50 border-slate-700">
+            <CardContent className="p-0">
+                {isLoading ? (
+                    <div className="p-8 text-center text-slate-400"><Loader2 className="mx-auto mb-4 animate-spin opacity-40" />Loading Transactions...</div>
+                ) : transactions?.length ? (
+                    transactions.map((tx, i) => <TransactionRow key={tx.id || i} tx={tx} />)
+                ) : (
+                    <div className="p-8 text-center text-slate-400">
+                        <Activity className="mx-auto mb-4 opacity-40" />
+                        <p>No activity yet</p>
+                        <p className="text-xs mt-1">Funding, spending, and rewards will appear here.</p>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    </Screen>
+);
+
+const SettingsView = ({ user }) => (
+    <Screen title="Settings" subtitle="Manage wallet and transaction preferences.">
+        <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader><CardTitle>Stripe Integration</CardTitle></CardHeader>
+            <CardContent>
+                 <Link href="/admin/dashboard/card-management">
+                    <Button variant="outline" className="w-full">
+                        Go to Card Management <ArrowRightLeft className="ml-2 w-4 h-4"/>
+                    </Button>
+                </Link>
+            </CardContent>
+        </Card>
+        <Card className="bg-slate-800/50 border-slate-700 mt-2">
+            <CardHeader><CardTitle>Security</CardTitle></CardHeader>
+            <CardContent><p className="text-slate-400">Update passkeys and biometrics.</p></CardContent>
+        </Card>
+    </Screen>
+);
+
+// --- Wrapper ---
+export default function MyPersonalBankPageWrapper() {
+    return (
+        <Suspense fallback={<div className="bg-gray-900 flex h-screen w-screen items-center justify-center text-white">Loading...</div>}>
+            <FamilyDataProvider>
+                <MyPersonalBankPage />
+            </FamilyDataProvider>
+        </Suspense>
+    );
+}
