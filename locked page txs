@@ -1,0 +1,131 @@
+
+'use client';
+
+import React, { useMemo, useState, useEffect } from 'react';
+import { ShieldAlert, Fingerprint } from 'lucide-react';
+import { useFirebase } from '@/firebase';
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+
+// Hashing function for tokens (client-side)
+const hashToken = async (token: string): Promise<string> => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(token);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const LockedPage = () => {
+    const { firestore } = useFirebase();
+    const router = useRouter();
+
+    const TOKEN_TTL = 15 * 60 * 1000; // 15 minutes
+
+    const generateRecoveryToken = useCallback(() => {
+        const issuedAt = Date.now();
+        return {
+            token: `SOV-REC-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+            issuedAt,
+            expiresAt: issuedAt + TOKEN_TTL,
+        };
+    }, [TOKEN_TTL]);
+
+    const [recovery, setRecovery] = useState(generateRecoveryToken);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${recovery.token}`;
+    const nodeId = useMemo(() => localStorage.getItem('sov_node_id') || 'UNKNOWN_NODE', []);
+
+    // Effect for token auto-rotation
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            if (Date.now() > recovery.expiresAt) {
+                if (firestore) {
+                     await addDoc(collection(firestore, 'sov_forensics'), {
+                        nodeId,
+                        event: 'TOKEN_ROTATED',
+                        initiatedBy: 'NODE_SELF',
+                        timestamp: serverTimestamp(),
+                        integrity: { protocol: 'PROTOCOL_ZERO', version: 'v2.1' }
+                     });
+                }
+                setRecovery(generateRecoveryToken());
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, [recovery, generateRecoveryToken, firestore, nodeId]);
+    
+    // Effect to listen for the AUTHORIZE_NODE command
+    useEffect(() => {
+        if (!firestore) return;
+
+        const listenForAuth = async () => {
+            const currentTokenHash = await hashToken(recovery.token);
+
+            const q = query(
+                collection(firestore, 'sov_commands'),
+                where('action', '==', 'AUTHORIZE_NODE'),
+                where('recoveryTokenHash', '==', currentTokenHash),
+                where('status', '==', 'pending')
+            );
+
+            const unsubscribe = onSnapshot(q, async (snap) => {
+                for (const docSnap of snap.docChanges()) {
+                    if (docSnap.type === 'added') {
+                        // Log forensic event
+                        await addDoc(collection(firestore, 'sov_forensics'), {
+                            nodeId, event: 'NODE_RECOVERED', recoveryTokenHash: currentTokenHash,
+                            initiatedBy: 'HOME_HUB', previousState: 'LOCKED', newState: 'AUTHORIZED',
+                            timestamp: serverTimestamp(), integrity: { protocol: 'PROTOCOL_ZERO', version: 'v2.1' }
+                        });
+                        
+                        // Burn the command token
+                        await updateDoc(doc(firestore, 'sov_commands', docSnap.doc.id), { status: 'executed' });
+
+                        // Clear local state and reboot
+                        localStorage.clear();
+                        router.push('/adult-app/adults-hub/download/pebbles');
+                    }
+                }
+            });
+
+            return unsubscribe;
+        };
+        
+        const unsubPromise = listenForAuth();
+
+        return () => {
+            unsubPromise.then(unsub => unsub && unsub());
+        };
+
+    }, [recovery.token, firestore, nodeId, router]);
+
+    return (
+        <div className="h-screen w-full bg-[#030308] text-white flex flex-col items-center justify-center font-mono p-10 overflow-hidden">
+            <div className="absolute inset-0 bg-red-900/5 animate-pulse pointer-events-none" />
+            <ShieldAlert className="w-20 h-20 text-red-600 mb-8 animate-bounce" />
+            <h1 className="text-4xl font-black tracking-tighter text-red-500 mb-2">PROTOCOL ZERO</h1>
+            <p className="text-[10px] tracking-[0.4em] text-white/30 uppercase mb-10 text-center">
+                Hardware Authority: Home Hub Verified
+            </p>
+            <div className="relative group">
+                <div className="absolute -inset-1 bg-gradient-to-r from-red-600 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                <div className="relative bg-black border border-white/10 p-6 rounded-2xl flex flex-col items-center">
+                    <img src={qrUrl} alt="Recovery QR" className="w-40 h-40 opacity-80 grayscale hover:grayscale-0 transition-all" />
+                    <div className="mt-4 flex items-center gap-2 text-white/40">
+                        <Fingerprint className="w-4 h-4" />
+                        <span className="text-[10px] font-bold">{recovery.token}</span>
+                    </div>
+                </div>
+            </div>
+            <div className="mt-12 text-center max-w-xs">
+                <p className="text-[9px] leading-relaxed text-white/20">
+                    This Sovereign Node is in **High-Security Lockdown**. All session iframes, local databases, and identity queries have been purged. 
+                    Scan to request re-authorization from the Home Hub. This token expires.
+                </p>
+            </div>
+        </div>
+    );
+};
+
+export default LockedPage;
