@@ -1,0 +1,658 @@
+'use client';
+
+import { useEffect } from 'react';
+
+// This component renders a self-contained HTML document with its own styles and scripts.
+export default function TunerApp() {
+
+  // The entire HTML, CSS, and JavaScript for the Arcade Rhythm Studio is contained in this string.
+  const htmlContent = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Arcade Rhythm Studio</title>
+      <!-- Load Tailwind CSS for utility classes -->
+      <script src="https://cdn.tailwindcss.com"></script>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+      
+      <!-- ===================== TESLA-QUALITY UI ENHANCEMENTS (Provided by User) ===================== -->
+      <style>
+          /* Global styling for Inter font and general reset */
+          :root {
+              --neon-blue: 92, 107, 192;
+              --neon-green: 52, 211, 153;
+          }
+
+          body {
+              font-family: 'Inter', sans-serif;
+              color: #E5E5E5;
+              min-height: 100vh;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              padding: 24px;
+          }
+
+          /* Utility to make the layout adapt better on mobile */
+          .flex-auto-wrap {
+              flex: 1 1 0%; /* Flex basis 0, can shrink and grow */
+              min-width: 300px; /* Minimum width for panels */
+          }
+          
+          /* ---------- GLOBAL ATMOSPHERE ---------- */
+          body {
+              background:
+                  radial-gradient(circle at 20% 20%, rgba(var(--neon-blue),0.12), transparent 40%),
+                  radial-gradient(circle at 80% 80%, rgba(var(--neon-green),0.10), transparent 40%),
+                  linear-gradient(180deg, #050509, #0A0A0F);
+              background-attachment: fixed;
+          }
+
+          /* ---------- GLASS PANELS ---------- */
+          .studio-panel {
+              backdrop-filter: blur(18px) saturate(140%);
+              -webkit-backdrop-filter: blur(18px) saturate(140%);
+              background: linear-gradient(
+                  180deg,
+                  rgba(26,26,31,0.85),
+                  rgba(10,10,15,0.9)
+              );
+              box-shadow:
+                  0 30px 80px rgba(0,0,0,0.7),
+                  inset 0 1px 0 rgba(255,255,255,0.06);
+              border-radius: 28px;
+              border: 1px solid rgba(255, 255, 255, 0.05); /* Subtle frame */
+              transition: transform 0.3s ease;
+          }
+
+          .studio-panel:hover {
+              transform: translateY(-2px);
+              box-shadow:
+                  0 35px 90px rgba(0,0,0,0.8),
+                  inset 0 1px 0 rgba(255,255,255,0.08);
+          }
+
+          /* ---------- TITLE GLOW ---------- */
+          h1 {
+              font-weight: 800;
+              text-shadow:
+                  0 0 30px rgba(var(--neon-blue),0.35),
+                  0 0 80px rgba(var(--neon-blue),0.15);
+          }
+
+          /* ---------- BUTTONS (TESLA SWITCH FEEL) ---------- */
+          .btn-control {
+              border-radius: 9999px;
+              backdrop-filter: blur(6px);
+              background: rgba(30, 41, 59, 0.7); /* slate-800 semi-transparent */
+              transition: all 0.2s ease;
+              box-shadow:
+                  inset 0 0 0 1px rgba(255,255,255,0.08),
+                  0 6px 20px rgba(0,0,0,0.4);
+          }
+
+          .btn-control:hover {
+              background: rgba(30, 41, 59, 0.9);
+              box-shadow:
+                  inset 0 0 0 2px rgba(255,255,255,0.1),
+                  0 8px 25px rgba(0,0,0,0.5);
+          }
+          
+          .btn-control:active {
+              transform: scale(0.97);
+              box-shadow:
+                  inset 0 0 0 1px rgba(255,255,255,0.05),
+                  0 2px 5px rgba(0,0,0,0.5);
+          }
+
+          .btn-active {
+              background: linear-gradient(
+                  135deg,
+                  #5C6BC0,
+                  #7986CB
+              ) !important;
+              color: #FFFFFF !important;
+              box-shadow:
+                  0 0 25px rgba(var(--neon-blue),0.6),
+                  inset 0 0 0 1px rgba(255,255,255,0.2) !important;
+          }
+
+          /* ---------- START BUTTON = IGNITION ---------- */
+          #start-button {
+              position: relative;
+              overflow: hidden;
+              font-weight: 700;
+          }
+
+          #start-button::before {
+              content: '';
+              position: absolute;
+              inset: 0;
+              background: linear-gradient(
+                  120deg,
+                  transparent 30%,
+                  rgba(255,255,255,0.35),
+                  transparent 70%
+              );
+              transform: translateX(-100%);
+          }
+
+          #start-button:hover::before {
+              animation: sweep 1.4s infinite;
+          }
+
+          @keyframes sweep {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+          }
+
+          /* ---------- TUNER NEEDLE (PHYSICAL FEEL) ---------- */
+          #tuner-needle {
+              border-radius: 9999px;
+              transition: transform 0.1s linear; /* Smooth micro-movement */
+          }
+          
+          .needle-active {
+              box-shadow:
+                  0 0 20px currentColor,
+                  0 0 40px currentColor;
+          }
+
+          /* ---------- PITCH METER DEPTH ---------- */
+          .pitch-meter-container {
+              background:
+                  linear-gradient(180deg, #2a2a33, #1a1a1f);
+              border-radius: 9999px;
+          }
+
+          /* ---------- FEEDBACK TEXT ---------- */
+          #tuner-feedback {
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              font-weight: 600;
+          }
+          
+          .glow-green { color: #34D399; text-shadow: 0 0 10px rgba(52, 211, 153, 0.5); }
+          .glow-red { color: #EF4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+          .glow-yellow { color: #F59E0B; text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+
+
+          /* ---------- STRING PROGRESS (HUD STYLE) ---------- */
+          #string-progress div {
+              backdrop-filter: blur(6px);
+              box-shadow:
+                  inset 0 0 0 1px rgba(255,255,255,0.12),
+                  0 6px 18px rgba(0,0,0,0.45);
+          }
+          
+          /* ---------- NOTE HIGHWAY (AUTOPILOT LANE) ---------- */
+          #note-highway-container {
+              position: relative;
+              height: 500px;
+              overflow: hidden;
+              background:
+                  linear-gradient(
+                      180deg,
+                      rgba(var(--neon-blue),0.08),
+                      rgba(10,10,15,0.95)
+                  );
+              border-radius: 24px;
+          }
+
+          /* ---------- HIT LINE GLOW ---------- */
+          #hit-line {
+              position: absolute;
+              bottom: 0;
+              width: 100%;
+              height: 8px;
+              background: linear-gradient(90deg, transparent, #5C6BC0, transparent);
+              box-shadow: 0 0 30px 10px rgba(var(--neon-blue), 0.8);
+              animation: pulseGlow 1.6s infinite ease-in-out;
+          }
+
+          @keyframes pulseGlow {
+              0%,100% { opacity: 1; }
+              50% { opacity: 0.6; }
+          }
+
+          /* ---------- FALLING NOTES ---------- */
+          .falling-note {
+              position: absolute;
+              left: 50%;
+              transform: translateX(-50%);
+              width: 60px; /* Note size */
+              height: 30px;
+              line-height: 30px;
+              text-align: center;
+              font-size: 14px;
+              color: white;
+              border-radius: 14px;
+              backdrop-filter: blur(4px);
+              box-shadow:
+                  inset 0 0 0 1px rgba(255,255,255,0.15),
+                  0 10px 30px rgba(0,0,0,0.5);
+              transition: background-color 0.1s;
+              z-index: 10;
+              font-weight: 700;
+          }
+
+          /* ---------- HIT FEEDBACK VISUALS ---------- */
+          .hit-indicator {
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              font-size: 2rem;
+              font-weight: 800;
+              opacity: 0;
+              pointer-events: none;
+              z-index: 20;
+              animation: feedbackPop 0.8s ease-out forwards;
+              text-shadow: 0 0 20px currentColor;
+          }
+
+          .hit-perfect { color: #34D399; } /* Green */
+          .hit-good { color: #60A5FA; } /* Blue */
+          .hit-miss { color: #F87171; filter: grayscale(1); } /* Red */
+          
+          @keyframes feedbackPop {
+              0% { transform: translate(-50%, 0); opacity: 0; }
+              20% { transform: translate(-50%, -50%); opacity: 1; }
+              100% { transform: translate(-50%, -150%); opacity: 0; }
+          }
+
+          /* ---------- STATUS TEXT (System Level) ---------- */
+          #status-message {
+              opacity: 0.85;
+              letter-spacing: 0.08em;
+              font-size: 0.875rem;
+              text-transform: uppercase;
+          }
+      </style>
+      <!-- ===================== END TESLA UI ===================== -->
+  </head>
+  <body class="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+
+      <div id="app" class="max-w-7xl w-full mx-auto space-y-8">
+          
+          <header class="text-center">
+              <h1 class="text-4xl md:text-5xl tracking-tight mb-2">ARCADE RHYTHM STUDIO</h1>
+              <p id="status-message" class="text-gray-400">System Ready. Awaiting Spotify Authorization.</p>
+          </header>
+
+          <main class="flex flex-col md:flex-row gap-8">
+              
+              <!-- Left Control Panel (Spotify, Mode, Tuner) -->
+              <div class="flex-auto-wrap space-y-8">
+
+                  <!-- Spotify Auth Panel -->
+                  <div class="studio-panel p-6 space-y-4">
+                      <h2 class="text-xl font-bold border-b border-gray-700 pb-2 flex justify-between items-center">
+                          <span class="text-indigo-400">Spotify Sync</span>
+                          <span id="spotify-status" class="text-xs text-red-500 font-normal">Disconnected</span>
+                      </h2>
+                      <button id="spotify-connect-button" onclick="loginSpotify()" class="btn-control w-full py-3 text-lg transition-colors duration-200 flex items-center justify-center space-x-2">
+                          <!-- Icon from lucide-react equivalent: Spotify -->
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12.9a8 8 0 0 1 8 0"/><path d="M8 17.5a4 4 0 0 1 8 0"/><path d="M12 8a4 4 0 0 1 0 8"/></svg>
+                          <span>Connect to Spotify (PKCE)</span>
+                      </button>
+                      <p class="text-xs text-gray-500 pt-2">
+                          Authorization Code Flow. Token exchange requires a server backend. This button only initiates the redirect.
+                      </p>
+                  </div>
+                  
+                  <!-- Tuner Panel -->
+                  <div class="studio-panel p-6 space-y-6">
+                      <h2 class="text-xl font-bold border-b border-gray-700 pb-2 text-green-400">Tuner Calibration</h2>
+                      
+                      <!-- Current String / Note -->
+                      <div id="string-progress" class="flex justify-between items-center text-sm">
+                          <div class="px-4 py-2 rounded-lg bg-gray-800 shadow-xl">
+                              <span class="text-gray-400">TARGET:</span> 
+                              <span id="target-note" class="text-xl font-mono ml-2 text-green-300">E2</span>
+                          </div>
+                          <div class="flex space-x-2 text-gray-400">
+                              <span>E</span>
+                              <span class="text-green-400 font-bold">A</span>
+                              <span>D</span>
+                              <span>G</span>
+                              <span>B</span>
+                              <span>E</span>
+                          </div>
+                      </div>
+
+                      <!-- Pitch Meter -->
+                      <div class="pitch-meter-container h-4 w-full relative overflow-hidden flex items-center justify-between p-1">
+                          <!-- Scale Markers -->
+                          <div class="h-full w-0.5 bg-red-500 absolute left-1/4"></div>
+                          <div class="h-full w-0.5 bg-green-500 absolute left-1/2 -ml-0.25"></div>
+                          <div class="h-full w-0.5 bg-red-500 absolute right-1/4"></div>
+
+                          <!-- Needle (Represents Pitch Deviation) -->
+                          <div id="tuner-needle" class="needle-active h-2 w-2 bg-indigo-400 absolute transition-all" style="left: 50%;"></div>
+                      </div>
+                      
+                      <!-- Feedback -->
+                      <div class="text-center">
+                          <p id="tuner-feedback" class="text-2xl mt-4 glow-green">Perfect Pitch</p>
+                          <p id="tuner-cents" class="text-lg font-mono text-gray-500">+0 Cents</p>
+                      </div>
+
+                  </div>
+
+                  <!-- Mode/Action Controls -->
+                  <div class="flex space-x-4">
+                      <button id="mode-tuner" onclick="setMode('tuner')" class="flex-auto-wrap btn-control py-3 text-center text-gray-300 btn-active">
+                          Tuner Mode
+                      </button>
+                      <button id="mode-game" onclick="setMode('game')" class="flex-auto-wrap btn-control py-3 text-center text-gray-300">
+                          Rhythm Game
+                      </button>
+                  </div>
+
+              </div>
+
+              <!-- Right Rhythm Highway Panel -->
+              <div class="flex-auto-wrap studio-panel p-4 md:p-8">
+                  <div class="text-center mb-6">
+                      <h2 class="text-2xl font-bold text-gray-300">Rhythm Highway</h2>
+                      <p id="score-display" class="text-4xl font-mono text-green-400 mt-2">Score: 0</p>
+                  </div>
+                  
+                  <!-- Note Highway -->
+                  <div id="note-highway-container" class="w-full relative mx-auto max-w-sm">
+                      <div id="hit-line"></div>
+                      <!-- Placeholder for falling notes (JS will inject these) -->
+                      <div id="note-hit-indicator" class="hit-indicator"></div>
+                  </div>
+
+                  <!-- Ignition Button -->
+                  <div class="mt-8 text-center">
+                      <button id="start-button" onclick="startGame()" class="btn-control bg-green-600 text-white hover:bg-green-500 w-full py-4 text-xl">
+                          Start Engine
+                      </button>
+                  </div>
+              </div>
+              
+          </main>
+      </div>
+
+      <script>
+          // =========================================================
+          // JAVASCRIPT LOGIC
+          // (Maintaining original logic structure, adding Spotify Auth)
+          // =========================================================
+
+          const SPOTIFY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID'; // Replace with your client ID
+          const REDIRECT_URI = window.location.origin + window.location.pathname;
+          const SPOTIFY_SCOPES = 'user-read-private user-read-email';
+          let spotifyToken = null;
+          let spotifyAuthCode = null;
+          let spotifyVerifier = localStorage.getItem('spotify_verifier');
+          let mode = 'tuner'; // 'tuner' or 'game'
+          let gameActive = false;
+          let score = 0;
+
+          // --- Utility Functions for Spotify PKCE Flow ---
+
+          function generateRandomString(length) {
+              let text = '';
+              let possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+              for (let i = 0; i < length; i++) {
+                  text += possible.charAt(Math.floor(Math.random() * possible.length));
+              }
+              return text;
+          }
+
+          async function generateCodeChallenge(codeVerifier) {
+              const encoder = new TextEncoder();
+              const data = encoder.encode(codeVerifier);
+              const digest = await window.crypto.subtle.digest('SHA-256', data);
+              return btoa(String.fromCharCode(...new Uint8Array(digest)))
+                  .replace(/\\+/g, '-')
+                  .replace(/\\//g, '_')
+                  .replace(/=+$/, '');
+          }
+
+          // --- Spotify Authentication ---
+
+          async function loginSpotify() {
+              if (SPOTIFY_CLIENT_ID === 'YOUR_SPOTIFY_CLIENT_ID') {
+                  console.error("Please update SPOTIFY_CLIENT_ID with your actual Spotify App ID.");
+                  updateStatus('ERROR: Spotify Client ID missing.', 'text-red-500');
+                  return;
+              }
+
+              // 1. Generate code verifier and challenge
+              const verifier = generateRandomString(128);
+              localStorage.setItem('spotify_verifier', verifier);
+              spotifyVerifier = verifier;
+
+              const challenge = await generateCodeChallenge(verifier);
+              
+              // 2. Build Authorization URL and redirect
+              const params = new URLSearchParams({
+                  client_id: SPOTIFY_CLIENT_ID,
+                  response_type: 'code',
+                  redirect_uri: REDIRECT_URI,
+                  scope: SPOTIFY_SCOPES,
+                  code_challenge_method: 'S256',
+                  code_challenge: challenge,
+              });
+
+              window.location.href = \`https://accounts.spotify.com/authorize?\${params.toString()}\`;
+              updateStatus('Redirecting to Spotify...', 'text-yellow-500');
+          }
+
+          // 3. Handle the incoming redirect response (where Spotify sends the code)
+          function handleSpotifyCallback() {
+              const params = new URLSearchParams(window.location.search);
+              const code = params.get('code');
+              const error = params.get('error');
+
+              if (code) {
+                  spotifyAuthCode = code;
+                  
+                  // IMPORTANT: The next step (token exchange) requires a server/backend.
+                  // We clear the code from the URL and inform the user.
+                  history.replaceState(null, '', REDIRECT_URI); 
+
+                  updateStatus('Spotify Authorization Code received. Awaiting server token exchange.', 'text-yellow-400');
+                  document.getElementById('spotify-status').textContent = 'Authenticated (Code)';
+                  document.getElementById('spotify-status').className = 'text-xs text-yellow-400 font-normal';
+
+                  // In a real app, you would now POST to your backend with the 'code' and 'verifier'
+                  // fetchToken(code, verifier); 
+
+              } else if (error) {
+                  updateStatus(\`Spotify Auth Error: \${error}.\`, 'text-red-500');
+                  document.getElementById('spotify-status').textContent = 'Denied';
+                  document.getElementById('spotify-status').className = 'text-xs text-red-500 font-normal';
+              } else {
+                  updateStatus('System Ready. Awaiting User Action.', 'text-gray-400');
+              }
+          }
+          
+          // --- UI and Game Logic Stubs ---
+
+          function updateStatus(message, colorClass = 'text-gray-400') {
+              const statusElement = document.getElementById('status-message');
+              statusElement.textContent = message;
+              statusElement.className = \`\${colorClass} text-xs md:text-sm pt-2 uppercase tracking-wider opacity-85\`;
+          }
+
+          function setMode(newMode) {
+              mode = newMode;
+              document.getElementById('mode-tuner').classList.toggle('btn-active', mode === 'tuner');
+              document.getElementById('mode-game').classList.toggle('btn-active', mode === 'game');
+              updateStatus(\`Mode switched to: \${mode.toUpperCase()}\`);
+          }
+
+          function startGame() {
+              gameActive = !gameActive;
+              const btn = document.getElementById('start-button');
+              if (gameActive) {
+                  btn.textContent = 'STOP ENGINE (Active)';
+                  btn.classList.remove('bg-green-600', 'hover:bg-green-500');
+                  btn.classList.add('bg-red-600', 'hover:bg-red-500');
+                  updateStatus('Rhythm Sequence Initiated. Watch the Highway.');
+                  if (mode === 'game') {
+                      // Start generating dummy notes
+                      setInterval(generateNote, 1000); 
+                      // Start simulation loop
+                      requestAnimationFrame(gameLoop);
+                  }
+              } else {
+                  btn.textContent = 'Start Engine';
+                  btn.classList.add('bg-green-600', 'hover:bg-green-500');
+                  btn.classList.remove('bg-red-600', 'hover:bg-red-500');
+                  updateStatus('System IDLE. Engine Stopped.');
+              }
+          }
+
+          // Tuner simulation stub
+          function simulateTuner() {
+              if (mode !== 'tuner' || !gameActive) return;
+
+              const cents = Math.floor(Math.random() * 201) - 100; // -100 to +100 cents
+              const needlePosition = (cents + 100) / 2; // 0 to 100
+              
+              const needle = document.getElementById('tuner-needle');
+              const feedback = document.getElementById('tuner-feedback');
+              const centsDisplay = document.getElementById('tuner-cents');
+
+              needle.style.left = \`\${needlePosition}%\`;
+              centsDisplay.textContent = \`\${cents > 0 ? '+' : ''}\${cents} Cents\`;
+
+              let feedbackText = 'Perfect Pitch';
+              let colorClass = 'glow-green';
+
+              if (Math.abs(cents) > 50) {
+                  feedbackText = 'TOO FLAT';
+                  colorClass = 'glow-red';
+              } else if (cents < -10) {
+                  feedbackText = 'Slightly FLAT';
+                  colorClass = 'glow-yellow';
+              } else if (cents > 10) {
+                  feedbackText = 'Slightly SHARP';
+                  colorClass = 'glow-yellow';
+              }
+
+              feedback.textContent = feedbackText;
+              feedback.className = \`text-2xl mt-4 \${colorClass}\`;
+          }
+          
+          // Game simulation stub
+          let notes = [];
+          const HIGHWAY_HEIGHT = 500;
+          const HIT_LINE_OFFSET = 50; // Distance from bottom
+          const NOTE_SPEED = 2; // Pixels per frame
+          const NOTE_COLORS = ['#34D399', '#60A5FA', '#FBBF24', '#F87171']; // Green, Blue, Yellow, Red
+
+          function generateNote() {
+              if (mode !== 'game' || !gameActive) return;
+
+              const highway = document.getElementById('note-highway-container');
+              const noteElement = document.createElement('div');
+              const colorIndex = Math.floor(Math.random() * NOTE_COLORS.length);
+              const noteText = ['E', 'A', 'D', 'G', 'B', 'E'][Math.floor(Math.random() * 6)];
+              
+              noteElement.className = 'falling-note';
+              noteElement.style.top = \`0px\`;
+              noteElement.style.backgroundColor = NOTE_COLORS[colorIndex];
+              noteElement.style.borderColor = NOTE_COLORS[colorIndex];
+              noteElement.textContent = noteText;
+              noteElement.dataset.id = Date.now();
+              noteElement.dataset.speed = NOTE_SPEED;
+
+              highway.appendChild(noteElement);
+              notes.push({ 
+                  id: noteElement.dataset.id, 
+                  element: noteElement, 
+                  y: 0, 
+                  speed: NOTE_SPEED,
+                  note: noteText 
+              });
+          }
+          
+          function gameLoop() {
+              if (!gameActive) return;
+
+              const highway = document.getElementById('note-highway-container');
+              const indicator = document.getElementById('note-hit-indicator');
+              const newNotes = [];
+
+              for (let i = 0; i < notes.length; i++) {
+                  const note = notes[i];
+                  note.y += note.speed;
+                  const noteBottom = note.y + note.element.offsetHeight;
+                  
+                  // Update position
+                  note.element.style.top = \`\${note.y}px\`;
+
+                  // Check for missed note (passed the hit line)
+                  if (noteBottom > HIGHWAY_HEIGHT - HIT_LINE_OFFSET + 10) {
+                      highway.removeChild(note.element);
+                      displayHitFeedback('MISS', 'hit-miss');
+                  } else if (noteBottom < HIGHWAY_HEIGHT - HIT_LINE_OFFSET) {
+                      // Note is still falling
+                      newNotes.push(note);
+                  }
+              }
+
+              notes = newNotes;
+              requestAnimationFrame(gameLoop);
+          }
+
+          function displayHitFeedback(text, className) {
+              const indicator = document.getElementById('note-hit-indicator');
+              indicator.textContent = text;
+              indicator.className = \`hit-indicator \${className}\`;
+              
+              // Re-trigger CSS animation
+              void indicator.offsetWidth;
+              indicator.style.animation = 'none';
+              void indicator.offsetWidth; 
+              indicator.style.animation = null; 
+          }
+
+          // --- Initialization ---
+          window.onload = function() {
+              handleSpotifyCallback();
+              setMode(mode); // Initialize UI mode
+
+              // Initial simulation setup
+              setInterval(simulateTuner, 100); 
+              // In game mode, the gameLoop handles note falling
+          };
+
+      </script>
+  </body>
+  </html>
+  `;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        border: 'none',
+        zIndex: 9999, // Ensure it covers everything
+      }}
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
+    />
+  );
+}'use client';
+
+import dynamic from 'next/dynamic';
+
+const TunerApp = dynamic(() => import('./tuner-app'), { ssr: false });
+
+export default function MyTunerPage() {
+  return <TunerApp />;
+}
