@@ -1,0 +1,620 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  DollarSign, Landmark, TrendingUp, Users, ShieldCheck, Heart, 
+  BarChart3, PieChart, Activity, Search, PlusCircle, ArrowRight,
+  Filter, Building, Download, Upload, CheckCircle, XCircle,
+  Shield, FileText, Bell, Send, Clock, AlertCircle,
+  Settings, Cpu, Zap, RefreshCw, Globe, Server, Database, Layers, Key, Loader2, ArrowDownLeft, ArrowUpRight, Check, Code, Hand, X, Lock, KeyRound, Wallet, Gift, Smile, Gamepad2, Handshake, BrainCircuit, Users2, Phone, Mail, Plus, Trash2, Eye, EyeOff, QrCode
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy, limit, DocumentData, addDoc, serverTimestamp, updateDoc, doc, setDoc } from 'firebase/firestore';
+import { usePlaidLink, PlaidLinkOptions, PlaidLinkOnSuccess } from 'react-plaid-link';
+import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
+
+
+// --- Reusable UI Components (Tailored for this page) ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+// --- API Configuration Panel with Multi-Key Support & IndexedDB ---
+const ApiConfigPanel = ({ title, icon: Icon, keyType, fields, description, onKeysSet }) => {
+    const [keys, setKeys] = useState([]);
+    const [activeKeyId, setActiveKeyId] = useState(null);
+    const [newKeyData, setNewKeyData] = useState({});
+    const [isAdding, setIsAdding] = useState(false);
+    const [revealedSecrets, setRevealedSecrets] = useState({});
+
+    const dbKeysName = `${keyType}ApiKeys`;
+    const dbActiveKeyName = `active${keyType.charAt(0).toUpperCase() + keyType.slice(1)}KeyId`;
+
+    useEffect(() => {
+        const loadKeys = async () => {
+            const savedKeys = (await idbGet(dbKeysName)) || [];
+            const savedActiveKey = await idbGet(dbActiveKeyName);
+            setKeys(savedKeys);
+            
+            let currentActiveId = savedActiveKey;
+            if (!currentActiveId && savedKeys.length > 0) {
+                currentActiveId = savedKeys[0].id;
+                await idbSet(dbActiveKeyName, currentActiveId);
+            }
+            setActiveKeyId(currentActiveId);
+            onKeysSet(!!currentActiveId);
+        };
+        loadKeys();
+    }, [dbKeysName, dbActiveKeyName, onKeysSet]);
+
+    const handleAddKey = async () => {
+        if (!newKeyData['name'] || !Object.values(newKeyData).every(Boolean)) return;
+        const newKey = { id: `key_${Date.now()}`, ...newKeyData };
+        const updatedKeys = [...keys, newKey];
+        setKeys(updatedKeys);
+        await idbSet(dbKeysName, updatedKeys);
+        if (!activeKeyId) {
+            await handleSetActive(newKey.id);
+        }
+        setNewKeyData({});
+        setIsAdding(false);
+    };
+    
+    const handleDeleteKey = async (id) => {
+        const updatedKeys = keys.filter(k => k.id !== id);
+        setKeys(updatedKeys);
+        await idbSet(dbKeysName, updatedKeys);
+        if (activeKeyId === id) {
+            const newActiveId = updatedKeys.length > 0 ? updatedKeys[0].id : null;
+            setActiveKeyId(newActiveId);
+            await idbSet(dbActiveKeyName, newActiveId);
+            onKeysSet(!!newActiveId);
+        }
+    };
+    
+    const handleSetActive = async (id) => {
+        setActiveKeyId(id);
+        await idbSet(dbActiveKeyName, id);
+        onKeysSet(true);
+    };
+
+    const toggleRevealSecret = (id) => {
+        setRevealedSecrets(prev => ({...prev, [id]: !prev[id]}));
+    };
+    
+    const isConfigured = keys.length > 0 && activeKeyId;
+
+    return (
+        <div className="bg-slate-950 border-2 border-indigo-500/30 rounded-2xl p-6 mb-8 space-y-4">
+            <h3 className="text-lg font-bold text-indigo-400 flex items-center gap-2"><Icon /> {title}</h3>
+            <p className="text-xs text-slate-500">{description}</p>
+            
+            <div className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                <div className={`w-3 h-3 rounded-full transition-colors ${isConfigured ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
+                <p className="text-xs font-bold text-slate-400 flex-grow">
+                    {isConfigured ? 'Live API Key is Active' : 'API Keys Not Configured'}
+                </p>
+                 <span className="text-xs font-mono text-slate-500">{activeKeyId || 'N/A'}</span>
+            </div>
+            
+            <div className="space-y-2">
+                {keys.map(key => (
+                    <div key={key.id} className="bg-slate-800/50 p-3 rounded-lg flex items-center gap-3 border border-slate-700">
+                        <button onClick={() => handleSetActive(key.id)} className="flex items-center gap-3 flex-grow text-left">
+                            <div className={`w-3 h-3 rounded-full transition-colors ${activeKeyId === key.id ? 'bg-green-500' : 'bg-slate-600'}`} />
+                            <span className="font-bold text-sm text-white flex-grow">{key.name}</span>
+                        </button>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            {fields.filter(f => f.isSecret).map(field => (
+                                <div key={field.id} className="relative">
+                                    <input type={revealedSecrets[key.id] ? 'text' : 'password'} value={key[field.id]} readOnly className="w-24 bg-transparent text-xs font-mono border-none" />
+                                    <button onClick={() => toggleRevealSecret(key.id)} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                                        {revealedSecrets[key.id] ? <EyeOff size={14}/> : <Eye size={14}/>}
+                                    </button>
+                                </div>
+                            ))}
+                             <button onClick={() => handleDeleteKey(key.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 size={14}/></button>
+                        </div>
+                    </div>
+                ))}
+                 {keys.length === 0 && !isAdding && <p className="text-center text-sm text-slate-500 py-4">No API keys configured.</p>}
+            </div>
+
+            {isAdding ? (
+                 <motion.div initial={{opacity: 0, y: -10}} animate={{opacity: 1, y: 0}} className="space-y-3 pt-4 border-t border-slate-700">
+                    <input type="text" placeholder="Key Name (e.g., 'Sandbox')" value={newKeyData['name'] || ''} onChange={(e) => setNewKeyData(d => ({...d, name: e.target.value}))} className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm" />
+                    {fields.map(field => (
+                        <input key={field.id} type={field.isSecret ? 'password' : 'text'} placeholder={field.label} value={newKeyData[field.id] || ''} onChange={(e) => setNewKeyData(d => ({...d, [field.id]: e.target.value}))} className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm" />
+                    ))}
+                    <div className="flex gap-2">
+                        <button onClick={handleAddKey} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-semibold">Save Key</button>
+                        <button onClick={() => setIsAdding(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">Cancel</button>
+                    </div>
+                </motion.div>
+            ) : (
+                <button onClick={() => setIsAdding(true)} className="w-full flex items-center justify-center gap-2 py-2 mt-2 bg-white/5 hover:bg-white/10 border border-dashed border-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors">
+                    <Plus size={16}/> Add New API Key
+                </button>
+            )}
+        </div>
+    );
+};
+
+
+// --- Sovereign Economic Engine Components ---
+const StatCard = ({ icon: Icon, label, value, subValue, color, isCurrency = false }) => (
+  <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 shadow-lg hover:border-slate-600 transition-all duration-300">
+    <div className="flex items-start justify-between">
+      <div className={`p-2 rounded-lg bg-${color}-500/10 border border-${color}-500/20`}>
+        <Icon className={`w-5 h-5 text-${color}-400`} />
+      </div>
+      <span className="text-xs font-bold px-2 py-0.5 bg-slate-700/50 rounded-full text-slate-400">LIVE</span>
+    </div>
+    <div className="mt-4">
+      <p className="text-3xl font-black text-white tracking-tighter">{isCurrency ? '$' : ''}{value.toLocaleString()}</p>
+      <p className="text-xs font-medium text-slate-500">{subValue}</p>
+    </div>
+  </div>
+);
+
+const TransactionRow = ({ tx }) => {
+    const isDeposit = tx.type === 'deposit' || tx.type === 'revenue';
+    const statusConfig = {
+        pending: { color: 'text-yellow-400', icon: <Loader2 size={12} className="animate-spin" /> },
+        confirmed: { color: isDeposit ? 'text-emerald-400' : 'text-rose-400', icon: isDeposit ? <ArrowUpRight size={12} /> : <ArrowDownLeft size={12} /> },
+        failed: { color: 'text-red-400', icon: <XCircle size={12} /> }
+    };
+    const currentStatus = statusConfig[tx.status] || statusConfig.pending;
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-800/70 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${isDeposit ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}>
+          {currentStatus.icon}
+        </div>
+        <div>
+          <p className="font-semibold text-sm text-slate-100">{tx.description}</p>
+          <p className="text-xs text-slate-500 font-mono">{(tx.timestamp as any)?.toDate ? (tx.timestamp as any).toDate().toLocaleString() : 'Pending...'} • <span className={`capitalize font-bold ${currentStatus.color}`}>{tx.status}</span></p>
+        </div>
+      </div>
+      <div className={`text-sm font-bold font-mono ${currentStatus.color}`}>
+        {isDeposit ? '+' : '-'}{tx.amount.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}
+      </div>
+    </div>
+  );
+};
+
+// --- Plaid Link Component ---
+const PlaidLinkComponent = ({ onLinkSuccess, children, areKeysSet, ...props }) => {
+  const { toast } = useToast();
+  const { user } = useUser();
+  const [linkToken, setLinkToken] = useState(null);
+
+  const generateToken = useCallback(async () => {
+    if (!user?.uid) return;
+    
+    const activeKeyId = await idbGet('activePlaidKeyId');
+    const allKeys = (await idbGet('plaidApiKeys')) || [];
+    const activeKey = allKeys.find(k => k.id === activeKeyId);
+
+    if (!activeKey) {
+        toast({ title: 'Plaid Error', description: 'No active API key set.', variant: 'destructive' });
+        return;
+    }
+
+    try {
+      const response = await fetch('/api/plaid', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-plaid-client-id': activeKey.clientId,
+          'x-plaid-secret': activeKey.secret,
+        },
+        body: JSON.stringify({ action: 'create_link_token', user_id: user.uid }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Network response was not ok");
+      }
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setLinkToken(data.link_token);
+    } catch (error) {
+      toast({ title: 'Plaid Error', description: `Could not generate link token: ${error.message}`, variant: 'destructive' });
+    }
+  }, [toast, user]);
+
+  useEffect(() => {
+    if (areKeysSet && user?.uid) {
+      generateToken();
+    }
+  }, [areKeysSet, generateToken, user]);
+
+  const onSuccess = useCallback<PlaidLinkOnSuccess>(async (public_token, metadata) => {
+    toast({ title: "Link Successful!", description: "Exchanging token and saving to vault..." });
+    
+    const activeKeyId = await idbGet('activePlaidKeyId');
+    const allKeys = (await idbGet('plaidApiKeys')) || [];
+    const activeKey = allKeys.find(k => k.id === activeKeyId);
+
+    try {
+      const response = await fetch('/api/plaid', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-plaid-client-id': activeKey.clientId,
+          'x-plaid-secret': activeKey.secret,
+        },
+        body: JSON.stringify({ action: 'exchange_public_token', public_token: public_token }),
+      });
+      const result = await response.json();
+      if (result.success && result.access_token) {
+        onLinkSuccess(metadata.institution.name, metadata.accounts[0].mask, result.access_token, result.item_id);
+      } else {
+        throw new Error(result.error || 'Token exchange failed.');
+      }
+    } catch (error) {
+      toast({ title: 'Server Error', description: `Could not complete token exchange: ${error.message}`, variant: 'destructive' });
+    }
+  }, [onLinkSuccess, toast]);
+
+  const config: PlaidLinkOptions = { token: linkToken, onSuccess };
+  const { open, ready } = usePlaidLink(config);
+
+  const disabled = !areKeysSet || !ready || !linkToken;
+  const buttonText = !areKeysSet ? 'Set API Keys First' : !linkToken ? 'Initializing...' : !ready ? 'Loading...' : 'Link Bank Account';
+
+  return React.cloneElement(children as React.ReactElement, { onClick: open, disabled, ...props, children: <><Landmark size={16}/> {buttonText}</> });
+};
+
+
+// --- Main Combined Page Component ---
+export default function SystemStudioPage() {
+  const { user, firestore } = useUser();
+  const { toast } = useToast();
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [arePlaidKeysSet, setArePlaidKeysSet] = useState(false);
+  const [areStripeKeysSet, setAreStripeKeysSet] = useState(false);
+
+  const accountRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'bank_accounts', user.uid);
+  }, [firestore, user]);
+  const { data: bankAccount, isLoading: isAccountLoading } = useDoc(accountRef);
+
+
+  // --- LIVE DATA HOOKS ---
+  const engineTransactionsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'transactions'), orderBy('timestamp', 'desc'), limit(10));
+  }, [firestore]);
+  const { data: engineTransactions } = useCollection(engineTransactionsQuery);
+
+  const sponsorsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'sponsors'), orderBy('contribution', 'desc'));
+  }, [firestore]);
+  const { data: sponsors } = useCollection(sponsorsQuery);
+  
+  // --- CALCULATED VALUES (from live data) ---
+  const { totalSovInCirculation, usdReserve, nonProfitBalance } = useMemo(() => {
+    if (!engineTransactions) return { totalSovInCirculation: 0, usdReserve: 0, nonProfitBalance: 0 };
+    const confirmedTxs = engineTransactions.filter(tx => tx.status === 'confirmed');
+    const sov = confirmedTxs.reduce((acc, tx) => acc + (tx.type === 'deposit' || tx.type === 'revenue' ? tx.amount : -tx.amount), 0);
+    const nonProfit = confirmedTxs.filter(tx => tx.description?.toLowerCase().includes("grant") || tx.description?.toLowerCase().includes("non-profit")).reduce((acc, tx) => acc + tx.amount, 0);
+    return { totalSovInCirculation: sov, usdReserve: sov * 2.50, nonProfitBalance: nonProfit };
+  }, [engineTransactions]);
+
+  const handleLinkSuccess = async (bankName, last4, accessToken, itemId) => {
+    if (!accountRef) return;
+    try {
+        await setDoc(accountRef, {
+            userId: user.uid,
+            bankName,
+            accountMask: last4,
+            plaidItemId: itemId,
+            plaidAccessToken: accessToken,
+            status: 'active',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+        toast({ title: "Bank Account Synced!", description: "Your account details have been securely saved to your vault." });
+    } catch (error) {
+        console.error("Error saving bank account to Firestore:", error);
+        toast({ variant: 'destructive', title: "Save Error", description: "Could not save bank details to the vault." });
+    }
+  };
+  
+    const handleCopyToClipboard = () => {
+        const stripeLink = 'https://buy.stripe.com/test_9B628s9Nj2su3ceayhds401';
+        navigator.clipboard.writeText(stripeLink);
+        toast({ title: 'Link Copied!', description: 'Stripe payment link copied to clipboard.' });
+    }
+
+    const handleDownloadQR = () => {
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=https://buy.stripe.com/test_9B628s9Nj2su3ceayhds401`;
+        const link = document.createElement('a');
+        link.href = qrUrl;
+        link.download = 'sovereign-os-payment-qr.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+
+  return (
+    <div className="space-y-8 p-4 md:p-8 min-h-screen bg-slate-900 text-slate-100">
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <ApiConfigPanel 
+          title="Plaid API Configuration" 
+          icon={Landmark}
+          keyType="plaid"
+          fields={[
+            { id: 'clientId', label: 'Plaid Client ID', isSecret: false },
+            { id: 'secret', label: 'Plaid Secret', isSecret: true },
+          ]}
+          description="Manage Plaid API credentials for linking bank accounts. Keys are stored securely in your browser's IndexedDB."
+          onKeysSet={setArePlaidKeysSet}
+        />
+        <ApiConfigPanel 
+          title="Stripe API Configuration" 
+          icon={Wallet}
+          keyType="stripe"
+          fields={[
+            { id: 'secretKey', label: 'Stripe Secret Key', isSecret: true },
+            { id: 'webhookSecret', label: 'Stripe Webhook Secret', isSecret: true },
+          ]}
+          description="Manage Stripe API keys for processing payments and verifying webhooks. Keys are stored securely in your browser's IndexedDB."
+          onKeysSet={setAreStripeKeysSet}
+        />
+      </div>
+
+      <section>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
+              <Landmark className="w-8 h-8 text-sky-400"/>
+              Sovereign Economic Engine
+            </h1>
+            <p className="text-slate-400 mt-2">Master ledger for SOV$ circulation, corporate sponsorship, and non-profit grants.</p>
+          </div>
+          <div className="flex gap-2">
+              <button className="bg-slate-800 text-slate-300 hover:bg-slate-700 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
+                  <Download size={16} /> Export Audit
+              </button>
+              <button onClick={() => setIsTxModalOpen(true)} className="bg-sky-600 text-white hover:bg-sky-500 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2" disabled={!areStripeKeysSet}>
+                  <PlusCircle size={16} /> Fund Reserve (Stripe)
+              </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+          <StatCard icon={DollarSign} label="Total SOV$ in Circulation" value={totalSovInCirculation} subValue={`~ $${(totalSovInCirculation * 2.50).toLocaleString()}`} color="sky" isCurrency />
+          <StatCard icon={Landmark} label="USD Held in Reserve" value={usdReserve} subValue="100% Backing Ratio Maintained" color="emerald" isCurrency />
+          <StatCard icon={Heart} label="Non-Profit / Grants" value={nonProfitBalance} subValue="Ready for next grant cycle" color="rose" isCurrency />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+          <div className="lg:col-span-2 space-y-6">
+              <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-lg font-bold text-white mb-4">Live Transaction Feed</h3>
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
+                      {engineTransactions && engineTransactions.length > 0 ? engineTransactions.map(tx => <TransactionRow key={tx.id} tx={tx} />) : <p className="text-slate-500 text-center py-10">Awaiting live transactions...</p>}
+                  </div>
+              </div>
+              <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-lg font-bold text-white mb-4 flex justify-between items-center">
+                      <span>Corporate Sponsors</span>
+                      <button className="text-xs text-sky-400 font-semibold hover:underline">Manage Tiers</button>
+                  </h3>
+                   <div className="space-y-3">
+                      {sponsors && sponsors.length > 0 ? sponsors.map(sp => (
+                          <div key={sp.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl border border-slate-800">
+                               <div className="flex items-center gap-3">
+                                   <div className="p-2 bg-indigo-500/10 rounded-lg"><Building size={16} className="text-indigo-400"/></div>
+                                   <div>
+                                       <p className="font-semibold text-sm text-slate-100">{sp.name}</p>
+                                       <p className="text-xs text-indigo-400 font-bold">{sp.tier} Tier</p>
+                                   </div>
+                               </div>
+                               <div className="text-right">
+                                   <p className="text-emerald-400 font-mono text-sm">+{sp.contribution.toLocaleString()} SOV$</p>
+                                   <p className="text-slate-500 text-[10px]">Cycle Contribution</p>
+                               </div>
+                          </div>
+                      )) : <p className="text-slate-500 text-center py-5">No sponsors found.</p>}
+                   </div>
+              </div>
+          </div>
+          <div className="space-y-6">
+              <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-lg font-bold text-white mb-4">Family ID Registration</h3>
+                  <div className="space-y-4">
+                      <div className="bg-slate-900/40 p-4 rounded-xl text-center border border-slate-700">
+                          <p className="text-xs text-slate-400 uppercase font-semibold">Revenue from Reserved IDs</p>
+                          <p className="text-3xl font-black text-sky-400 mt-1">0 SOV$</p>
+                      </div>
+                      <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700">
+                          <p className="text-xs text-slate-400 mb-2">Last Reserved ID:</p>
+                          <div className="flex justify-between items-center">
+                              <span className="text-lg font-mono font-bold text-white">N/A</span>
+                          </div>
+                      </div>
+                      <p className="text-xs text-slate-500 text-center italic">
+                          Custom 3-letter IDs cost 13 SOV$ to reserve.
+                      </p>
+                      <button className="w-full bg-slate-700 text-slate-200 hover:bg-slate-600 px-4 py-2 rounded-xl text-sm font-semibold">
+                          View Registration Log
+                      </button>
+                  </div>
+              </div>
+              <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><ShieldCheck className="text-green-400"/> True Oath Founder Payout</h3>
+                  {isAccountLoading ? <Loader2 className="animate-spin" /> : bankAccount ? (
+                    <div className="space-y-3">
+                        <p className="text-xs text-slate-400">Your real-world bank account is securely linked.</p>
+                        <div className="p-4 bg-green-900/20 rounded-xl border border-green-500/30">
+                            <p className="text-xs text-green-300 font-semibold">{bankAccount.bankName}</p>
+                            <p className="font-mono text-lg text-white mt-1">•••• •••• {bankAccount.accountMask}</p>
+                        </div>
+                        <button className="w-full bg-slate-700 text-slate-200 hover:bg-slate-600 px-4 py-2 rounded-xl text-sm font-semibold">
+                            Manage Connection
+                        </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                        <p className="text-xs text-slate-400">
+                            Connect your real-world bank account to enable deposits and withdrawals. This system uses Plaid for bank-grade security.
+                        </p>
+                        <div className="p-3 bg-slate-900/30 rounded-xl border border-slate-700">
+                            <p className="text-xs text-slate-400 font-semibold">Linked Account:</p>
+                            <p className="font-mono text-sm text-slate-500 mt-1">NOT LINKED</p>
+                        </div>
+                        <PlaidLinkComponent onLinkSuccess={handleLinkSuccess} areKeysSet={arePlaidKeysSet}>
+                           <button className="w-full bg-green-600 text-white hover:bg-green-500 px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" />
+                        </PlaidLinkComponent>
+                    </div>
+                  )}
+                  <div className="mt-4 pt-4 border-t border-slate-700 space-y-2">
+                        <h4 className="text-xs text-slate-400 font-bold uppercase">Digital Wallet Integration</h4>
+                         <div className="grid grid-cols-2 gap-2">
+                            <button className="p-2 bg-black rounded-lg flex items-center justify-center gap-2 text-sm text-white font-semibold border border-slate-600">
+                                <Wallet size={18} />
+                                Google Pay
+                            </button>
+                             <button className="p-2 bg-black rounded-lg flex items-center justify-center gap-2 text-sm text-white font-semibold border border-slate-600">
+                                <Wallet size={18} />
+                                Apple Pay
+                            </button>
+                        </div>
+                   </div>
+              </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                  <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                      <Gift className="w-8 h-8 text-rose-400" />
+                      Spike Points Economy
+                  </h1>
+                  <p className="text-slate-400 mt-2">The ethical, non-monetary engine for family engagement and positive reinforcement.</p>
+              </div>
+          </div>
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6 shadow-lg">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-3"><FileText className="text-rose-400" /> Rules & Regulations</h3>
+                  <div className="space-y-3">
+                      <p className="text-sm flex items-start gap-3"><span className="text-rose-400 mt-1"><Smile size={16}/></span><span>Members can award up to <strong>100 SP</strong> per day to others for positive actions.</span></p>
+                      <p className="text-sm flex items-start gap-3"><span className="text-rose-400 mt-1"><BrainCircuit size={16}/></span><span>Pebble AI monitors interactions for tone and respect, automatically adjusting SP balances.</span></p>
+                      <p className="text-sm flex items-start gap-3"><span className="text-rose-400 mt-1"><Gamepad2 size={16}/></span><span>Family-oriented games (Geo-Games, Trivia) provide substantial SP rewards.</span></p>
+                      <p className="text-sm flex items-start gap-3"><span className="text-rose-400 mt-1"><Handshake size={16}/></span><span>A <strong>400 SP</strong> monthly continuity fee per adult ensures system sustainability, covered by earned points.</span></p>
+                  </div>
+              </div>
+              <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6 shadow-lg">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-3"><Users className="text-rose-400" /> Family Pot & Balances</h3>
+                  <div className="text-center p-4 bg-slate-900/40 rounded-xl border border-slate-700">
+                      <p className="text-xs text-slate-400 uppercase font-semibold">Total Family Pot</p>
+                      <p className="text-4xl font-black text-rose-400 mt-1">6,000 SP</p>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs text-slate-500 text-center italic">Each of the 6 family members starts with 1,000 SP. Points spent go back into the family pot, creating a closed-loop, self-sustaining economy.</p>
+                  </div>
+              </div>
+          </div>
+      </section>
+
+      <div className="border-t-4 border-dashed border-slate-800 my-16" />
+      
+      <section>
+        <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-gradient-to-tr from-cyan-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                <Layers className="text-white w-6 h-6" />
+            </div>
+            <div>
+                <h1 className="font-black text-white text-2xl tracking-tighter">System Audit & Integrity</h1>
+                <p className="text-[9px] text-cyan-400 font-bold uppercase tracking-widest">Master Control & Verification</p>
+            </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="md:col-span-2 lg:col-span-1 space-y-6">
+                 <div className="p-6 bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Verification Tools</h3>
+                    <div className="space-y-2">
+                        <button className="w-full text-left p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800 transition-colors flex items-center justify-between">
+                            <span className="flex items-center gap-2 text-sm"><Users2 size={16}/> Identity Audit</span> <span className="text-xs text-green-400 font-bold">PASS</span>
+                        </button>
+                        <button className="w-full text-left p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800 transition-colors flex items-center justify-between">
+                            <span className="flex items-center gap-2 text-sm"><Phone size={16}/> Phone Registry</span> <span className="text-xs text-green-400 font-bold">PASS</span>
+                        </button>
+                        <button className="w-full text-left p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800 transition-colors flex items-center justify-between">
+                            <span className="flex items-center gap-2 text-sm"><Mail size={16}/> Email Registry</span> <span className="text-xs text-green-400 font-bold">PASS</span>
+                        </button>
+                    </div>
+                </div>
+                 <div className="p-6 bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Quick Access</h3>
+                    <div className="space-y-2">
+                        <Link href="/admin/dashboard/sandbox-audit"><button className="w-full text-left p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800 transition-colors text-sm font-medium">Sandbox Audit</button></Link>
+                        <Link href="/login/registration"><button className="w-full text-left p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800 transition-colors text-sm font-medium">Master Registration</button></Link>
+                    </div>
+                </div>
+            </div>
+            <div className="md:col-span-2 lg:col-span-2 bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-white mb-4">System Ledgers</h3>
+                <div className="grid grid-cols-2 gap-4">
+                     <div className="p-4 bg-slate-900/40 rounded-xl border border-rose-500/20">
+                        <p className="text-xs text-rose-400 font-bold uppercase">Spike Points Ledger</p>
+                        <p className="text-2xl font-black text-white mt-1">14,280</p>
+                        <p className="text-xs text-slate-500">Total Transactions</p>
+                    </div>
+                     <div className="p-4 bg-slate-900/40 rounded-xl border border-purple-500/20">
+                        <p className="text-xs text-purple-400 font-bold uppercase">Signed Contracts</p>
+                        <p className="text-2xl font-black text-white mt-1">68</p>
+                        <p className="text-xs text-slate-500">Across 12 Families</p>
+                    </div>
+                    <div className="col-span-2 p-4 bg-slate-900/40 rounded-xl border border-cyan-500/20">
+                        <p className="text-xs text-cyan-400 font-bold uppercase">Firewall Protocols</p>
+                        <p className="text-lg font-bold text-white mt-1">Guardian Shield v3.1</p>
+                        <p className="text-xs text-slate-400">All child nodes protected. No integrity breaches detected.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </section>
+      
+      <AnimatePresence>
+      {isTxModalOpen && (
+         <motion.div initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+            <div className="relative bg-slate-900 p-8 rounded-2xl border border-slate-700 w-full max-w-sm text-center">
+                <button onClick={() => setIsTxModalOpen(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                    <X size={18}/>
+                </button>
+                <h3 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3"><QrCode /> Your QR Code</h3>
+                <p className="text-slate-400 mb-6 text-sm">Use this payment link to add funds to the Sovereign reserve.</p>
+                <div className="p-4 bg-white rounded-lg">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=https://buy.stripe.com/test_9B628s9Nj2su3ceayhds401" alt="Stripe Payment Link QR Code" className="w-full h-full" />
+                </div>
+                <div className="mt-2 text-indigo-400 font-mono text-xs p-2 bg-indigo-900/20 rounded">
+                    Scan to pay
+                </div>
+                <div className="mt-6 flex gap-4">
+                    <button onClick={handleCopyToClipboard} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-semibold">Copy to clipboard</button>
+                    <button onClick={handleDownloadQR} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold">Download image</button>
+                </div>
+            </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+    
+
+    
