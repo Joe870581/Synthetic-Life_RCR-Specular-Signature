@@ -1,0 +1,12 @@
+
+/**
+ * @fileoverview This is the barrel file that exports all available Genkit tools.
+ * By importing this single file, other flows can gain access to all system capabilities.
+ */
+
+// This file should NOT have 'use server'. It's a module for re-exporting.
+
+export { getCalendarEventsTool } from './calendar';
+export { queryKnowledgeVaultTool } from './knowledge';
+export { makeCallTool } from './telephony';
+export { getSystemHealthTool, setSystemThemeTool, toggleChargeTool, openAppTool } from './system';
