@@ -1,0 +1,199 @@
+'use client';
+
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { 
+    ArrowLeft,
+    Building2,
+    Users,
+    Cpu,
+    Shield,
+    Megaphone,
+    Workflow,
+    Lightbulb,
+    FileText,
+    BarChart2,
+    Video,
+    Scissors,
+    Send,
+    Calendar,
+    CheckCircle,
+    Loader,
+    PauseCircle,
+    Zap,
+    Globe,
+    Landmark,
+    Book,
+    FileQuestion,
+    DollarSign,
+    GitBranch,
+    FileSignature,
+    Presentation,
+    Store,
+    ArrowUpRight,
+    TrendingUp,
+    HardDrive,
+    Database,
+    Power
+} from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { docContents } from '@/lib/dossier';
+
+
+// --- Reusable Components ---
+const SectionHeader = ({ icon: Icon, title, className='' }) => (
+    <h2 className={`text-2xl font-bold text-indigo-400 mb-6 border-b border-indigo-700/50 pb-2 flex items-center ${className}`}>
+        <Icon className="w-5 h-5 mr-3" /> {title}
+    </h2>
+);
+
+const PhaseCard = ({ phase, title, objective, deliverable, tech, icon: Icon, status }) => {
+    const statusConfig = {
+        'COMPLETE': { color: 'border-green-500/50 bg-green-500/10 text-green-300', text: 'COMPLETE' },
+        'IN_PROGRESS': { color: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-300', text: 'IN PROGRESS' },
+        'DEFINED': { color: 'border-blue-500/50 bg-blue-500/10 text-blue-300', text: 'DEFINED' },
+    };
+    const currentStatus = statusConfig[status] || statusConfig['DEFINED'];
+
+    return (
+        <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700 h-full flex flex-col">
+            <div className="flex justify-between items-start mb-4">
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                    <Icon className="w-8 h-8 text-indigo-400" />
+                </div>
+                <div className={`px-3 py-1 rounded-full text-xs font-black tracking-widest ${currentStatus.color}`}>
+                    {currentStatus.text}
+                </div>
+            </div>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">{phase}</p>
+            <h3 className="text-2xl font-black text-white mb-2">{title}</h3>
+            <p className="text-sm text-slate-400 leading-relaxed flex-grow">{objective}</p>
+            <div className="mt-6 pt-4 border-t border-slate-700/50">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-2">Key Deliverable:</p>
+                <p className="text-sm font-medium text-indigo-300">{deliverable}</p>
+            </div>
+             <div className="mt-4 pt-4 border-t border-slate-700/50">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-2">Core Tech:</p>
+                <p className="text-sm font-mono text-slate-400">{tech}</p>
+            </div>
+        </div>
+    );
+};
+
+
+export default function V1DeploymentHandbookPage() {
+    const v1Roadmap = [
+        { 
+            phase: 'Phase 1', 
+            title: 'Guardian Firmware', 
+            objective: 'Develop and validate the MER-Guard firmware for the ESP32-S3 microcontroller. This is the core safety and policy enforcer.',
+            deliverable: 'A stable firmware binary that can reliably read Qi charge packets and disconnect power via EPT command.',
+            tech: 'C++, ESP-IDF, FreeRTOS, I2C Drivers',
+            icon: Cpu,
+            status: 'DEFINED'
+        },
+        { 
+            phase: 'Phase 2', 
+            title: 'Home Anchor App Integration', 
+            objective: 'Build the app interface for controlling the V1 Home Anchor. Users must be able to view status, see battery levels, and toggle charging permissions.',
+            deliverable: 'A "Power Dashboard" within the main app that reflects the real-time state of the charging anchor from Firestore.',
+            tech: 'React, Next.js, Firebase Firestore (Realtime)',
+            icon: Smartphone,
+            status: 'DEFINED'
+        },
+        { 
+            phase: 'Phase 3', 
+            title: 'Cloud-to-Hardware Bridge', 
+            objective: 'Create the backend service that securely relays commands from the user\'s app (via Firestore) to the ESP32 hardware in their home.',
+            deliverable: 'A Firestore listener (e.g., Cloud Function) that triggers an MQTT message or HTTPS call to the specific Home Anchor device.',
+            tech: 'Firebase Functions, MQTT (e.g., Google IoT Core) or secure REST endpoint',
+            icon: Cloud,
+            status: 'DEFINED'
+        }
+    ];
+
+    return (
+        <div className="min-h-screen bg-gray-900 text-gray-100 p-4 sm:p-8 font-sans">
+            <div className="max-w-7xl mx-auto space-y-12">
+                <header className="mb-10">
+                    <Link href="/admin/dashboard">
+                        <Button variant="outline" className="mb-6 bg-gray-800 border-gray-700 hover:bg-gray-700">
+                            <ArrowLeft className="mr-2 w-4 h-4" /> Back to Dashboard
+                        </Button>
+                    </Link>
+                    <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center">
+                        <Zap className="w-8 h-8 mr-4 text-purple-400" />
+                        V1 Home Anchor: Build Plan
+                    </h1>
+                    <p className="text-xl text-purple-300 mt-2">The executable roadmap for a V1 Governed Contact Charging product.</p>
+                </header>
+
+                <section>
+                    <SectionHeader icon={GitBranch} title="Achievable V1 Product Roadmap" />
+                     <p className="text-slate-400 max-w-3xl -mt-4 mb-8">
+                        This revised plan focuses exclusively on the V1 Home Anchor, a real, buildable product using our current technology stack. It delivers on the core promise of governed power without requiring native OS integration, making the project immediately viable.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {v1Roadmap.map(item => <PhaseCard key={item.phase} {...item} />)}
+                    </div>
+                </section>
+                
+                <div className="border-t-4 border-dashed border-purple-700/50 my-16"></div>
+                
+                <section>
+                    <SectionHeader icon={Database} title="System Architecture & Data Flow" />
+                     <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700">
+                        <div className="grid grid-cols-1 md:grid-cols-5 items-center gap-6 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                                <Users className="w-10 h-10 text-blue-400" />
+                                <h4 className="font-bold text-sm">User App (PWA)</h4>
+                                <p className="text-xs text-slate-400">Sets charging policy</p>
+                            </div>
+                            <ArrowRight className="mx-auto text-slate-600 hidden md:block" />
+                             <div className="flex flex-col items-center gap-2">
+                                <Database className="w-10 h-10 text-orange-400" />
+                                <h4 className="font-bold text-sm">Firebase Firestore</h4>
+                                <p className="text-xs text-slate-400">State document (e.g., `anchors/{'{anchorId}'}`)</p>
+                            </div>
+                            <ArrowRight className="mx-auto text-slate-600 hidden md:block" />
+                            <div className="flex flex-col items-center gap-2">
+                                <Cloud className="w-10 h-10 text-purple-400" />
+                                <h4 className="font-bold text-sm">Cloud Function / MQTT</h4>
+                                <p className="text-xs text-slate-400">Securely relays command to hardware</p>
+                            </div>
+                            <ArrowRight className="mx-auto text-slate-600 hidden md:block" />
+                             <div className="flex flex-col items-center gap-2">
+                                <HardDrive className="w-10 h-10 text-green-400" />
+                                <h4 className="font-bold text-sm">V1 Home Anchor (ESP32)</h4>
+                                <p className="text-xs text-slate-400">Receives command & enforces policy</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div className="border-t-4 border-dashed border-purple-700/50 my-16"></div>
+
+                <section>
+                    <SectionHeader icon={Book} title="Core Technical Dossiers (V1 Focus)" />
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <Link href="/docs/V1-Hardware-Bring-Up-Guide.md" className="block p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">
+                            <h4 className="font-bold text-white">V1 Hardware Bring-Up Guide</h4>
+                            <p className="text-sm text-slate-400 mt-1">Step-by-step checklist for assembling and validating the ESP32 + WLC1115 prototype.</p>
+                        </Link>
+                         <Link href="/docs/MER-Guard-Firmware-Spec.md" className="block p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">
+                            <h4 className="font-bold text-white">MER-Guard Firmware Spec</h4>
+                            <p className="text-sm text-slate-400 mt-1">The C++ skeleton for the ESP32 policy enforcer. The core logic of the system.</p>
+                        </Link>
+                         <Link href="/docs/WLC1115-Integration-Notes.md" className="block p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">
+                            <h4 className="font-bold text-white">WLC1115 Integration Notes</h4>
+                            <p className="text-sm text-slate-400 mt-1">Procurement links and physical wiring guide for the Qi2 power plane.</p>
+                        </Link>
+                    </div>
+                </section>
+
+
+            </div>
+        </div>
+    );
+}
