@@ -1,0 +1,101 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { 
+  Heart, MessageCircle, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon, Save
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Link from 'next/link';
+import { useFirebase, useUser } from '@/firebase';
+import { saveToVault } from '@/lib/mediaVault';
+import { useToast } from '@/hooks/use-toast';
+
+const HeaderNav = ({ onSave }) => (
+    <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+        <div className="flex flex-col items-center gap-2">
+            <motion.div layout className="flex items-center gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/[0.05] rounded-3xl">
+                <button onClick={onSave} className="w-14 h-14 rounded-2xl flex items-center justify-center bg-green-500/10 hover:bg-green-500/20 text-green-400 transition-colors">
+                    <Save />
+                </button>
+            </motion.div>
+        </div>
+    </div>
+);
+
+const AppContent = (props) => {
+    const { firestore, user } = useFirebase();
+    const { toast } = useToast();
+    const [content, setContent] = useState('');
+    const [image, setImage] = useState(null);
+
+    const handleSave = async () => {
+        if (!content.trim() && !image) {
+            toast({ title: "Content is empty", variant: "destructive" });
+            return;
+        }
+        if (!user) {
+             toast({ title: "Authentication error", description: "User not found.", variant: "destructive" });
+            return;
+        }
+
+        try {
+            await saveToVault({
+                type: 'post',
+                title: content.substring(0, 30) || "Untitled Post",
+                description: content,
+                creatorId: user.uid,
+                thumbnailUrl: image,
+                ageGroup: 'adult', // Assuming this is an adult context for now
+            });
+            toast({ title: "Post saved to Vault!" });
+            setContent('');
+            setImage(null);
+        } catch (error) {
+            toast({ title: "Failed to save post", description: error.message, variant: "destructive" });
+        }
+    };
+    
+    return (
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center py-10 px-4 font-sans">
+            <HeaderNav onSave={handleSave} />
+            <main className="w-full max-w-2xl mt-16">
+                <div className="bg-zinc-900 rounded-2xl border border-white/5 p-4">
+                    <textarea 
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="What's happening in your universe?"
+                        className="w-full bg-transparent p-4 focus:outline-none text-lg placeholder:text-zinc-500"
+                    />
+                    {image && <img src={image} className="rounded-xl mt-4" />}
+                    <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/10">
+                        <input type="file" accept="image/*" className="hidden" id="image-upload" onChange={(e) => {
+                            if(e.target.files && e.target.files[0]) {
+                                const reader = new FileReader();
+                                reader.onload = (re) => setImage(re.target.result as string);
+                                reader.readAsDataURL(e.target.files[0]);
+                            }
+                        }} />
+                        <label htmlFor="image-upload" className="text-zinc-400 hover:text-white cursor-pointer"><ImageIcon /></label>
+                        <button onClick={handleSave} className="px-6 py-2 bg-blue-600 rounded-full font-bold text-sm">Post</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default function App() {
+    return (
+        <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading...</div>}>
+            <FamilyDataProvider>
+                <AppContent />
+            </FamilyDataProvider>
+        </Suspense>
+    )
+}
