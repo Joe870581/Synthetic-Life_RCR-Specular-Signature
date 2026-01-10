@@ -1,0 +1,60 @@
+
+'use server';
+/**
+ * @fileoverview This file defines the Genkit tool for querying the 700-Source Knowledge Vault.
+ */
+
+import { ai } from '@/ai/genkit-client';
+import { z } from 'zod';
+import { docContents } from '@/lib/dossier';
+
+// Create a searchable knowledge base from the imported dossier
+const knowledgeBase = [
+  { keywords: ['rcr', 'stability', 'theorem', 'conservation', 'resources'], content: docContents.rcrTheorem, source: 'RCR Stability Theorem' },
+  { keywords: ['divine integration', 'conscience', 'pedlle', 'ai governance'], content: docContents.divineIntegration, source: 'Divine Integration Protocol' },
+  { keywords: ['five problem', '5 problem', 'resolution', 'unified framework'], content: docContents.fiveProblem, source: 'Five-Problem Resolution' },
+  { keywords: ['6g', 'signal symmetry', 'data lasso', 'true path'], content: docContents.sixG, source: '6G Signal Symmetry Protocol' },
+  { keywords: ['dockrtc', 'webrtc', 'signaling'], content: docContents.dockRTCReadme, source: 'DockRTC Readme' },
+  { keywords: ['home grid', 'kinesis engine', 'rcr power'], content: docContents.homeGridIntegration, source: 'Home-Grid Integration Paper' },
+  { keywords: ['orami', 'governance', 'non-profit'], content: docContents.oramiGovernance, source: 'Orami Governance Protocol' },
+  { keywords: ['architecture', 'principles', 'governance over generation', 'guard is sovereign'], content: docContents.architecturalPrinciples, source: 'Core Architectural Principles' },
+  { keywords: ['reality check', 'feasibility', 'buildable', 'real'], content: docContents.realityCheck, source: 'Reality Check & Feasibility Audit' },
+  { keywords: ['readme', 'dossier', 'master stamp'], content: docContents.readme, source: 'System Dossier README' },
+];
+
+export const queryKnowledgeVaultTool = ai.defineTool(
+  {
+    name: 'queryKnowledgeVaultTool',
+    description: 'Queries the Sovereign OS internal documentation and knowledge vault to find answers to questions about its architecture, principles, technology, and core theorems like RCR. This is the primary source of truth for the AI.',
+    inputSchema: z.object({
+      query: z.string().describe('The question to ask the knowledge vault.'),
+    }),
+    outputSchema: z.object({
+      answer: z.string().optional(),
+      source: z.string().optional(),
+    }),
+  },
+  async ({ query }) => {
+    console.log(`[queryKnowledgeVaultTool] Querying for: "${query}"`);
+    const lowerQuery = query.toLowerCase();
+
+    // Perform a keyword-based search on the knowledge base
+    for (const entry of knowledgeBase) {
+      for (const keyword of entry.keywords) {
+        if (lowerQuery.includes(keyword)) {
+          // Return a summary or the full content based on a simple heuristic
+          const summary = entry.content.split('\n').slice(0, 10).join('\n');
+          return {
+            answer: `From the document "${entry.source}", I found the following information: ${summary}`,
+            source: entry.source,
+          };
+        }
+      }
+    }
+    
+    // Default response if no specific keywords are matched
+    return {
+      answer: undefined,
+    };
+  }
+);
