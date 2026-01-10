@@ -1,0 +1,22 @@
+'use client';
+
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { HardHat } from 'lucide-react';
+import Link from 'next/link';
+
+export default function DeprecatedCardUserPage() {
+    return (
+        <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">This page has been deprecated.</h1>
+            <Card>
+                <CardHeader>
+                    <HardHat className="w-12 h-12 text-gray-400 mb-4" />
+                    <CardTitle>Functionality Moved</CardTitle>
+                    <CardDescription>
+                        The "Sovereign Identity Forge" has been integrated directly into the new <Link href="/adult-app/adults-hub" className="text-blue-500 underline">Adults Hub</Link> to consolidate all core user management functions into a single, unified interface.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        </div>
+    );
+}
