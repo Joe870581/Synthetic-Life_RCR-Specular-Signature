@@ -1,0 +1,536 @@
+'use client';
+
+import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
+import { 
+  Search, Play, Pause, Radio, Tv, Music, 
+  Globe, Zap, Filter, Mic2, ExternalLink, 
+  ChevronRight, Disc, Layers, Monitor, 
+  Smartphone, Share2, Clock, Eye, SkipBack, 
+  SkipForward, Plus, Layout, BarChart3, 
+  Wallet, Image as ImageIcon, Video, Send, 
+  ArrowUpRight, Sparkles, Loader2, ArrowLeft, Palette, X, Save, UploadCloud, Folder, Calendar, History as HistoryIcon, Star, CheckCircle2, Award, Upload
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { FamilyDataContext } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+import { useParams } from 'next/navigation';
+
+
+// --- CONSTANTS ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'nexus-universal';
+
+// Studio-specific data
+const studioApps = [
+    { id: 'art', title: 'Art Studio', href: '/shared-app/art-studio', icon: Palette },
+    { id: 'video', title: 'Video Creator', href: '/shared-app/video-creator', icon: Video },
+    { id: 'audio', title: 'Audio Studio', href: '/shared-app/audio-studio', icon: Music },
+    { id: 'live', title: 'Live Studio', href: '/shared-app/live-studio', icon: Radio },
+    { id: 'tuner', title: 'MyTuner', href: '/family-shared/my-tuner', icon: Disc }
+];
+
+
+const AppContent = () => {
+  const { familyMembers } = useContext(FamilyDataContext);
+  const params = useParams();
+  const userId = params.userId as string;
+
+  const activeUser = useMemo(() => {
+    return familyMembers.find(m => m.id === userId) || familyMembers[0];
+  }, [userId, familyMembers]);
+
+
+  const [activeTab, setActiveTab] = useState('studio');
+  const [view, setView] = useState('forge'); // browse, studio, forge
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSignal, setActiveSignal] = useState(null);
+  
+  // Forge State
+  const [songName, setSongName] = useState('');
+  const [artistName, setArtistName] = useState('');
+  const [description, setDescription] = useState('');
+  const [contentType, setContentType] = useState('song');
+  const [coverImage, setCoverImage] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showAssetSourceModal, setShowAssetSourceModal] = useState(false);
+
+  // Studio Modal State
+  const [activeStudio, setActiveStudio] = useState(null);
+
+  // New states for Saved and Published Modals
+  const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
+  const [isPublishedModalOpen, setIsPublishedModalOpen] = useState(false);
+
+
+  // Stats / Wallet
+  const [stats] = useState({ viewers: '1.2k', sov: '4,520.50', growth: '+12%' });
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (f) => {
+        setCoverImage(f.target.result as string);
+        setShowAssetSourceModal(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#020202] text-[#fafafa] font-sans selection:bg-cyan-500/50 flex flex-col overflow-hidden">
+      {/* Subtle Background Texture */}
+      <div className="absolute inset-0 z-0 opacity-[0.03] mix-blend-overlay pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+      
+      {/* TOP HUD */}
+      <header className="h-16 border-b border-white/5 bg-black/40 backdrop-blur-xl px-6 flex items-center justify-between shrink-0 z-50">
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('browse')}>
+            <div className="w-6 h-6 bg-cyan-500 rounded-sm rotate-45 flex items-center justify-center">
+              <div className="w-2 h-2 bg-black -rotate-45" />
+            </div>
+            <h1 className="text-sm font-black tracking-[0.2em] uppercase italic">Nexus.OS</h1>
+          </div>
+          
+          <nav className="hidden md:flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/5">
+            <NavBtn active={view === 'browse'} icon={Globe} label="Explore" onClick={() => setView('browse')} />
+            <NavBtn active={view === 'forge'} icon={Sparkles} label="Forge" onClick={() => setView('forge')} />
+            <NavBtn active={view === 'studio'} icon={BarChart3} label="Studio" onClick={() => setView('studio')} />
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Link href="/adult-app/adults-hub" passHref>
+              <button className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all" title="Back to Adult Hub">
+                <ArrowLeft size={20} />
+              </button>
+            </Link>
+            <Link href="/shared-app/video-posting" passHref>
+              <button className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all" title="Video Posting">
+                <Video size={20} />
+              </button>
+            </Link>
+          </div>
+
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Balance</span>
+            <span className="text-sm font-black text-cyan-400 flex items-center gap-1">
+              {stats.sov} <span className="text-[10px] opacity-70 italic font-medium">SOV</span>
+            </span>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-purple-600 border border-white/20 overflow-hidden">
+            {activeUser && activeUser.imageUrl && <Image src={activeUser.imageUrl} alt={activeUser.name} width={32} height={32} className="w-full h-full object-cover" />}
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN VIEWPORT */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+        <AnimatePresence mode="wait">
+          {view === 'browse' && (
+            <motion.div 
+              key="browse"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className="p-8 max-w-7xl mx-auto w-full"
+            >
+              <div className="flex items-center justify-between mb-10">
+                <h2 className="text-4xl font-black italic tracking-tighter uppercase">Universal Spectrum</h2>
+                <div className="flex gap-2">
+                  {['Audio', 'Cinema', 'Live'].map(t => (
+                    <button key={t} className="px-4 py-1.5 rounded-full border border-white/10 text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {MOCK_DATA.map(item => (
+                   <div 
+                    key={item.id}
+                    onClick={() => { setActiveSignal(item); setIsPlaying(true); }}
+                    className="group bg-zinc-900/40 border border-white/5 rounded-2xl p-4 hover:border-cyan-500/40 transition-all cursor-pointer relative overflow-hidden"
+                   >
+                     <div className="h-40 bg-zinc-800 rounded-xl mb-4 overflow-hidden relative">
+                        <img src={item.img} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" alt="" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+                        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                          <span className="text-[10px] font-black bg-cyan-500 text-black px-2 py-0.5 rounded uppercase">{item.type}</span>
+                        </div>
+                     </div>
+                     <h3 className="font-black uppercase tracking-tight text-lg italic">{item.title}</h3>
+                     <p className="text-xs text-zinc-500 font-bold mb-4">{item.author}</p>
+                     <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-zinc-400 uppercase">{item.duration}</span>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <div className="w-1 h-3 bg-cyan-400 animate-pulse" />
+                           <div className="w-1 h-3 bg-cyan-400 animate-pulse delay-75" />
+                           <div className="w-1 h-3 bg-cyan-400 animate-pulse delay-150" />
+                        </div>
+                     </div>
+                   </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {view === 'forge' && (
+            <motion.div 
+              key="forge"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="p-8 max-w-4xl mx-auto w-full"
+            >
+              <div className="text-center mb-12">
+                <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-2">The Creative Forge</h2>
+                <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Manifest your signal identity</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                <div className="space-y-6">
+                  {/* Metadata Form */}
+                  <div className="space-y-3">
+                    <input type="text" placeholder="Song/Video Title" value={songName} onChange={e => setSongName(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-xl p-3 text-lg font-bold italic" />
+                    <input type="text" placeholder="Artist Name" value={artistName} onChange={e => setArtistName(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-xl p-3 text-sm" />
+                    <textarea placeholder="Description..." value={description} onChange={e => setDescription(e.target.value)} className="w-full h-24 bg-zinc-900 border border-white/10 rounded-xl p-3 text-sm resize-none" />
+                    <select value={contentType} onChange={e => setContentType(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-xl p-3 text-sm">
+                      <option value="song">Song</option>
+                      <option value="video">Video</option>
+                      <option value="broadcast">Broadcast</option>
+                      <option value="live-recording">Live Recording</option>
+                    </select>
+                  </div>
+                  
+                  {/* Media Link */}
+                  <div className="p-4 bg-white/5 border border-dashed border-white/10 rounded-xl flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-400">Link media from Studio...</span>
+                    <button className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-[10px] font-black uppercase tracking-widest">Select File</button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button className="flex-1 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-2xl text-[10px] font-black uppercase tracking-widest">Save to Sandbox</button>
+                    <button className="flex-1 py-3 bg-cyan-500 text-black font-black uppercase tracking-widest rounded-2xl hover:bg-cyan-400">Publish</button>
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setShowAssetSourceModal(true)}
+                  className="relative aspect-[3/4] bg-zinc-900 rounded-3xl border-2 border-dashed border-white/10 overflow-hidden flex items-center justify-center group shadow-2xl cursor-pointer hover:border-cyan-500/50"
+                >
+                  {coverImage ? (
+                    <img src={coverImage} className="w-full h-full object-cover" alt="Cover art preview" />
+                  ) : (
+                    <div className="text-center space-y-4 opacity-30 group-hover:opacity-60 transition-opacity">
+                      <ImageIcon size={64} className="mx-auto" />
+                      <p className="font-black uppercase tracking-tighter text-sm italic">SELECT COVER ART</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {view === 'studio' && (
+            <motion.div 
+              key="studio"
+              initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+              className="p-8 max-w-7xl mx-auto w-full space-y-12"
+            >
+               <div className="text-center">
+                  <h2 className="text-5xl font-black italic tracking-tighter uppercase mb-2">Creation Suite</h2>
+                  <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Select a studio to begin your next project</p>
+               </div>
+               
+               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+                 {studioApps.map(app => (
+                   <div key={app.id} onClick={() => setActiveStudio(app)} className="group aspect-square bg-zinc-900/50 border border-white/5 rounded-3xl flex flex-col items-center justify-center gap-4 hover:bg-zinc-900 hover:border-cyan-500/50 cursor-pointer transition-all hover:-translate-y-2">
+                     <div className="p-4 rounded-full bg-black/30 border border-white/5 text-cyan-400 group-hover:scale-110 transition-transform">
+                       <app.icon size={32} />
+                     </div>
+                     <span className="text-xs font-black text-zinc-400 uppercase tracking-widest">{app.title}</span>
+                   </div>
+                 ))}
+                 <AnalyticsCard />
+               </div>
+
+               <div className="flex flex-col md:flex-row gap-6">
+                 <button onClick={() => setIsSavedModalOpen(true)} className="flex-1 p-8 bg-zinc-800/40 border border-white/5 rounded-3xl flex items-center gap-6 hover:bg-zinc-800 transition-all">
+                   <Folder size={32} className="text-emerald-400" />
+                   <div>
+                      <h4 className="text-lg font-black uppercase tracking-tighter text-left">Saved Sandbox Content</h4>
+                      <p className="text-xs text-zinc-500 font-bold text-left">Access your drafts and unfinished projects</p>
+                   </div>
+                 </button>
+                 <button onClick={() => setIsPublishedModalOpen(true)} className="flex-1 p-8 bg-zinc-800/40 border border-white/5 rounded-3xl flex items-center gap-6 hover:bg-zinc-800 transition-all">
+                   <UploadCloud size={32} className="text-purple-400" />
+                   <div>
+                      <h4 className="text-lg font-black uppercase tracking-tighter text-left">Publish Live Content</h4>
+                      <p className="text-xs text-zinc-500 font-bold text-left">Finalize and release your content to the public</p>
+                   </div>
+                 </button>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+      
+      {/* Studio Modal */}
+      <AnimatePresence>
+        {activeStudio && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => setActiveStudio(null)} />
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full h-[90vh] max-w-6xl bg-black border border-cyan-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900/50">
+                        <div className="flex items-center gap-3">
+                           <activeStudio.icon size={18} className="text-cyan-400" />
+                           <span className="text-sm font-bold text-white">{activeStudio.title}</span>
+                        </div>
+                        <button onClick={() => setActiveStudio(null)} className="p-1 rounded-full text-zinc-500 hover:bg-white/10 hover:text-white"><X size={16} /></button>
+                    </div>
+                    <iframe src={activeStudio.href} className="w-full h-full border-none" title={activeStudio.title} />
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
+      {/* Asset Source Modal */}
+      <AnimatePresence>
+        {showAssetSourceModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-lg">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-lg bg-zinc-900 border border-white/10 rounded-3xl p-8 space-y-6">
+              <h3 className="text-xl font-black text-center">Select Asset Source</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="p-8 bg-white/5 rounded-2xl flex flex-col items-center justify-center gap-3 text-center cursor-pointer hover:bg-white/10 border border-white/10">
+                  <Upload size={32} />
+                  <span className="text-xs font-bold uppercase">Upload New File</span>
+                  <input type="file" onChange={handleFileUpload} className="hidden" />
+                </label>
+                 <button className="p-8 bg-white/5 rounded-2xl flex flex-col items-center justify-center gap-3 text-center cursor-pointer hover:bg-white/10 border border-white/10">
+                  <Folder size={32} />
+                  <span className="text-xs font-bold uppercase">From Media Vault</span>
+                </button>
+              </div>
+              <button onClick={() => setShowAssetSourceModal(false)} className="w-full py-3 bg-zinc-700/50 rounded-lg text-sm font-bold mt-4 hover:bg-zinc-700">Cancel</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Saved/Published Modals */}
+      <ContentModal 
+        isOpen={isSavedModalOpen} 
+        onClose={() => setIsSavedModalOpen(false)} 
+        title="Saved Sandbox"
+        icon={Folder}
+      />
+      <ContentModal 
+        isOpen={isPublishedModalOpen} 
+        onClose={() => setIsPublishedModalOpen(false)} 
+        title="Published Content"
+        icon={UploadCloud}
+        published
+      />
+
+      {/* FOOTER TRANSPORT & WAVEFORM */}
+      <footer className="h-28 bg-[#050505] border-t border-white/10 shrink-0 relative z-[60] flex flex-col justify-end">
+        {/* WAVEFORM UX */}
+        <div className="absolute top-0 left-0 right-0 h-12 flex items-center justify-center gap-[2px] pointer-events-none opacity-40">
+           {Array.from({ length: 120 }).map((_, i) => (
+             <WaveBar key={i} active={isPlaying} />
+           ))}
+        </div>
+
+        <div className="relative px-8 pb-4 flex items-center justify-between">
+          <div className="w-1/3 flex items-center gap-4">
+            {activeSignal ? (
+              <>
+                <div className="w-12 h-12 bg-zinc-900 rounded border border-white/10 overflow-hidden relative">
+                   <img src={activeSignal.img} className="w-full h-full object-cover" alt="" />
+                </div>
+                <div>
+                  <h5 className="font-black text-xs uppercase italic tracking-tighter">{activeSignal.title}</h5>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase">{activeSignal.author}</p>
+                </div>
+              </>
+            ) : (
+              <p className="text-[10px] text-zinc-700 font-black uppercase italic">No Active Signal</p>
+            )}
+          </div>
+
+          <div className="w-1/3 flex flex-col items-center gap-1">
+            <div className="flex items-center gap-8">
+              <TransportBtn icon={SkipBack} />
+              <button 
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+              >
+                {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
+              </button>
+              <TransportBtn icon={ChevronRight} />
+            </div>
+          </div>
+
+          <div className="w-1/3 flex justify-end items-center gap-6">
+             <div className="flex items-center gap-4">
+               <span className="text-[9px] font-black text-zinc-600 uppercase">3:42 / 5:12</span>
+               <div className="w-32 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                  <motion.div animate={{ width: isPlaying ? '60%' : '40%' }} className="h-full bg-cyan-500" />
+               </div>
+             </div>
+             <button className="text-zinc-500 hover:text-white"><Layers size={18} /></button>
+          </div>
+        </div>
+      </footer>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+      `}</style>
+    </div>
+  );
+};
+
+
+// --- SUBCOMPONENTS ---
+
+const AnalyticsCard = () => {
+    const [isFlipped, setIsFlipped] = useState(false);
+  
+    return (
+      <div 
+        className="group aspect-square relative [perspective:1000px]"
+        onMouseEnter={() => setIsFlipped(true)}
+        onMouseLeave={() => setIsFlipped(false)}
+      >
+        <motion.div
+          className="relative w-full h-full transition-transform duration-700 [transform-style:preserve-3d]"
+          animate={{ rotateY: isFlipped ? 180 : 0 }}
+        >
+          {/* Front */}
+          <div className="absolute inset-0 bg-zinc-900/50 border border-white/5 rounded-3xl flex flex-col items-center justify-center gap-4 transition-all [backface-visibility:hidden]">
+            <div className="p-4 rounded-full bg-black/30 border border-white/5 text-yellow-400">
+              <Star size={32} />
+            </div>
+            <span className="text-xs font-black text-zinc-400 uppercase tracking-widest">Analytics</span>
+          </div>
+  
+          {/* Back */}
+          <div className="absolute inset-0 bg-yellow-900/10 border border-yellow-500/20 rounded-3xl p-4 flex flex-col [transform:rotateY(180deg)] [backface-visibility:hidden]">
+            <h4 className="text-[10px] font-black text-yellow-400 uppercase tracking-widest mb-2">Creator Metrics</h4>
+            <div className="space-y-3 text-xs">
+                <div className="flex justify-between items-center"><span className="text-zinc-400">Total SOV$ Earned:</span><span className="font-bold text-white">1,240.50</span></div>
+                <div className="h-px bg-yellow-500/20" />
+                <p className="font-bold text-white">Top Content:</p>
+                <div className="flex justify-between"><span className="text-zinc-400">"Solar Winds"</span><span className="text-yellow-400 font-mono">+450 SOV$</span></div>
+                <div className="flex justify-between"><span className="text-zinc-400">"Live Set #3"</span><span className="text-yellow-400 font-mono">+280 SOV$</span></div>
+            </div>
+            <div className="mt-auto text-center">
+                <p className="text-[9px] text-zinc-500 font-bold">@creator.os | <span className="text-emerald-400">LIVE</span></p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+};
+
+const ContentModal = ({ isOpen, onClose, title, icon: Icon, published = false }) => {
+  const [activeTab, setActiveTab] = useState('art');
+
+  if (!isOpen) return null;
+
+  const renderContent = () => {
+    if(activeTab === 'live') {
+      return (
+        <div className="space-y-4">
+          <h4 className="font-bold text-lg mb-4">{published ? "Past Broadcasts" : "Scheduled Live Events"}</h4>
+          <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700">
+             <p className="font-semibold text-white">August 28, 2024 - Live Q&A</p>
+             <p className="text-sm text-zinc-400">Duration: 45:12</p>
+             <div className="mt-2 flex gap-2">
+                <button className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg">Watch Replay</button>
+                <button className="px-3 py-1 bg-purple-600 text-white text-xs rounded-lg">Get Audio</button>
+             </div>
+          </div>
+          <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 opacity-60">
+             <p className="font-semibold text-white">September 05, 2024 - Studio Session</p>
+             <p className="text-sm text-zinc-400">Scheduled for 8:00 PM EST</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="group aspect-square bg-zinc-800 rounded-xl flex flex-col items-center justify-center p-2 relative">
+            <p className="font-bold text-xs text-zinc-400">{activeTab.slice(0, 1).toUpperCase() + activeTab.slice(1)} Project {i+1}</p>
+            <p className="text-[10px] text-zinc-500">{published ? "Published" : "Draft"}</p>
+            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-black ${published ? 'bg-emerald-500' : 'bg-yellow-500'}`} />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={onClose} />
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full h-[90vh] max-w-4xl bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-2xl font-black text-white flex items-center gap-3"><Icon size={24} className="text-purple-400"/> {title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full bg-white/5 hover:bg-white/10"><X size={20} /></button>
+        </div>
+        <div className="flex gap-2 mb-4 p-1 bg-black/40 rounded-xl border border-white/10 self-start">
+          {studioApps.map(app => (
+             <button key={app.id} onClick={() => setActiveTab(app.id)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeTab === app.id ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/10'}`}>{app.title}</button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+          {renderContent()}
+        </div>
+      </motion.div>
+    </div>
+  )
+};
+
+
+const NavBtn = ({ active, icon: Icon, label, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${active ? 'bg-white text-black shadow-lg shadow-white/5' : 'text-zinc-500 hover:text-white'}`}
+  >
+    <Icon size={14} /> {label}
+  </button>
+);
+
+const TransportBtn = ({ icon: Icon, onClick }) => (
+  <button onClick={onClick} className="text-zinc-500 hover:text-white transition-colors active:scale-90">
+    <Icon size={20} fill="none" />
+  </button>
+);
+
+const WaveBar = ({ active }) => {
+  const height = active ? Math.random() * 30 + 5 : 4;
+  return (
+    <motion.div 
+      animate={{ height: `${height}px` }}
+      transition={{ duration: 0.15, repeat: Infinity, repeatType: 'reverse' }}
+      className={`w-1 rounded-full ${active ? 'bg-cyan-500/60' : 'bg-zinc-800'}`}
+    />
+  );
+};
+
+// --- MOCK DATA ---
+const MOCK_DATA = [
+  { id: 1, type: 'audio', title: 'Midnight Echoes', author: '@SynthWizard', duration: '4:12', img: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=400&q=80' },
+  { id: 2, type: 'cinema', title: 'Neo-Tokyo 2099', author: 'Visual Studio X', duration: '1:45:20', img: 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?auto=format&fit=crop&w=400&q=80' },
+  { id: 3, type: 'live', title: 'Global News Feed', author: 'Reuters Universal', duration: 'LIVE', img: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=400&q=80' },
+  { id: 4, type: 'audio', title: 'Hyper Drive', author: 'Nexus Community', duration: '3:50', img: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=400&q=80' },
+  { id: 5, type: 'cinema', title: 'The Silent Void', author: 'Astral Media', duration: '12:45', img: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=400&q=80' },
+  { id: 6, type: 'audio', title: 'Vapor Memories', author: 'RetroFlow', duration: '5:02', img: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=400&q=80' },
+];
+
+export default AppContent;
