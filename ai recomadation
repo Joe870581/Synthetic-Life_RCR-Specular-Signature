@@ -1,0 +1,63 @@
+
+'use server';
+/**
+ * @fileOverview An AI agent that provides personalized recommendations for family activities and events based on past history and preferences.
+ *
+ * - provideAIRecommendations - A function that generates AI-powered recommendations for family activities.
+ * - AIRecommendationInput - The input type for the provideAIRecommendations function.
+ * - AIRecommendationOutput - The return type for the provideAIRecommendations function.
+ */
+
+import {ai} from '@/ai/genkit-client';
+import {z} from 'genkit';
+
+const AIRecommendationInputSchema = z.object({
+  familyHistory: z.string().describe('A summary of the family past activities and events, including preferences and feedback.'),
+  preferences: z.string().describe('Specific preferences of family members, including age, interests, and any constraints.'),
+});
+export type AIRecommendationInput = z.infer<typeof AIRecommendationInputSchema>;
+
+const AIRecommendationOutputSchema = z.object({
+  recommendations: z.array(
+    z.object({
+      activity: z.string().describe('Name of the activity.'),
+      description: z.string().describe('A brief description of the activity.'),
+      suitabilityScore: z.number().describe('A score indicating how suitable the activity is for the family (0-1).'),
+      estimatedCost: z.string().describe('Estimated cost of the activity.'),
+      location: z.string().describe('The place that this activity is located at.'),
+    })
+  ).describe('A list of recommended activities and events for the family.'),
+});
+export type AIRecommendationOutput = z.infer<typeof AIRecommendationOutputSchema>;
+
+export async function provideAIRecommendations(input: AIRecommendationInput): Promise<AIRecommendationOutput> {
+  return provideAIRecommendationsFlow(input);
+}
+
+const prompt = ai.definePrompt({
+  name: 'aiRecommendationPrompt',
+  input: {schema: AIRecommendationInputSchema},
+  output: {schema: AIRecommendationOutputSchema},
+  prompt: `You are an AI assistant designed to provide personalized recommendations for family activities and events.
+
+  Based on the family's past history, preferences, and any constraints, suggest activities that the family might enjoy together.
+  Provide a brief description of each activity and estimate the cost of each activity.
+
+  Family History: {{{familyHistory}}}
+  Preferences: {{{preferences}}}
+
+  Please provide your recommendations in a structured format.
+  `,
+});
+
+const provideAIRecommendationsFlow = ai.defineFlow(
+  {
+    name: 'provideAIRecommendationsFlow',
+    inputSchema: AIRecommendationInputSchema,
+    outputSchema: AIRecommendationOutputSchema,
+  },
+  async input => {
+    const {output} = await prompt(input);
+    return output!;
+  }
+);
