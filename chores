@@ -1,0 +1,127 @@
+'use client';
+import { useState } from 'react';
+import { useRole } from '@/contexts/role-context';
+import { chores as initialChores, users } from '@/lib/mock-data';
+import type { Chore, User } from '@/lib/mock-data';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { CheckCircle2, PlusCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const statusStyles: Record<string, string> = {
+  todo: 'bg-gray-200 text-gray-800',
+  inprogress: 'bg-blue-200 text-blue-800',
+  done: 'bg-green-200 text-green-800',
+};
+
+export default function ChoresPage() {
+  const { role } = useRole();
+  const [chores, setChores] = useState<Chore[]>(initialChores);
+
+  const handleCompleteChore = (choreId: string) => {
+    setChores(chores.map(c => c.id === choreId ? { ...c, status: 'done' } : c));
+  };
+  
+  const findUser = (userId: string) => users.find(u => u.id === userId);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold font-headline">Family CRM</h1>
+        <p className="text-muted-foreground">
+          Manage chores, points, and family responsibilities.
+        </p>
+      </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Chore Board</CardTitle>
+            <CardDescription>
+              Here's the list of current family chores.
+            </CardDescription>
+          </div>
+          {role === 'adult' && (
+            <Button size="sm">
+              <PlusCircle className="mr-2 size-4" />
+              Add Chore
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Chore</TableHead>
+                <TableHead>Assigned To</TableHead>
+                <TableHead>Points</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {chores.map(chore => {
+                const user = findUser(chore.assignedTo);
+                return (
+                  <TableRow key={chore.id}>
+                    <TableCell className="font-medium">{chore.title}</TableCell>
+                    <TableCell>
+                        <div className="flex items-center gap-2">
+                           <Avatar className="w-8 h-8">
+                                <AvatarImage src={user?.avatar} />
+                                <AvatarFallback>{user?.name.charAt(0)}</AvatarFallback>
+                           </Avatar>
+                           <span>{user?.name}</span>
+                        </div>
+                    </TableCell>
+                    <TableCell>{chore.points > 0 ? chore.points : '-'}</TableCell>
+                    <TableCell>
+                      <Badge className={cn('capitalize', statusStyles[chore.status])} variant="outline">
+                        {chore.status === 'inprogress' ? 'In Progress' : chore.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {role === 'adult' && chore.status !== 'done' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCompleteChore(chore.id)}
+                        >
+                          <CheckCircle2 className="mr-2 size-4" />
+                          Mark as Done
+                        </Button>
+                      )}
+                       {role === 'kid' && chore.status === 'inprogress' && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleCompleteChore(chore.id)}
+                        >
+                          I'm Done!
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
