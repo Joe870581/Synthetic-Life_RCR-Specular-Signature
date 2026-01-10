@@ -1,0 +1,296 @@
+
+'use client';
+
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  ChevronLeft,
+  Users,
+  Home,
+  Zap,
+  Map,
+  Shield,
+  Wifi,
+  Battery,
+  Server,
+  AlertTriangle,
+  CheckCircle,
+  RotateCw,
+  Activity,
+  GitCommit,
+  HardDrive,
+  Database,
+  Code,
+  LayoutGrid,
+  Phone,
+  GitBranch,
+  Cloud,
+  Binary,
+  Satellite,
+  XCircle,
+  CheckCircle2,
+  ShieldCheck,
+} from 'lucide-react';
+import { useFamilyPebbleStore, type Device } from '@/stores/familyPebbleStore';
+import { motion, AnimatePresence } from 'framer-motion';
+import { formatDistanceToNow } from 'date-fns';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+/* --- Aura & visual container for central dashboard --- */
+const AuraContainer = ({ children, hubColor = 'cyan' }) => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    {[...Array(3)].map((_, i) => (
+      <motion.div
+        key={i}
+        animate={{ rotate: 360 }}
+        transition={{ duration: 40 + i * 15, repeat: Infinity, ease: 'linear' }}
+        className={`absolute w-[calc(100%+40px)] h-[calc(100%+40px)] border-2 border-${hubColor}-500/10 rounded-[3rem]`}
+        style={{
+          width: `calc(100% + ${40 + i * 40}px)`,
+          height: `calc(100% + ${40 + i * 40}px)`,
+          opacity: 0.3 - i * 0.05
+        }}
+      />
+    ))}
+
+    {[...Array(8)].map((_, i) => (
+      <motion.div
+        key={`spike-${i}`}
+        className="absolute w-px h-full bg-gradient-to-b from-transparent via-cyan-500/40 to-transparent"
+        style={{ transform: `rotate(${i * 45}deg) scaleY(1.2)`, transformOrigin: 'center' }}
+        animate={{ opacity: [0, 0.5, 0] }}
+        transition={{ duration: 3, repeat: Infinity, delay: i * 0.3 }}
+      />
+    ))}
+
+    <div className="relative z-10 w-full h-full rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl shadow-black">
+      {children}
+    </div>
+  </div>
+);
+
+/* --- Device Status Card --- */
+const DeviceCard = ({ device }: { device: Device }) => {
+  const statusConfig = {
+    online: { icon: Wifi, color: 'text-green-400', label: 'Online' },
+    offline: { icon: AlertTriangle, color: 'text-red-400', label: 'Offline' },
+    unstable: { icon: RotateCw, color: 'text-yellow-400', label: 'Unstable' },
+  };
+  const current = statusConfig[device.status] || statusConfig.offline;
+
+  return (
+    <div className="flex items-center justify-between p-2 bg-black/30 rounded-lg text-xs">
+      <span className="font-mono text-slate-300 truncate">{device.name}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">
+          Ping: {formatDistanceToNow(device.lastPing, { addSuffix: true })}
+        </span>
+        <div className={cn("flex items-center gap-1 font-bold", current.color)}>
+          <current.icon size={12} />
+          {current.label}
+        </div>
+        <Battery size={12} className="text-slate-400" />
+      </div>
+    </div>
+  );
+};
+
+
+/* --- App Status Card --- */
+const AppCard = ({ app }: { app: { name: string; status: 'online' | 'offline' } }) => (
+  <div className={`flex items-center justify-between px-2 py-1 rounded-lg text-xs font-mono bg-black/20 border ${app.status === 'online' ? 'border-green-500/30' : 'border-red-500/30'}`}>
+    <span className="truncate text-slate-400">{app.name}</span>
+    <div className={`flex items-center gap-1.5 font-bold text-xs ${app.status === 'online' ? 'text-green-400' : 'text-red-400'}`}>
+      <div className={`w-1.5 h-1.5 rounded-full ${app.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+      {app.status}
+    </div>
+  </div>
+);
+
+/* --- Guardian Protocols Panel --- */
+const GuardianProtocols = () => {
+    const protocols = [
+        { name: 'TruePath Routing', icon: GitBranch, status: 'NOMINAL', color: 'text-green-400' },
+        { name: 'DockRTC Signaling', icon: Phone, status: 'ACTIVE', color: 'text-green-400' },
+        { name: 'SOV_Cloud Sync', icon: Cloud, status: 'SYNCHRONIZED', color: 'text-green-400' },
+        { name: 'Sentinel Audit', icon: ShieldCheck, status: 'LIVE', color: 'text-cyan-400' },
+        { name: 'Master Console', icon: Binary, status: 'OPERATIONAL', color: 'text-green-400' },
+        { name: '6G Anchor', icon: Satellite, status: 'LOCKED', color: 'text-green-400' },
+    ];
+    return (
+        <div className="space-y-2">
+            {protocols.map(p => (
+                 <div key={p.name} className="flex items-center justify-between p-2 bg-black/30 rounded-lg text-xs">
+                    <div className="flex items-center gap-2 font-mono text-slate-300"><p.icon size={12} /> {p.name}</div>
+                    <span className={`font-bold ${p.color}`}>{p.status}</span>
+                 </div>
+            ))}
+        </div>
+    );
+};
+
+
+/* --- Audit Log Panel --- */
+const AuditLog = ({ events }) => (
+  <div className="h-full flex flex-col">
+    <h3 className="text-sm font-bold text-slate-400 mb-2 px-2">Live System Log</h3>
+    <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-2">
+      {events.map(event => (
+        <p key={event.id} className="font-mono text-[10px] text-slate-500 leading-relaxed">
+          <span className="text-indigo-400/50 mr-2">{event.timestamp.toLocaleTimeString()}</span>
+          {event.description}
+        </p>
+      ))}
+    </div>
+  </div>
+);
+
+/* --- Family Pebble Audit Dashboard --- */
+const FamilyPebbleAuditContent = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const userId = searchParams.get('userId') || 'p1';
+  const sessionId = searchParams.get('sessionId') || 's1';
+
+  const {
+    familySpikePoints,
+    memoryEvents,
+    devices,
+    apps,
+    simulateDeviceActivity
+  } = useFamilyPebbleStore();
+
+  const [activeHub, setActiveHub] = useState('dashboard');
+  const [hubUrl, setHubUrl] = useState(`/Family-Shared/clock-setting?userId=${userId}&sessionId=${sessionId}`);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
+  const hubs = [
+    { id: 'dashboard', title: 'Dashboard', url: `/Family-Shared/clock-setting?userId=${userId}&sessionId=${sessionId}`, icon: Home, color: 'purple' },
+    { id: 'guardian', title: 'Guardian Clock', url: `/Family-Shared/clock-setting?userId=${userId}&sessionId=${sessionId}`, icon: Shield, color: 'cyan' },
+    { id: 'adult', title: 'Adult Hub', url: `/adult-app/adults-hub?userId=${userId}&sessionId=${sessionId}`, icon: Users, color: 'orange' },
+    { id: 'kids', title: 'Kids Pebble', url: `/kids-app/my-kids-pebble/${userId}?sessionId=${sessionId}`, icon: Zap, color: 'yellow' },
+    { id: 'map', title: 'Family Map', url: `/shared-app/family-anchor-map?userId=${userId}&sessionId=${sessionId}`, icon: Map, color: 'green' },
+  ];
+
+  const switchHub = (hub) => {
+    setActiveHub(hub.id);
+    setHubUrl(hub.url);
+    setShowConfirmation(true);
+    setTimeout(() => setShowConfirmation(false), 2000);
+  };
+
+  useEffect(() => {
+    const interval = setInterval(simulateDeviceActivity, 5000);
+    return () => clearInterval(interval);
+  }, [simulateDeviceActivity]);
+
+  const activeHubInfo = hubs.find(h => h.id === activeHub);
+
+  return (
+    <div className="min-h-screen bg-black text-white font-sans flex p-4 relative">
+
+      {/* Sidebar with Device Status + Audit Log */}
+      <AnimatePresence>
+        <motion.aside
+          initial={{ x: '-100%', opacity: 0 }}
+          animate={{ x: '0%', opacity: 1 }}
+          exit={{ x: '-100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+          className="w-96 flex-shrink-0 bg-black/40 backdrop-blur-2xl border border-white/5 rounded-3xl p-4 flex flex-col gap-4"
+        >
+          <div className="space-y-4">
+            <h2 className="text-lg font-black text-slate-300">Device Network</h2>
+            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+              {devices.map(device => <DeviceCard key={device.id} device={device} />)}
+            </div>
+          </div>
+           <div className="space-y-4 border-t border-white/10 pt-4">
+               <h2 className="text-lg font-black text-slate-300">App Matrix ({apps.length})</h2>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar">
+                  {apps.map(app => <AppCard key={app.name} app={app} />)}
+              </div>
+          </div>
+           <div className="border-t border-white/10 pt-4">
+              <h3 className="text-sm font-bold text-slate-400 mb-2 px-2">Guardian Protocols</h3>
+              <GuardianProtocols />
+          </div>
+          <div className="flex-1 border-t border-white/10 pt-4 mt-4 overflow-hidden">
+            <AuditLog events={memoryEvents} />
+          </div>
+        </motion.aside>
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col relative pl-4">
+        <div className="flex justify-between items-center mb-4 flex-shrink-0 z-20">
+          <button
+            onClick={() => router.push(`/login/registration/admin/dashboard/audit-login/audit-journal?sessionId=${sessionId}`)}
+            className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-bold p-2 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" /> Back to Registry
+          </button>
+          <div className="text-right">
+            <p className="text-sm text-slate-400">Total Family Points</p>
+            <p className="text-2xl font-bold text-yellow-400">{familySpikePoints.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <AuraContainer hubColor={activeHubInfo?.color}>
+          <iframe
+            src={hubUrl}
+            className="w-full h-full"
+            frameBorder="0"
+            title={`Family Pebble Hub - ${activeHubInfo?.title}`}
+            key={hubUrl}
+          />
+        </AuraContainer>
+        
+        {/* Hub Switcher */}
+        <div className="flex justify-center py-4">
+          <div className="flex items-center gap-4 bg-black/40 backdrop-blur-md p-2 rounded-full border border-white/5">
+            {hubs.map(hub => (
+              <button
+                key={hub.id}
+                onClick={() => switchHub(hub)}
+                className={`p-3 rounded-xl border-2 transition-all ${activeHub === hub.id ? `border-${hub.color}-500/80 bg-${hub.color}-500/10` : 'border-transparent hover:bg-white/10'}`}
+              >
+                <hub.icon className={`w-5 h-5 text-${hub.color}-400`} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {showConfirmation && activeHubInfo && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full border-2 bg-black/50 backdrop-blur-md border-${activeHubInfo.color}-500/50 shadow-lg shadow-black/50`}
+            >
+              <div className="flex items-center gap-3">
+                <activeHubInfo.icon className={`w-5 h-5 text-${activeHubInfo.color}-400`} />
+                <span className="font-bold text-sm text-white">Connected to {activeHubInfo.title}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+      `}</style>
+    </div>
+  );
+};
+
+/* --- Suspense wrapper --- */
+export default function FamilyPebbleAuditPage() {
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading Family Pebble Audit...</div>}>
+      <FamilyPebbleAuditContent />
+    </Suspense>
+  );
+}
