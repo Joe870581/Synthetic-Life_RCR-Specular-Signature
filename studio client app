@@ -1,0 +1,232 @@
+
+'use client';
+
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Baby, Users, User, ToyBrick, Briefcase, PiggyBank, HeartPulse, MessagesSquare, FolderKanban, Video, Music, Radio, Palette, Anchor, Car, Map, FileText, Sheet, Calculator, Camera, BrainCircuit, Calendar } from 'lucide-react';
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
+const appSections = [
+    {
+        title: 'Kids App Blueprints',
+        icon: <Baby className="size-8 text-primary" />,
+        description: 'Templates for applications designed for children.',
+        apps: [
+            {
+                href: '/kids/kids-app/socialpost-view',
+                icon: <ToyBrick className="size-6 text-muted-foreground" />,
+                title: 'Social App',
+                description: 'The isolated social zone for kids.'
+            },
+            {
+                href: '/kids/kids-app/kids-video-music',
+                icon: <Music className="size-6 text-muted-foreground" />,
+                title: 'Kids\' Music & Video',
+                description: 'Filtered long-form video and music.'
+            },
+            {
+                href: '#',
+                icon: <FolderKanban className="size-6 text-muted-foreground" />,
+                title: 'School Hub',
+                description: 'Tools for homework and learning.'
+            },
+            {
+                href: '#',
+                icon: <MessagesSquare className="size-6 text-muted-foreground" />,
+                title: 'Creative Studio',
+                description: 'Drawing, music, and story-telling apps.'
+            }
+        ]
+    },
+    {
+        title: 'Family Shared App Blueprints',
+        icon: <Users className="size-8 text-primary" />,
+        description: 'Templates for applications shared by the whole family.',
+        apps: [
+            {
+                href: '/shared-app/family-pebbles',
+                icon: <BrainCircuit className="size-6 text-muted-foreground" />,
+                title: 'Family Pebble',
+                description: 'The core AI node for each family member.'
+            },
+            {
+                href: '/shared-app/family-anchor-map',
+                icon: <Anchor className="size-6 text-muted-foreground" />,
+                title: 'Family Anchor Map',
+                description: 'Live map of all connected family devices.'
+            },
+            {
+                href: '/shared-app/travinling-planing',
+                icon: <Map className="size-6 text-muted-foreground" />,
+                title: 'Traveling Planning',
+                description: 'Plan your family trips and adventures.'
+            },
+             {
+                href: '/shared-app/word-processor',
+                icon: <FileText className="size-6 text-muted-foreground" />,
+                title: 'Word Processor',
+                description: 'Shared document editor for the family.'
+            },
+            {
+                href: '/shared-app/spreadsheet',
+                icon: <Sheet className="size-6 text-muted-foreground" />,
+                title: 'Spreadsheet',
+                description: 'Family budgets, lists, and more.'
+            },
+            {
+                href: '/shared-app/calculator',
+                icon: <Calculator className="size-6 text-muted-foreground" />,
+                title: 'Calculator',
+                description: 'Quick maths for the family.'
+            },
+             {
+                href: '/shared-app/social-posting',
+                icon: <MessagesSquare className="size-6 text-muted-foreground" />,
+                title: 'Social Posting',
+                description: 'Create and share posts with your family.'
+            },
+            {
+                href: '/shared-app/ar-camera',
+                icon: <Camera className="size-6 text-muted-foreground" />,
+                title: 'AR Camera',
+                description: 'Augmented reality filters and effects.'
+            },
+            {
+                href: '/shared-app/video-posting',
+                icon: <Video className="size-6 text-muted-foreground" />,
+                title: 'Video Posting',
+                description: 'Share video moments with your family.'
+            },
+            {
+                href: '/shared-app/Shared-Calendar',
+                icon: <Calendar className="size-6 text-muted-foreground" />,
+                title: 'Shared Calendar',
+                description: 'The central family scheduling app.'
+            },
+            {
+                href: '#',
+                icon: <MessagesSquare className="size-6 text-muted-foreground" />,
+                title: 'Family Chat',
+                description: 'Secure messaging for all family members.'
+            },
+            {
+                href: '#',
+                icon: <FolderKanban className="size-6 text-muted-foreground" />,
+                title: 'Media Vault',
+                description: 'Shared photos, videos, and documents.'
+            },
+            {
+                href: '/shared-app/video-creator',
+                icon: <Video className="size-6 text-muted-foreground" />,
+                title: 'Video Studio',
+                description: 'Create and edit family videos.'
+            },
+            {
+                href: '/shared-app/audio-studio',
+                icon: <Music className="size-6 text-muted-foreground" />,
+                title: 'Audio Studio',
+                description: 'Record podcasts and music.'
+            },
+            {
+                href: '/shared-app/live-studio',
+                icon: <Radio className="size-6 text-muted-foreground" />,
+                title: 'Live Studio',
+                description: 'DJ booth and live radio.'
+            },
+            {
+                href: '/shared-app/art-studio',
+                icon: <Palette className="size-6 text-muted-foreground" />,
+                title: 'Art Studio',
+                description: 'Digital painting and drawing tools.'
+            }
+        ]
+    },
+    {
+        title: 'Adult App Blueprints',
+        icon: <User className="size-8 text-primary" />,
+        description: 'Templates for applications for adult family members.',
+        apps: [
+            {
+                href: '/adult-app/adult-socialpost-view',
+                icon: <MessagesSquare className="size-6 text-muted-foreground" />,
+                title: 'Adult Social Posting',
+                description: 'Private social feed for adults.'
+            },
+             {
+                href: '/car',
+                icon: <Car className="size-6 text-muted-foreground" />,
+                title: 'Car Information System',
+                description: 'The central dashboard for in-vehicle technology.'
+            },
+            {
+                href: '/admin/dashboard/system-settings/studio/client-apps/work',
+                icon: <Briefcase className="size-6 text-muted-foreground" />,
+                title: 'Work App',
+                description: 'Productivity and work-related tools.'
+            },
+            {
+                href: '/admin/dashboard/system-settings/studio/client-apps/banking',
+                icon: <PiggyBank className="size-6 text-muted-foreground" />,
+                title: 'Banking App',
+                description: 'Personal and family finance management.'
+            },
+            {
+                href: '/adult-app/adult-music-video',
+                icon: <Music className="size-6 text-muted-foreground" />,
+                title: 'Music & Video Hub',
+                description: 'Long-form video content and music library.'
+            },
+            {
+                href: '#',
+                icon: <HeartPulse className="size-6 text-muted-foreground" />,
+                title: 'Health & Wellness',
+                description: 'Fitness, health records, and wellness apps.'
+            }
+        ]
+    }
+];
+
+function ClientAppsPage() {
+    return (
+        <div className="space-y-12">
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Client App Blueprints</h1>
+                <p className="text-muted-foreground">
+                    This is the staging area for all user-facing applications, organized by role.
+                </p>
+            </div>
+
+            {appSections.map((section) => (
+                <div key={section.title} className="space-y-6">
+                    <div className="flex items-start gap-4">
+                         <div className="p-2 bg-primary/10 rounded-full">
+                            {section.icon}
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-bold font-headline">{section.title}</h2>
+                            <p className="text-muted-foreground">{section.description}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {section.apps.map((app) => (
+                            <Link href={app.href} key={app.title}>
+                                <Card className="hover:bg-accent/50 transition-colors h-full">
+                                    <CardHeader className="flex flex-row items-center gap-4">
+                                        {app.icon}
+                                        <div>
+                                            <CardTitle>{app.title}</CardTitle>
+                                            <CardDescription>{app.description}</CardDescription>
+                                        </div>
+                                    </CardHeader>
+                                </Card>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+
+export default dynamic(() => Promise.resolve(ClientAppsPage), { ssr: false });
