@@ -1,0 +1,87 @@
+# MER-Guard Firmware Specification
+**Version:** 1.0
+**Target MCU:** ESP32-S3
+**Target Power Controller:** Infineon WLC1115
+
+This document contains the conceptual C++ skeleton for the MER-Guard firmware, which acts as the sovereign policy enforcer for the WLC1115 power plane.
+
+---
+
+## 1. Core Logic (Arduino/ESP-IDF Skeleton)
+
+This code demonstrates the primary loop for reading the Qi Charge Status packet and enforcing the 80% charge limit veto.
+
+```cpp
+#include "wlc1115.h" // Assumes a full driver class exists
+
+// --- Global Objects & Pins ---
+WLC1115 guard(Wire);
+const int INT_PIN = 19; // GPIO for WLC1115 interrupt
+volatile bool packetReady = false;
+
+// --- Interrupt Service Routine ---
+void IRAM_ATTR onPacket() {
+    packetReady = true;
+}
+
+// --- Main Setup ---
+void setup() {
+    Serial.begin(115200);
+    pinMode(INT_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(INT_PIN), onPacket, FALLING);
+    
+    if (!guard.begin()) {
+        Serial.println("CRITICAL: WLC1115 NOT FOUND. VETO ENGAGED.");
+        // Enter a safe state, do not allow power plane to activate
+        while(1); 
+    }
+    Serial.println("Sovereign Guard Active. System Nominal.");
+}
+
+// --- Main Loop ---
+void loop() {
+    // Event-driven, waits for interrupt from WLC1115
+    if (packetReady) {
+        packetReady = false;
+        
+        // Optional: Clear interrupt status register on the WLC1115 if needed
+        // guard.clearInterrupts(); 
+
+        uint8_t currentSOC = 0;
+        
+        // Attempt to read the State of Charge from the Qi packet buffer
+        if (guard.getBatteryPercentage(currentSOC)) {
+            Serial.printf("Telemetry: iPhone at %d%%\\n", currentSOC);
+            
+            // THE VETO: 80% Hard-Stop Policy
+            if (currentSOC >= 80) {
+                Serial.println("POLICY VIOLATION: Threshold 80% reached.");
+                guard.forceEPT(EPT_CODE_CHG_COMPLETE); // 0x01 = 'Charge Complete' in Qi Spec
+                Serial.println("VETO: Power plane disconnected.");
+            }
+        }
+    }
+    // Low power delay or sleep until next interrupt
+    delay(100);
+}
+```
+
+## 2. WLC1115 Driver Class (Conceptual)
+
+This is a simplified header illustrating the necessary functions for the driver.
+
+```cpp
+class WLC1115 {
+public:
+    WLC1115(TwoWire &bus);
+    bool begin();
+    bool isRxPresent();
+    bool getBatteryPercentage(uint8_t &soc);
+    void forceEPT(uint8_t reason);
+
+private:
+    void writeReg16(uint16_t reg, uint8_t* data, uint8_t len);
+    void readReg16(uint16_t reg, uint8_t* data, uint8_t len);
+    TwoWire* _i2c;
+};
+```
