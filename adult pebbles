@@ -1,0 +1,399 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, useContext } from 'react';
+import { 
+  Cpu, User, ShieldCheck, Zap, Radio, Gamepad2, Film, MessageSquare, Activity, Briefcase, Wallet, Star,
+  Users as UsersIcon, Settings, Globe, Monitor, Smartphone, Search, KeyRound, Save, Folder, Upload,
+  Layers, GitCommit, Server, HardDrive, Fingerprint, Baby, History, GitMerge, Split, Lock, CheckCircle2,
+  AlertTriangle, RotateCw, Route as RouteIcon, CornerUpRight, TrafficCone, MapPinned, Gauge, Thermometer,
+  Radar, EyeOff, Hotel, Fuel, Utensils, Mic, Code, Shield, Sparkles, X, ArrowLeft, LayoutGrid, BookOpen,
+  Loader2, BrainCircuit, Camera, Watch, Waves, ScanFace, Volume2
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams, useParams, useRouter } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+import { simpleSpeak } from '@/ai/flows/tts-flow';
+import Link from 'next/link';
+
+// --- MOCK DATA & CONFIGURATION ---
+const MOCK_USER_PROJECTS_INITIAL = [
+    { id: 'proj1', name: 'Family Trip Planner Q3', ownerId: 'p1', isPublic: false, type: 'app' },
+    { id: 'proj2', name: '2025 Budget Spreadsheet', ownerId: 'p1', isPublic: false, type: 'data' },
+];
+
+const MOCK_PUBLIC_PROJECTS_INITIAL = [
+    { id: 'pub1', name: 'Community Game Night', ownerId: 'user_abc', isPublic: true, type: 'app', forks: 12, signals: { opens: 150 } },
+    { id: 'pub2', name: 'Shared Workout Tracker', ownerId: 'user_xyz', isPublic: true, type: 'app', forks: 5, signals: { opens: 88 } },
+];
+
+// --- ON-DEVICE AI & SENSORY LOGIC ---
+const getAIResponse = (input, user) => {
+    const lowerInput = input.toLowerCase();
+    const isKid = user?.type === 'child';
+
+    if (lowerInput.includes('hello') || lowerInput.includes('hi')) {
+        return isKid ? "Hi there! Ready to play and learn?" : "Hello. How can I assist with your tasks today?";
+    }
+    if (lowerInput.includes('status') || lowerInput.includes('health')) {
+        return "All systems are operating at 100% efficiency. No anomalies detected in the local mesh.";
+    }
+    if (lowerInput.includes('idea') || lowerInput.includes('create') || lowerInput.includes('project')) {
+        return `Creative mode engaged. I've drafted a new project file in your Studio sandbox based on: "${input}". Let's build something great.`;
+    }
+    if (lowerInput.includes('search') || lowerInput.includes('find')) {
+        return `Initiating search for "${input.replace(/search for/i, '').trim()}". Please check the display.`
+    }
+    if (isKid && (lowerInput.includes('game') || lowerInput.includes('play'))) {
+        return "Game time! I've prepared a fun logic puzzle in your activity feed."
+    }
+    return "I've processed that. I will add it to the memory lasso for contextual recall.";
+};
+
+
+// --- UI Sub-components ---
+const TabButton = ({ id, activeTab, setActiveTab, icon: Icon, label }) => (
+  <button 
+    onClick={() => setActiveTab(id)} 
+    className={`w-full text-left p-3 rounded-lg text-sm font-bold flex items-center gap-3 transition-colors ${activeTab === id ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5'}`}
+  >
+    <Icon size={18} />
+    {label}
+  </button>
+);
+
+const ProjectCard = ({ project, onSelect, onDeploy, onFork, isPublic }) => (
+  <motion.div 
+    layout
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.9 }}
+    className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 flex flex-col justify-between"
+  >
+    <div>
+      <h4 className="font-bold text-white truncate">{project.name}</h4>
+      <p className="text-xs text-slate-400 font-mono mt-1">
+        {isPublic ? `Forks: ${project.forks || 0}` : `Owner: You`}
+      </p>
+    </div>
+    <div className="flex gap-2 mt-4">
+      <button onClick={() => onSelect(project)} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold">Launch</button>
+      {isPublic ? (
+        <button onClick={() => onFork(project)} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold">Fork</button>
+      ) : (
+        <button onClick={() => onDeploy(project)} className="flex-1 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-xs font-semibold">Deploy</button>
+      )}
+    </div>
+  </motion.div>
+);
+
+// --- Main App Component ---
+const AppContent = () => {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const userId = params.userId as string;
+  const sessionId = searchParams.get('sessionId');
+  const router = useRouter();
+  const { familyState, isLoaded } = useFamilyData();
+  const familyMembers = Object.values(familyState.members);
+
+  const [activeTab, setActiveTab] = useState('audit');
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const [projects, setProjects] = useState(() => MOCK_USER_PROJECTS_INITIAL);
+  const [publicProjects, setPublicProjects] = useState(() => MOCK_PUBLIC_PROJECTS_INITIAL);
+
+  const [activeProject, setActiveProject] = useState(null);
+  const [isBuilding, setIsBuilding] = useState(false);
+
+  const [currentContext, setCurrentContext] = useState({ occupancy: 'Social', ambientNoise: 0, userStressLevel: 'Low' });
+  const [log, setLog] = useState([]);
+  const [pebbleMode, setPebbleMode] = useState('Listening');
+  
+  const [biometrics, setBiometrics] = useState({ face: 25, voice: 10, wearable: 0 });
+  const [voiceConfig, setVoiceConfig] = useState({ voice: 'Puck' });
+  
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
+
+  const activeUser = useMemo(() => {
+    if (!familyMembers) return null;
+    return familyMembers.find(m => m.id === userId);
+  }, [userId, familyMembers]);
+
+  const addLog = useCallback((message, type = 'info') => {
+    setLog(prev => [{ msg: message, type, timestamp: new Date().toLocaleTimeString() }, ...prev.slice(0, 50)]);
+  }, []);
+  
+  const buildFromPrompt = useCallback(async (promptText: string) => {
+    if (!promptText.trim() || isBuilding) return;
+    setIsBuilding(true);
+    addLog(`AI Action: Creating project from prompt "${promptText}"`, 'action');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    const newProject = {
+      id: `neural_${Date.now()}`, name: promptText,
+      code: `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;font-family:sans-serif;color:white;background:#111;"><h1>${promptText}</h1><p style="margin-top:1rem;font-size:0.8rem;color:grey;">Built with On-Device Pebble Engine</p></div>`,
+      ownerId: userId, createdAt: new Date(), isPublic: false, type: 'neural'
+    };
+    
+    setProjects(prev => [newProject, ...prev]);
+    setIsBuilding(false);
+    addLog(`Success: Project "${promptText}" is now in your studio.`, 'success');
+  }, [addLog, isBuilding, userId]);
+
+  const evaluateEvent = useCallback((event: { title: string, baseImportance: number, knownEntity: boolean, data?: any }) => {
+    setPebbleMode('Evaluating');
+    let score = event.baseImportance;
+    if (currentContext.occupancy === 'Social') score -= 15;
+    if (currentContext.userStressLevel === 'High') score -= 20;
+    if (event.knownEntity) score += 10;
+    const threshold = 50;
+    const shouldAct = score > threshold;
+
+    setTimeout(() => {
+      const decision = { ...event, score, shouldAct, timestamp: new Date().toLocaleTimeString(), reason: shouldAct ? "Relevance exceeds social friction" : "Social priority: User focus preserved" };
+      
+      if (shouldAct) {
+        setPebbleMode('Intervening');
+        addLog(`Pebble acting on '${event.title}'. Score: ${score}. Reason: ${decision.reason}`, 'action');
+        
+        const aiResponse = getAIResponse(event.data?.text || event.title, activeUser);
+        addLog(aiResponse, 'ai');
+        
+        if ((event.data?.text || "").toLowerCase().includes('create') || (event.data?.text || "").toLowerCase().includes('idea')) {
+          buildFromPrompt(event.data.text);
+        }
+        
+        const voiceForUser = activeUser?.type === 'child' ? 'Puck' : 'Algenib';
+        simpleSpeak(aiResponse, { voice: voiceForUser });
+        
+        setTimeout(() => setPebbleMode('Listening'), 2000);
+      } else {
+        addLog(`Pebble ignored '${event.title}'. Score: ${score}. Reason: ${decision.reason}`, 'ignore');
+        setPebbleMode('Listening');
+      }
+      setLog(prev => [decision, ...prev].slice(0, 10));
+    }, 800);
+  }, [currentContext, addLog, activeUser, buildFromPrompt]);
+
+  const setupAudioContext = useCallback(async () => {
+    if (audioContextRef.current) return;
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
+        sourceRef.current = source;
+        dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+        addLog("Ambient Audio Probe initialized successfully.", 'success');
+    } catch (err) {
+        addLog("Audio probe failed: " + (err as Error).message, 'error');
+        console.error("Error accessing microphone:", err);
+    }
+  }, [addLog]);
+
+  useEffect(() => {
+    setupAudioContext();
+    const interval = setInterval(() => {
+        if (!analyserRef.current || !dataArrayRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        const average = dataArrayRef.current.reduce((sum, val) => sum + val, 0) / dataArrayRef.current.length;
+        setCurrentContext(prev => ({...prev, ambientNoise: average}));
+
+        if(average > 80) { 
+             evaluateEvent({ title: 'Loud Audio Event', baseImportance: 60, knownEntity: false, data: { text: `Loud noise detected at ${new Date().toLocaleTimeString()}` } });
+        }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [setupAudioContext, evaluateEvent]);
+  
+  const handleEnrollBiometric = (type) => {
+    addLog(`Simulating enrollment for ${type}...`, 'action');
+    setTimeout(() => {
+        setBiometrics(prev => ({...prev, [type]: 100}));
+        addLog(`${type.charAt(0).toUpperCase() + type.slice(1)} ID anchor established.`, 'success');
+    }, 1500);
+  };
+
+  const handleTestVoice = async (voice: string) => {
+    await simpleSpeak(`This is a test of the ${voice} voice model.`, { voice });
+  };
+
+
+  const buildKernelSrc = (project) => `
+    <html><head><style>body { margin: 0; overflow: hidden; background: #111; color: white; }</style></head><body>
+      ${project.code || `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:sans-serif;"><h1>${project.name}</h1></div>`}
+    </body></html>
+  `;
+  
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'studio':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map(p => <ProjectCard key={p.id} project={p} onSelect={setActiveProject} onDeploy={() => {}} onFork={() => {}} isPublic={false}/>)}
+          </div>
+        );
+      case 'store':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {publicProjects.map(p => <ProjectCard key={p.id} project={p} onSelect={setActiveProject} onDeploy={() => {}} onFork={() => {}} isPublic={true}/>)}
+          </div>
+        );
+      case 'voice':
+        const voices = activeUser?.type === 'child' ? 
+            [{id: 'Puck', name: 'Puck (Playful)'}, {id: 'Enif', name: 'Enif (Friendly)'}] : 
+            [{id: 'Algenib', name: 'Algenib (Calm, Male)'}, {id: 'Gacrux', name: 'Gacrux (Warm, Female)'}];
+        return (
+            <div className="max-w-md mx-auto space-y-4">
+                <h3 className="font-bold text-slate-400 uppercase tracking-widest text-xs">Select Pebble's Voice</h3>
+                {voices.map(v => (
+                    <div key={v.id} onClick={() => setVoiceConfig({voice: v.id})} className={`p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border-2 ${voiceConfig.voice === v.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-700 bg-slate-800/50'}`}>
+                        <span>{v.name}</span>
+                        <button onClick={(e) => {e.stopPropagation(); handleTestVoice(v.id)}}><Volume2 size={20}/></button>
+                    </div>
+                ))}
+            </div>
+        );
+      case 'security':
+        const BiometricEnrollmentSlot = ({ icon: Icon, label, progress, onClick }) => (
+            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                <div className="flex items-center gap-3 mb-2">
+                    <Icon className={`w-5 h-5 ${progress === 100 ? 'text-green-400' : 'text-indigo-400'}`} />
+                    <span className="text-xs font-semibold text-slate-300">{label}</span>
+                    <div className="flex-1" />
+                    <span className="text-xs font-mono text-indigo-300">{progress}%</span>
+                </div>
+                <div className="w-full bg-slate-700/50 h-2 rounded-full overflow-hidden">
+                    <motion.div 
+                        className={`h-full ${progress === 100 ? 'bg-green-500' : 'bg-indigo-500'} rounded-full`}
+                        initial={{ width: '0%' }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 1.5, ease: 'easeOut' }}
+                    />
+                </div>
+                {progress < 100 && <button onClick={onClick} className="text-xs text-indigo-400 hover:underline mt-2">Start Enrollment</button>}
+            </div>
+        );
+        return (
+            <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                    <h3 className="font-bold text-slate-400 uppercase tracking-widest text-xs">Biometric Enrollment</h3>
+                     <BiometricEnrollmentSlot icon={ScanFace} label="Face ID Scans" progress={biometrics.face} onClick={() => handleEnrollBiometric('face')} />
+                     <BiometricEnrollmentSlot icon={Mic} label="Voice Prints" progress={biometrics.voice} onClick={() => handleEnrollBiometric('voice')} />
+                     <BiometricEnrollmentSlot icon={Watch} label="Wearable ID" progress={biometrics.wearable} onClick={() => handleEnrollBiometric('wearable')} />
+                </div>
+            </div>
+        );
+      case 'audit':
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+                    <h3 className="text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2"><Radar/> Ambient Awareness Probe</h3>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg"><span className="text-sm font-medium text-slate-400">Occupancy</span><span className="font-bold text-white">{currentContext.occupancy}</span></div>
+                        <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg"><span className="text-sm font-medium text-slate-400">Ambient Noise</span><span className="font-bold text-white">{currentContext.ambientNoise.toFixed(2)} dB</span></div>
+                        <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg"><span className="text-sm font-medium text-slate-400">User Stress</span><span className="font-bold text-green-400">{currentContext.userStressLevel}</span></div>
+                    </div>
+                </div>
+                <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+                    <h3 className="text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2"><BrainCircuit /> Pebble Decorum Journal</h3>
+                    <div className="h-80 overflow-y-auto space-y-3 font-mono text-xs pr-2">
+                        {log.map((entry, i) => (
+                            <div key={i} className={`p-2 rounded-md border ${entry.type === 'action' ? 'bg-cyan-500/10 border-cyan-500/20' : entry.type === 'success' ? 'bg-green-500/10 border-green-500/20' : entry.type === 'error' ? 'bg-red-500/10 border-red-500/20' : 'bg-slate-700/30 border-slate-700/50'}`}>
+                               <p className="text-slate-400 text-[10px]">[{entry.timestamp}]</p>
+                               <p className={entry.type === 'action' ? 'text-cyan-300' : entry.type === 'success' ? 'text-green-300' : entry.type === 'error' ? 'text-red-300' : 'text-slate-500'}>{entry.msg}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+      default:
+        return null;
+    }
+  };
+  
+  if (!isLoaded) {
+    return <div className="h-full w-full flex items-center justify-center text-slate-500"><Loader2 className="animate-spin mr-2" /> Loading Profile...</div>;
+  }
+  
+  if (!activeUser) {
+    return <div className="h-full w-full flex items-center justify-center text-red-500">Error: User not found. Please check the URL.</div>;
+  }
+
+  return (
+    <div className="h-full bg-black flex flex-col">
+      <header className="p-4 flex justify-between items-center border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden">
+             {activeUser?.imageUrl && <Image src={activeUser.imageUrl} alt="User" width={40} height={40} className="w-full h-full object-cover"/>}
+          </div>
+          <h2 className="text-lg font-bold">Omni-Kernel: {activeUser.name}</h2>
+        </div>
+        <Link href={`/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/client-app-blueprints?userId=${userId}&sessionId=${sessionId}`} className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors">
+            <LayoutGrid size={18} />
+        </Link>
+      </header>
+      <div className="flex-1 flex overflow-hidden">
+        <nav className="w-48 border-r border-white/10 p-4 space-y-2">
+            <TabButton id="audit" activeTab={activeTab} setActiveTab={setActiveTab} icon={Shield} label="Pebble Audit" />
+            <TabButton id="studio" activeTab={activeTab} setActiveTab={setActiveTab} icon={Code} label="Studio" />
+            <TabButton id="store" activeTab={activeTab} setActiveTab={setActiveTab} icon={UsersIcon} label="Public Store" />
+            <TabButton id="security" activeTab={activeTab} setActiveTab={setActiveTab} icon={Fingerprint} label="Security" />
+            <TabButton id="voice" activeTab={activeTab} setActiveTab={setActiveTab} icon={Volume2} label="Voice" />
+        </nav>
+        <main className="flex-1 overflow-y-auto p-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3 }}
+            >
+              {renderTabContent()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+      {activeProject && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md p-8">
+          <div className="w-full h-full bg-slate-900 rounded-2xl flex flex-col">
+            <div className="p-2 flex justify-between items-center border-b border-slate-700">
+              <span className="text-xs ml-2">{activeProject.name}</span>
+              <button onClick={() => setActiveProject(null)} className="p-2 hover:bg-slate-700 rounded-full"><X/></button>
+            </div>
+            <iframe 
+              srcDoc={buildKernelSrc(activeProject)}
+              title={activeProject.name}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const App = (props) => (
+    <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" /></div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default App;
+
+    
