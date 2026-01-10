@@ -1,0 +1,90 @@
+
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/firebaseAdmin';
+import { FieldValue } from 'firebase-admin/firestore';
+
+export async function GET(
+  req: Request,
+  { params }: { params: { sessionId: string } }
+) {
+  try {
+    const sessionId = params.sessionId;
+
+    if (!sessionId) {
+      return NextResponse.json({ error: 'Missing session ID' }, { status: 400 });
+    }
+
+    const familyRef = db.collection('familyCores').doc(sessionId);
+    const docSnap = await familyRef.get();
+
+    if (!docSnap.exists) {
+      return NextResponse.json({ message: "No data found for this session yet." }, { status: 404 });
+    }
+
+    return NextResponse.json(docSnap.data());
+
+  } catch (err) {
+    console.error("API Error fetching family data:", err);
+    const error = err as Error;
+    return NextResponse.json({ error: 'An unexpected server error occurred.', details: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: { sessionId: string } }
+) {
+    try {
+        const sessionId = params.sessionId;
+        const { deviceId, lat, lng, timestamp } = await req.json();
+
+        if (!sessionId || !deviceId || typeof lat !== 'number' || typeof lng !== 'number') {
+            return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
+        }
+        
+        const familyRef = db.collection('familyCores').doc(sessionId);
+        const docSnap = await familyRef.get();
+
+        if (!docSnap.exists) {
+            return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+        }
+
+        const familyData = docSnap.data();
+        if (!familyData || !familyData.members) {
+            return NextResponse.json({ error: 'Family data or members not found' }, { status: 404 });
+        }
+
+        let memberIdToUpdate: string | null = null;
+        let deviceIndexToUpdate: number = -1;
+
+        // Find which member owns the device
+        Object.entries(familyData.members).forEach(([memberId, member]: [string, any]) => {
+            const deviceIndex = member.devices?.findIndex((d: any) => d.id === deviceId);
+            if (deviceIndex > -1) {
+                memberIdToUpdate = memberId;
+                deviceIndexToUpdate = deviceIndex;
+            }
+        });
+        
+        if (!memberIdToUpdate || deviceIndexToUpdate === -1) {
+             return NextResponse.json({ error: 'Device not found within any member' }, { status: 404 });
+        }
+
+        // Use dot notation for precise, atomic updates in Firestore
+        const updatePayload = {
+            [`members.${memberIdToUpdate}.devices.${deviceIndexToUpdate}.lat`]: lat,
+            [`members.${memberIdToUpdate}.devices.${deviceIndexToUpdate}.lng`]: lng,
+            [`members.${memberIdToUpdate}.devices.${deviceIndexToUpdate}.lastPing`]: new Date(timestamp).toISOString(),
+            updatedAt: FieldValue.serverTimestamp(),
+        };
+
+        await familyRef.update(updatePayload);
+
+        return NextResponse.json({ success: true });
+
+    } catch (err) {
+        console.error("API Error updating location:", err);
+        const error = err as Error;
+        return NextResponse.json({ error: 'An unexpected server error occurred.', details: error.message }, { status: 500 });
+    }
+}
