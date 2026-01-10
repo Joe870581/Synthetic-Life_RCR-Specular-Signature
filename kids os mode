@@ -1,0 +1,339 @@
+
+'use client';
+
+import { Suspense, useContext, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { 
+    Baby, Users, User, ToyBrick, Briefcase, PiggyBank, HeartPulse, MessagesSquare, FolderKanban, 
+    Video, Music, Radio, Palette, Anchor, Car, Map, FileText, Sheet, Calculator, Camera, 
+    BrainCircuit, Calendar, Clock, Banknote, Power, VideoIcon, Disc, Phone, School, Home, 
+    MessageCircle, HelpCircle, UserPlus, BookCopy, Wallet, Star, Server, Check, X, 
+    Award, ShieldCheck, VideoOff, Timer, Globe, Wifi, HardHat, KeyRound, ChevronRight,
+    Search, Bell, Settings, Info, Save, Trash2, Mail, MapPin, Eye, EyeOff, Cpu, Rocket,
+    LayoutGrid, Gamepad2, History, MessageSquare as MessageSquareIcon, Film, QrCode, Smartphone, RefreshCw
+} from 'lucide-react';
+import Link from 'next/link';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuGroup } from '@/components/ui/dropdown-menu';
+import { AnimatePresence, motion } from 'framer-motion';
+import { FamilyDataContext, FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+
+const allApps = [
+    // These belong to the Organizer Grid
+    { href: `/shared-app/organizer-multi-grid-app`, icon: LayoutGrid, title: 'Sovereign OS: Organizer', description: 'Your central hub for family organization, communication, and system settings.', category: 'main' },
+    // These belong to the Entertainment Grid
+    { href: `/shared-app/multi-grade-app`, icon: Gamepad2, title: 'Sovereign OS: Entertainment', description: 'Your portal for social, financial, and entertainment applications.', category: 'main' },
+
+    // Other Apps
+    { href: '/kids-app/kids-hub', icon: Home, title: 'Kids Hub', description: 'The main dashboard for kids.', category: 'kids' },
+    { href: '/kids/kids-app/socialpost-view', icon: ToyBrick, title: 'Social App', description: 'The isolated social zone for kids.', category: 'kids' },
+    { href: '/kids/kids-app/kids-video-music', icon: Music, title: 'Kids\' Music & Video', description: 'Filtered long-form video and music.', category: 'kids' },
+    { href: '/kids-app/my-school', icon: School, title: 'My School', description: 'Tools for homework and learning.', category: 'kids' },
+    { href: '/kids-app/my-kids-pebble/[userId]', icon: BrainCircuit, title: 'My Kids Pebble', description: 'The core AI node for kids.', category: 'kids' },
+    { href: '/kids-app/kids-message', icon: MessageSquareIcon, title: 'Kids Message', description: 'Send messages to family members.', category: 'kids' },
+    { href: '/kids-app/kids-homework-helper', icon: HelpCircle, title: 'Kids Homework Helper', description: 'AI-powered help for school work.', category: 'kids' },
+    { href: '/kids-app/kids-my-chat', icon: MessagesSquare, title: 'Kids My Chat', description: 'A private chat for kids.', category: 'kids' },
+    { href: '/kids-app/kids-contact', icon: UserPlus, title: 'Kids Contact', description: 'A list of approved contacts.', category: 'kids' },
+    { href: '/kids-app/my-personal-bank', icon: Wallet, title: 'My Personal Bank', description: 'View your personal bank account.', category: 'kids' },
+    { href: '/kids-app/my-spikes-point-store', icon: Star, title: 'My Spikes Point Store', description: 'Redeem your Spike Points for rewards.', category: 'kids' },
+    { href: '/shared-app/family-pebbles', icon: BrainCircuit, title: 'Family Pebble', description: 'Core AI node for shared knowledge.', category: 'shared' },
+    { href: '/shared-app/family-anchor-map', icon: Anchor, title: 'Family Anchor Map', description: 'Live map of all connected family devices.', category: 'shared' },
+    { href: '/shared-app/travinling-planing', icon: Map, title: 'Traveling Planning', description: 'Plan your family trips and adventures.', category: 'shared' },
+    { href: '/shared-app/word-processor', icon: FileText, title: 'Word Processor', description: 'Shared document editor for the family.', category: 'shared' },
+    { href: '/shared-app/spreadsheet', icon: Sheet, title: 'Spreadsheet', description: 'Family budgets, lists, and more.', category: 'shared' },
+    { href: '/shared-app/calculator', icon: Calculator, title: 'Calculator', description: 'Quick maths for the family.', category: 'shared' },
+    { href: '/shared-app/social-posting', icon: MessageSquareIcon, title: 'Social Posting', description: 'Create and share posts with your family.', category: 'shared' },
+    { href: '/shared-app/ar-camera', icon: Camera, title: 'AR Camera', description: 'Augmented reality filters and effects.', category: 'shared' },
+    { href: '/shared-app/video-posting', icon: Video, title: 'Video Posting', description: 'Share video moments with your family.', category: 'shared' },
+    { href: '/shared-app/Shared-Calendar', icon: Calendar, title: 'Shared Calendar', description: 'Central family scheduling app.', category: 'shared' },
+    { href: '/Family-Shared/clock-setting', icon: Clock, title: 'Clock', description: 'Holographic clock customization.', category: 'shared' },
+    { href: '/family-shared/spike-store', icon: Banknote, title: 'Spike Store', description: 'Spike Points reward system.', category: 'shared' },
+    { href: '/family-shared/family-banking', icon: Power, title: 'Family Banking', description: 'Shared family financial tools.', category: 'shared' },
+    { href: '/family-shared/live-video-recording', icon: VideoIcon, title: 'Live Video Recording', description: 'Record and share live video.', category: 'shared' },
+    { href: '/family-shared/my-tuner', icon: Disc, title: 'MyTuner', description: 'Tune in to family broadcasts.', category: 'shared' },
+    { href: '/family-shared/phone-pad', icon: Phone, title: 'Phone Pad', description: 'Isolated phone pad for secure calls.', category: 'shared' },
+    { href: '/family-shared/family-chat', icon: MessageSquareIcon, title: 'Family Chat', description: 'Secure messaging for the whole family.', category: 'shared' },
+    { href: '/family-shared/media-vault', icon: FolderKanban, title: 'Media Vault', description: 'Shared photos, videos, and docs.', category: 'shared' },
+    { href: '/shared-app/video-creator', icon: Video, title: 'Video Studio', description: 'Create and edit family videos.', category: 'shared' },
+    { href: '/shared-app/audio-studio', icon: Music, title: 'Audio Studio', description: 'Record podcasts and music.', category: 'shared' },
+    { href: '/shared-app/live-studio', icon: Radio, title: 'Live Studio', description: 'DJ booth and live radio.', category: 'shared' },
+    { href: '/shared-app/art-studio', icon: Palette, title: 'Art Studio', description: 'Digital painting and drawing tools.', category: 'shared' },
+    { href: '/shared-app/myclips', icon: Film, title: 'MyClips', description: 'Your personal video clip library.', category: 'shared' },
+    { href: '/shared-app/email', icon: Mail, title: 'Email', description: 'Secure family email client.', category: 'shared' },
+    { href: '/shared-app/gamerzoner', icon: Gamepad2, title: 'GamerZoner', description: 'Connect with gaming friends.', category: 'shared' },
+    { href: '/adult-app/adults-hub', icon: Home, title: 'Adults Hub', description: 'The main dashboard for adults.', category: 'adults' },
+    { href: '/adult-app/adult-socialpost-view', icon: MessagesSquare, title: 'Adult Social Posting', description: 'Private social feed for adults.', category: 'adults' },
+    { href: '/car', icon: Car, title: 'Car Info System', description: 'Central dashboard for in-vehicle technology.', category: 'adults' },
+    { href: '/adult-app/my-work', icon: Briefcase, title: 'My Work', description: 'Productivity and work-related tools.', category: 'adults' },
+    { href: '/adult-app/banking-app', icon: PiggyBank, title: 'Banking App', description: 'Personal and family finance management.', category: 'adults' },
+    { href: '/adult-app/adult-music-video/[userId]', icon: Music, title: 'Music & Video Hub', description: 'Long-form video content and music library.', category: 'adults' },
+    { href: '/adult-app/my-adult-pebble/[userId]', icon: BrainCircuit, title: 'My Adult Pebble', description: 'The core AI node for adults.', category: 'adults' },
+    { href: '/adult-app/adults-message', icon: MessageSquareIcon, title: 'Adults Message', description: 'Send messages to family and contacts.', category: 'adults' },
+    { href: '/adult-app/work-helper', icon: HelpCircle, title: 'Work Helper', description: 'AI-powered assistance for tasks.', category: 'adults' },
+    { href: '/adult-app/adults-my-chat', icon: MessagesSquare, title: 'Adults My Chat', description: 'Private and group chat for adults.', category: 'adults' },
+    { href: '/adult-app/adults-contact', icon: UserPlus, title: 'Adults Contact', description: 'Manage personal and work contacts.', category: 'adults' },
+    { href: '/adult-app/my-personal-bank', icon: Wallet, title: 'My Personal Bank', description: 'Manage personal bank accounts.', category: 'adults' },
+    { href: '/adult-app/my-spikes-point-store', icon: Star, title: 'My Spikes Point Store', description: 'Redeem Spike Points for rewards.', category: 'adults' },
+    { href: '/adult-app/health-wellness', icon: HeartPulse, title: 'Health & Wellness', description: 'Fitness, records, and wellness apps.', category: 'adults' }
+];
+
+const AppCard = ({ href, icon: Icon, title, description, userId, sessionId, onActionClick }) => {
+    const dynamicHref = userId && href.includes('[userId]') ? href.replace('[userId]', userId) : href.replace('/[userId]', '');
+    
+    const params = new URLSearchParams();
+    if (sessionId) params.append('sessionId', sessionId);
+    if (userId) params.append('userId', userId);
+    const queryString = params.toString();
+
+    const launchUrl = `${dynamicHref}${queryString ? `?${queryString}` : ''}`;
+
+    return (
+        <Card className="h-full border-2 border-transparent transition-all hover:border-indigo-200 dark:hover:border-indigo-900 hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 group text-left">
+            <CardHeader className="flex flex-row items-center gap-5">
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    <Icon className="size-6" />
+                </div>
+                <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                        <CardTitle className="text-base font-bold">{title}</CardTitle>
+                        <ChevronRight className="size-4 text-slate-300 group-hover:text-indigo-400 transition-all group-hover:translate-x-1" />
+                    </div>
+                    <CardDescription className="line-clamp-2 text-xs leading-relaxed">
+                        {description}
+                    </CardDescription>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+                 <Button variant="outline" className="w-full" onClick={(e) => { e.preventDefault(); onActionClick(launchUrl); }}>
+                    Launch Sandbox
+                </Button>
+            </CardContent>
+        </Card>
+    );
+};
+
+const DeviceBridgeModal = ({ isOpen, onClose, adultHubUrl, pwaInstallPrompt, handleInstallClick }) => {
+    const pebbleInstallData = JSON.stringify({
+      type: 'pebble-node',
+      bundle: 'adult-hub-v2.0.0',
+      entryPoint: adultHubUrl, 
+      timestamp: Date.now(),
+    });
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(pebbleInstallData)}`;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-md bg-slate-900/80 border-cyan-500/50 text-white backdrop-blur-xl">
+                <DialogHeader>
+                    <DialogTitle className="text-2xl font-black text-cyan-400 flex items-center gap-3">
+                        <Smartphone /> Device Bridge & Recovery
+                    </DialogTitle>
+                    <DialogDescription className="text-slate-400 !mt-4">
+                        Install the OS shell directly to your device for a native, offline-first experience.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 text-center">
+                    <Button 
+                        onClick={handleInstallClick} 
+                        disabled={!pwaInstallPrompt}
+                        className="w-full h-16 text-lg bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-900/40"
+                    >
+                        {pwaInstallPrompt ? 'Install Adult Hub OS' : 'Installation Not Available'}
+                    </Button>
+                    <p className="text-xs text-slate-500 mt-3">
+                        This will add the app to your home screen and enable full offline capabilities.
+                    </p>
+                </div>
+                <div className="space-y-3 pt-6 border-t border-slate-800">
+                    <h4 className="text-sm font-bold text-slate-400 text-center">Fail-safe Controls</h4>
+                    <Button variant="secondary" className="w-full bg-slate-700 hover:bg-slate-600">
+                        <Save className="mr-2" /> Backup to Cloud
+                    </Button>
+                    <Button variant="destructive" className="w-full">
+                        <Trash2 className="mr-2" /> Remote Wipe Device
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+
+function ClientAppsPageInternal() {
+    const { familyState } = useFamilyData();
+    const familyMembers = useMemo(() => familyState.members ? Object.values(familyState.members) : [], [familyState.members]);
+    const searchParams = useSearchParams();
+    const userId = searchParams.get('userId');
+    const sessionId = searchParams.get('sessionId');
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [isDeviceBridgeOpen, setIsDeviceBridgeOpen] = useState(false);
+    
+    // --- PWA INSTALLATION LOGIC ---
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+    useEffect(() => {
+        const handler = (e: any) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+            console.log("`beforeinstallprompt` event was fired.");
+        };
+
+        window.addEventListener('beforeinstallprompt', handler);
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handler);
+        };
+    }, []);
+
+    const handleInstallClick = async () => {
+        if (!deferredPrompt) {
+            alert('The app is likely already installed or your browser does not support this feature.');
+            return;
+        }
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            console.log('User accepted the install prompt');
+        } else {
+            console.log('User dismissed the install prompt');
+        }
+        setDeferredPrompt(null);
+        setIsDeviceBridgeOpen(false);
+    };
+    // --- END PWA ---
+
+    const user = useMemo(() => {
+        if (!familyMembers || familyMembers.length === 0) return null;
+        return familyMembers.find(m => m.id === userId);
+    }, [userId, familyMembers]);
+    
+    const getAge = (dob) => {
+        if (!dob) return 0;
+        const birthDate = new Date(dob);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+
+    const isAdult = user ? user.type === 'parent' || (user.dob && getAge(user.dob) >= 16) : false;
+
+    const visibleSections = useMemo(() => {
+        const mainApps = allApps.filter(app => app.category === 'main');
+        const sharedApps = allApps.filter(app => app.category === 'shared');
+        
+        let userSpecificApps = [];
+        if (isAdult) {
+            userSpecificApps = allApps.filter(app => app.category === 'adults');
+        } else {
+            userSpecificApps = allApps.filter(app => app.category === 'kids');
+        }
+
+        return [
+            { id: 'main', title: 'Sovereign OS Hubs', icon: LayoutGrid, description: 'Core operating system dashboards.', apps: mainApps },
+            { id: 'user-specific', title: isAdult ? 'Adult App Blueprints' : 'Kids App Blueprints', icon: isAdult ? User : Baby, description: isAdult ? 'Apps for adult members.' : 'Safe-zone apps for kids.', apps: userSpecificApps },
+            { id: 'shared', title: 'Family Shared Apps', icon: Users, description: 'Apps for the whole family.', apps: sharedApps },
+        ];
+    }, [isAdult]);
+    
+    const adultHubUrl = useMemo(() => {
+        if (typeof window !== 'undefined') {
+            const p1User = familyMembers.find(m => m.id === 'p1');
+            const targetUserId = p1User ? 'p1' : userId || 'p1';
+            return `${window.location.origin}/adult-app/adults-hub/${targetUserId}?sessionId=${sessionId}`;
+        }
+        return '';
+    }, [sessionId, userId, familyMembers]);
+    
+    if (!user) {
+        return <div className="p-8 text-center text-white">Awaiting User...</div>;
+    }
+
+    return (
+        <TooltipProvider>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30">
+            <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+                <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/20">
+                            <LayoutGrid className="size-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-black tracking-tight uppercase">Sovereign <span className="text-indigo-600">OS</span></h1>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                                {isAdult ? `Adult Workspace: ${user.name}` : `Kids Safe Zone: ${user.name}`}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold hidden md:inline">{visibleSections.reduce((acc, section) => acc + section.apps.length, 0)} Apps Available</span>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                 <button onClick={() => setIsDeviceBridgeOpen(true)} className="w-10 h-10 rounded-full border-2 border-slate-200 dark:border-slate-700 p-0.5 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700">
+                                    <Smartphone className="size-5 text-slate-500 dark:text-slate-400" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Device Bridge & Recovery</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <div className="w-10 h-10 rounded-full border-2 border-green-500 dark:border-green-400 p-0.5 overflow-hidden">
+                            {user.imageUrl ? <Image src={user.imageUrl} alt={user.name} width={40} height={40} className="rounded-full object-cover" /> : <div className="w-full h-full rounded-full bg-slate-200 dark:bg-slate-700" />}
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main className="max-w-7xl mx-auto px-4 py-12 space-y-16">
+                 {visibleSections.map(section => (
+                    <section key={section.id}>
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-black mb-2 uppercase tracking-tight">{section.title}</h2>
+                        </div>
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {section.apps.map((app, idx) => (
+                               <AppCard key={app.href || idx} {...app} userId={userId} sessionId={sessionId} onActionClick={setPreviewUrl} />
+                            ))}
+                        </div>
+                    </section>
+                ))}
+            </main>
+        </div>
+        <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
+            <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0 dark:bg-slate-950">
+                <DialogHeader className="p-4 border-b dark:border-slate-800 flex-row items-center justify-between">
+                     <DialogTitle className="text-white">App Preview</DialogTitle>
+                     <DialogDescription className="text-slate-400">{previewUrl}</DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 w-full h-full bg-gray-100 dark:bg-slate-800">
+                    {previewUrl && <iframe src={previewUrl} className="w-full h-full border-0" title="App Preview" />}
+                </div>
+            </DialogContent>
+        </Dialog>
+        <DeviceBridgeModal 
+            isOpen={isDeviceBridgeOpen} 
+            onClose={() => setIsDeviceBridgeOpen(false)} 
+            adultHubUrl={adultHubUrl}
+            pwaInstallPrompt={deferredPrompt}
+            handleInstallClick={handleInstallClick}
+        />
+        </TooltipProvider>
+    );
+}
+
+export default function ClientAppsPage() {
+    return (
+        <FamilyDataProvider>
+            <Suspense fallback={<div>Loading...</div>}>
+                <ClientAppsPageInternal />
+            </Suspense>
+        </FamilyDataProvider>
+    )
+}
