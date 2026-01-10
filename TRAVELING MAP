@@ -1,0 +1,132 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geo Traveling Trip Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom map styling */
+        body, html {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        .map-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #2D3748; /* Dark blue/gray base map color */
+            overflow: hidden;
+        }
+        .route-line {
+            position: absolute;
+            width: 8px;
+            background: linear-gradient(to bottom, #4299E1 0%, #3182CE 100%); /* Blue gradient for the route */
+            box-shadow: 0 0 15px rgba(66, 153, 225, 0.8);
+            border-radius: 4px;
+        }
+        .car-marker {
+            width: 30px;
+            height: 30px;
+            background: #FBBF24; /* Yellow marker */
+            border-radius: 50%;
+            border: 4px solid #1A202C;
+            box-shadow: 0 0 10px #FBBF24;
+            transform: translate(-50%, -50%);
+            animation: pulse-glow 1.5s infinite alternate;
+        }
+        @keyframes pulse-glow {
+            from { box-shadow: 0 0 5px #FBBF24, 0 0 10px #FBBF24; }
+            to { box-shadow: 0 0 10px #FBBF24, 0 0 20px #FBBF24; }
+        }
+        /* Custom route visualization for the mock */
+        .route-mock {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 50%;
+            height: 100%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="map-container">
+        <!-- Mock Map Background and Features -->
+        <div class="route-mock">
+            <!-- Simplified Route Line (Toronto -> Ottawa visualization) -->
+            <div class="route-line" style="top: 10%; left: 50%; height: 80%; transform: translateX(-50%);"></div>
+
+            <!-- Current Location (Simulated Vehicle Position) - dynamically moving -->
+            <div id="car-marker" class="car-marker" style="top: 75%; left: 50%;"></div>
+            
+            <!-- Start Location -->
+            <div class="absolute top-8 left-1/4 transform -translate-x-1/2 p-2 bg-green-500 rounded-full shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><circle cx="12" cy="10" r="3"/><path d="M12 21.7c-3.1 0-7-2.6-7-7 0-4.6 4-7.8 7-7.8s7 3.2 7 7.8c0 4.4-3.9 7-7 7z"/></svg>
+            </div>
+            <span class="absolute top-8 left-1/4 transform -translate-x-1/2 translate-y-8 text-xs font-semibold text-white/80">Toronto (Start)</span>
+
+            <!-- Destination -->
+            <div class="absolute top-[80%] right-1/4 transform -translate-x-1/2 p-2 bg-red-500 rounded-full shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M18 8h-1V6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H6a2 2 0 0 0-2 2v4h16v-4a2 2 0 0 0-2-2zM9 22h6"/><path d="M7 16V9a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7"/><path d="M10 22h4"/></svg>
+            </div>
+            <span class="absolute top-[80%] right-1/4 transform -translate-x-1/2 translate-y-8 text-xs font-semibold text-white/80">Ottawa (End)</span>
+        </div>
+
+        <!-- Navigation Overlays (Always visible in the iframe) -->
+        <div class="absolute top-4 left-4 p-4 bg-black/70 rounded-xl shadow-2xl backdrop-blur-sm border border-white/10 z-20">
+            <div class="flex items-center space-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><path d="M15 14L9 8"/><path d="M15 8l-6 6"/></svg>
+                <div>
+                    <p class="text-sm text-gray-400 font-medium">NEXT TURN IN</p>
+                    <p id="turn-distance" class="text-3xl font-extrabold text-white">5.2 km</p>
+                </div>
+            </div>
+            <p id="turn-instruction" class="text-lg mt-2 text-teal-400 font-semibold">Keep right onto ON-401 E</p>
+        </div>
+
+        <div class="absolute bottom-4 left-4 p-3 bg-black/70 rounded-xl shadow-2xl backdrop-blur-sm border border-white/10 z-20 text-center">
+            <p class="text-xs text-gray-400">Current Speed</p>
+            <p id="speed-display" class="text-4xl font-extrabold text-red-400">108</p>
+            <p class="text-sm text-gray-400">km/h</p>
+        </div>
+    </div>
+
+    <script>
+        const carMarker = document.getElementById('car-marker');
+        const turnDistance = document.getElementById('turn-distance');
+        const speedDisplay = document.getElementById('speed-display');
+
+        let progress = 0;
+
+        function updateSimulation() {
+            // 1. Simulate Car Progress
+            progress += 0.005; // Adjust speed
+            if (progress > 1) {
+                progress = 0; // Loop the simulation
+            }
+
+            // Calculate position: 75% is the bottom of the visible map, 15% is the top (simulating car moving up)
+            const topPosition = 75 - (progress * 60); 
+            carMarker.style.top = `${topPosition}%`;
+
+            // 2. Simulate Nav Data Updates
+            const distance = (5.2 * (1 - progress * 2)) + 0.5;
+            turnDistance.textContent = `${Math.max(0.1, distance).toFixed(1)} km`;
+
+            // 3. Simulate Speed (Should ideally come from the parent React app, but mocked here for independence)
+            const speed = Math.round(105 + (Math.random() * 10 - 5));
+            speedDisplay.textContent = speed;
+            speedDisplay.style.color = speed > 110 ? '#F87171' : '#E5E7EB'; // Red if speeding
+
+            requestAnimationFrame(updateSimulation);
+        }
+
+        // Delay to ensure rendering before starting animation loop
+        setTimeout(updateSimulation, 50);
+    </script>
+</body>
