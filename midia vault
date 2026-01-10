@@ -1,0 +1,30 @@
+
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/firebaseAdmin'; // Using Admin SDK on the backend
+import { FieldValue } from 'firebase-admin/firestore';
+
+export async function POST(req: NextRequest) {
+  if (req.method !== 'POST') {
+    return NextResponse.json({ error: 'Method Not Allowed' }, { status: 405 });
+  }
+
+  try {
+    const itemData = await req.json();
+
+    if (!itemData.title || !itemData.type || !itemData.creatorId) {
+      return NextResponse.json({ error: 'Missing required fields: title, type, creatorId' }, { status: 400 });
+    }
+
+    const docRef = await db.collection('media_vault').add({
+      ...itemData,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return NextResponse.json({ success: true, id: docRef.id }, { status: 201 });
+  } catch (error: any) {
+    console.error('Error saving to media vault:', error);
+    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+  }
+}
+
+    
