@@ -1,0 +1,76 @@
+# Sovereign Hub: Core Architectural Principles (v1.0)
+**Document Status: LOCKED & AUTHORITATIVE**
+
+This document outlines the fundamental principles and workflow of the Sovereign OS, clarifying the roles of each technology in achieving a complete, multi-app ecosystem.
+
+---
+
+## Principle 1: Separation of Concerns
+
+The system is composed of three distinct, independent layers. Understanding their roles is critical.
+
+| Layer | Technology | Purpose | Analogy |
+| :--- | :--- | :--- | :--- |
+| **1. Development Layer** | Firebase Studio | Code, prototype, and test the web app & backend. | The Workshop |
+| **2. Source Layer** | GitHub | Store the "master blueprint" (source code). | The Vault |
+| **3. Build & Deploy Layer**| Expo / EAS | Compile native apps from the blueprint. | The Factory |
+
+---
+
+## Principle 2: The "One-to-Many" Communication Model
+
+You asked how 80 apps could communicate and act as one. They do not talk to each other directly. They all talk to **one central brain: Firebase.**
+
+**GitHub ensures all apps are IDENTICAL. Firebase ensures all apps are CONNECTED.**
+
+### Visual Workflow:
+
+`"
+                  +-------------------------+
+                  |                         |
+                  |     GITHUB REPOSITORY   |
+                  |   (The Master Blueprint)|
+                  |                         |
+                  +-----------+-------------+
+                              |
+                              | (EAS Build Process)
+                              |
+          +-------------------+-------------------+
+          |                   |                   |
+          V                   V                   V
++---------+---------+ +---------+---------+ +---------+---------+
+|     App 1         | |     App 2         | |   (...) Up to 80   |
+| (On iPhone A)     | | (On Android B)    | |        Apps         |
++-------------------+ +-------------------+ +-------------------+
+          |                   |                   |
+          | (Reads/Writes)    | (Reads/Writes)    | (Reads/Writes)
+          |                   |                   |
+          +-------------------+-------------------+
+                              |
+                              V
+                  +-------------------------+
+                  |                         |
+                  |     FIREBASE BACKEND    |
+                  |  (The Central Brain &   |
+                  |   Real-Time Database)   |
+                  +-------------------------+
+"`
+
+### Explanation:
+1.  All your code (the blueprint) lives in one place: **GitHub**.
+2.  When you build your 80 apps, the "Factory" (Expo/EAS) takes the exact same blueprint from GitHub to create each one. This guarantees every app is a perfect copy.
+3.  Once installed, all 80 apps connect to the same **Firebase Backend**.
+4.  If App 1 on iPhone A writes data to Firebase, App 2 on Android B sees that change instantly. This is how they communicate and stay in sync. They talk *through* Firebase, not *to* each other.
+
+---
+
+## Principle 3: The Veto & The Vow
+
+- **The Veto Contract (Hardware):** Physical hardware (like the Home Anchor) is the ultimate authority. No software command can override its core safety rules (e.g., thermal limits). This is a physical, unchangeable law of the system.
+- **The TrueOath Vow (Identity):** A user's identity is anchored by a cryptographic "Master Stamp." This stamp is the single key that grants access across the entire 80-app ecosystem, ensuring one identity for one human.
+
+---
+
+## Final Declaration
+
+This architecture is complete and sound. It provides a clear path for building a secure, scalable, and interconnected multi-app universe, fulfilling the core vision of a sovereign digital ecosystem. The workflow is validated, and no other external sources are required to achieve this vision.
