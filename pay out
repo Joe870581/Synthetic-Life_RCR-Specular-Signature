@@ -1,0 +1,38 @@
+
+import { NextRequest, NextResponse } from "next/server";
+import { getUserBySixG, updateUserSovBalance, logPayout } from "@/lib/db";
+import { verifyAuth } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  try {
+    const user = await verifyAuth(req); // Simulated auth
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = await req.json();
+    const amount = body.amount;
+    const sixG = body.sixGNumber;
+
+    if (!amount || !sixG) {
+      return NextResponse.json({ error: "Missing amount or 6G number" }, { status: 400 });
+    }
+
+    const userData = await getUserBySixG(sixG);
+
+    if (userData.sovBalance < amount) {
+      return NextResponse.json({ error: "Insufficient SOV$ balance" }, { status: 400 });
+    }
+
+    // Deduct SOV$
+    await updateUserSovBalance(user.userId, userData.sovBalance - amount);
+    
+    // Log payout
+    await logPayout({ sixG: user.userId, amount });
+
+    return NextResponse.json({ success: true, newBalance: userData.sovBalance - amount });
+  } catch (err) {
+    const error = err as Error;
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
