@@ -1,0 +1,105 @@
+
+'use client';
+
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Loader2, CheckCircle, ExternalLink } from 'lucide-react';
+import { doc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { useFirebase } from '@/firebase';
+
+function HandoffContent() {
+    const { firestore, user } = useFirebase();
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    
+    const [status, setStatus] = useState('processing');
+    const [error, setError] = useState(null);
+
+    const productId = searchParams.get('product');
+    const amazonLink = "https://www.amazon.ca/dp/YOUR_ASIN_HERE?tag=YOUR_AMAZON_TAG-20"; // Replace with your actual ASIN and affiliate tag
+
+    useEffect(() => {
+        if (!user || !firestore || !productId) {
+            return;
+        }
+
+        const finalizeBurn = async () => {
+            try {
+                const userRef = doc(firestore, 'users', user.uid);
+                // Placeholder cost
+                const sovCost = 500; 
+
+                // Note: In a real app, use a Cloud Function for this transaction
+                // to prevent client-side manipulation.
+                await updateDoc(userRef, {
+                    hardwareStatus: 'AWAITING_INSTALL',
+                    sovBalance: increment(-sovCost),
+                    lastAction: 'HARDWARE_PURCHASE',
+                    lastPurchaseAt: serverTimestamp(),
+                });
+                
+                setStatus('redirecting');
+
+                setTimeout(() => {
+                    window.location.href = amazonLink;
+                }, 3000);
+
+            } catch (err) {
+                console.error("Finalize Burn Error:", err);
+                setError(err.message || "Failed to update your account. Please contact support.");
+                setStatus('error');
+            }
+        };
+
+        finalizeBurn();
+
+    }, [user, firestore, productId, amazonLink]);
+
+    return (
+        <div className="flex flex-col items-center justify-center h-screen bg-slate-950 text-white p-8 text-center">
+            {status === 'processing' && (
+                <>
+                    <Loader2 className="w-16 h-16 text-indigo-400 animate-spin mb-6" />
+                    <h1 className="text-3xl font-bold">Processing Your SOV$ Burn...</h1>
+                    <p className="text-slate-400 mt-2">Finalizing your access and preparing hardware link.</p>
+                </>
+            )}
+             {status === 'redirecting' && (
+                <>
+                    <CheckCircle className="w-16 h-16 text-green-400 mb-6" />
+                    <h1 className="text-3xl font-bold">SOV$ Burn Complete!</h1>
+                    <p className="text-slate-400 mt-2">You will be redirected to Amazon to finalize your hardware order.</p>
+                    <a href={amazonLink} className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-green-600 rounded-lg font-bold">
+                        Click here if you are not redirected <ExternalLink className="w-4 h-4" />
+                    </a>
+                </>
+            )}
+             {status === 'error' && (
+                <>
+                    <div className="w-16 h-16 bg-red-500/10 flex items-center justify-center rounded-full border-2 border-red-500/50 mb-6">
+                        <X className="w-10 h-10 text-red-500" />
+                    </div>
+                    <h1 className="text-3xl font-bold text-red-400">Transaction Failed</h1>
+                    <p className="text-slate-400 mt-2 max-w-md">{error}</p>
+                    <button onClick={() => router.back()} className="mt-6 px-6 py-3 bg-slate-700 rounded-lg font-bold">
+                        Go Back
+                    </button>
+                </>
+            )}
+        </div>
+    );
+}
+
+
+export default function HandoffPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex flex-col items-center justify-center h-screen bg-slate-950 text-white p-8 text-center">
+                <Loader2 className="w-16 h-16 text-indigo-400 animate-spin mb-6" />
+                <h1 className="text-3xl font-bold">Initializing...</h1>
+            </div>
+        }>
+            <HandoffContent />
+        </Suspense>
+    )
+}
