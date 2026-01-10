@@ -1,0 +1,439 @@
+
+'use client';
+
+import React, { useState, useMemo, Suspense, useContext, useCallback, useRef } from 'react';
+import { 
+  Store, Package, BarChart3, TrendingUp, Search, DollarSign, Wallet, Send, Loader2, ArrowUpRight, ShoppingCart, X, ImageIcon, Flame, Zap, Settings, MapPin, Video
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useFamilyData, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
+import { useUser, useFirestore } from '@/firebase';
+
+
+// --- UTILITY ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- SANDBOX VIEW: SUB-COMPONENTS ---
+
+const StoreIdentityForm = ({ store, onUpdate, onFileChange }) => {
+    const bannerInputRef = useRef(null);
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+            <div className="space-y-4">
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Storefront Name</label>
+                <input type="text" value={store.name} onChange={(e) => onUpdate({ ...store, name: e.target.value })} className="w-full p-4 bg-gray-50 border-none rounded-2xl text-lg font-bold" />
+                
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest pt-4">Store Description</label>
+                <textarea value={store.description} onChange={(e) => onUpdate({ ...store, description: e.target.value })} className="w-full p-4 bg-gray-50 border-none rounded-2xl text-sm min-h-[100px]" />
+            </div>
+            <div className="space-y-4">
+                 <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Banner Image</label>
+                 <label className="relative aspect-video w-full bg-gray-50 rounded-2xl flex flex-col items-center justify-center text-gray-400 border-2 border-dashed hover:border-indigo-500 cursor-pointer transition-all">
+                    <input type="file" ref={bannerInputRef} className="hidden" onChange={(e) => onFileChange(e, 'bannerImage')} accept="image/*" />
+                    {store.bannerImage ? (
+                        <img src={store.bannerImage} className="w-full h-full object-cover rounded-xl" alt="Banner preview" />
+                    ) : ( <> <ImageIcon className="w-8 h-8 mb-2" /> <span className="text-sm font-semibold">Upload Banner</span> </>)}
+                 </label>
+            </div>
+        </div>
+    )
+};
+
+const CatalogForms = ({ onAddItem, inventory }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    return (
+        <div>
+             <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 text-sm font-bold text-indigo-500 hover:text-indigo-400 transition-colors">
+                <Plus className="w-4 h-4" /> Add New Item to Catalog
+            </button>
+            <ProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAddItem={onAddItem} />
+            <div className="mt-4 grid grid-cols-2 gap-4">
+                {inventory.map(item => (
+                     <div key={item.id} className="bg-gray-100 p-3 rounded-lg border flex items-center gap-3">
+                         <div className="w-10 h-10 rounded bg-gray-200 overflow-hidden">
+                             {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-cover"/>}
+                         </div>
+                         <div className="text-xs">
+                            <p className="font-bold text-gray-800">{item.name}</p>
+                            <p className="text-indigo-600 font-semibold">{item.price} SOV$</p>
+                         </div>
+                     </div>
+                ))}
+            </div>
+        </div>
+    )
+};
+
+const AnalyticsView = ({ store, onCashOut }) => {
+    const { toast } = useToast();
+    const [isCashingOut, setIsCashingOut] = useState(false);
+
+    const kpiData = [ { label: 'Total SOV Balance', value: '1,850.75', change: '+5.2%', icon: Wallet, color: 'text-blue-500' }, { label: 'Gross Creator Revenue', value: '$1,765.25', change: 'Net after fees', icon: TrendingUp, color: 'text-green-500' }, { label: 'Platform Fees Paid (Burn)', value: '$85.05', change: '2% Burn Rate', icon: Flame, color: 'text-red-500' } ];
+    
+    const handleCashOut = async () => {
+        setIsCashingOut(true);
+        try {
+            const payoutAmount = 100; // Example amount
+            await onCashOut(payoutAmount);
+            toast({ title: 'Payout Successful!', description: `${payoutAmount} SOV$ has been cashed out.` });
+        } catch (error: any) {
+            toast({ title: 'Payout Failed', description: error.message, variant: "destructive" });
+        } finally {
+            setIsCashingOut(false);
+        }
+    };
+    
+    const StatCard = ({ title, value, change, icon: Icon, color }) => (
+        <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h4 className={`text-sm font-bold uppercase flex items-center gap-2 mb-2 ${color}`}>
+                <div className={`p-1.5 rounded-md ${color.replace('text-', 'bg-')}/20`}><Icon size={16}/></div>{title}
+            </h4>
+            <p className="text-4xl font-black text-gray-900">{value}</p>
+            <p className={`text-sm font-bold ${color}`}>{change}</p>
+        </div>
+    );
+
+    return (
+        <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {kpiData.map(item => (<StatCard key={item.label} {...item} />))}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border flex flex-col justify-center">
+                    <h4 className="text-sm font-bold uppercase text-blue-500 mb-2">Cash Out Balance</h4>
+                    <p className="text-gray-500 text-xs mb-4">Request a payout of your SOV$ balance to your linked bank account.</p>
+                     <button onClick={handleCashOut} disabled={isCashingOut} className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-blue-500 transition-colors disabled:bg-gray-400">
+                        {isCashingOut ? <Loader2 className="animate-spin" /> : <Send />}
+                        {isCashingOut ? 'Processing...' : 'Request Payout'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- CLIENT VIEW: SUB-COMPONENTS ---
+
+const ClientView = ({ activeStore, inventory, onAddToCart }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const filteredInventory = useMemo(() => {
+        if (!searchTerm) return inventory;
+        return inventory.filter(item => 
+            item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            item.description.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [inventory, searchTerm]);
+
+    const LiveVideoPanel = () => (
+        <div className="aspect-video bg-black/50 border border-slate-700 rounded-2xl flex items-center justify-center text-slate-500">
+            <Video className="w-12 h-12" />
+        </div>
+    );
+
+    const ChatMessage = ({ name, text, isOwner }) => (
+        <div className={`flex items-start gap-2.5 ${isOwner ? 'justify-end' : ''}`}>
+            {!isOwner && <div className="w-8 h-8 rounded-full bg-slate-600 flex-shrink-0" />}
+            <div className={`p-3 rounded-2xl max-w-xs text-sm ${isOwner ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-700 rounded-bl-none'}`}>
+                {!isOwner && <p className="font-bold text-blue-300 mb-1 text-xs">{name}</p>}
+                <p>{text}</p>
+            </div>
+        </div>
+    );
+    
+    const LiveChatPanel = () => (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 flex flex-col h-full">
+            <h3 className="text-sm font-bold text-white mb-3 px-1">Live Chat & Reviews</h3>
+            <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+                <ChatMessage name="Customer1" text="This looks great! Do you ship to Kingston?" isOwner={false} />
+                <ChatMessage name="Sudbury Elite Fitness" text="We do! Shipping is a flat rate of 15 SOV$." isOwner={true} />
+            </div>
+            <div className="mt-4 flex gap-2">
+                <input type="text" placeholder="Ask a question..." className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                <button className="p-3 bg-blue-600 rounded-lg text-white"><Send size={16} /></button>
+            </div>
+        </div>
+    );
+    
+    const ProductCard = ({ item, onAddToCart }) => (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-2xl overflow-hidden group">
+            <div className={`relative ${item.layout === 'top' ? 'aspect-video' : 'aspect-square'} bg-slate-900`}>
+                 {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />}
+            </div>
+            <div className="p-4">
+                <h4 className="font-bold text-white truncate">{item.name}</h4>
+                <p className="text-xs text-slate-400 line-clamp-2 h-8">{item.description}</p>
+                <div className="flex justify-between items-center mt-4">
+                    <span className="text-lg font-bold text-blue-400">{item.price} SOV$</span>
+                    <button onClick={() => onAddToCart(item)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-500">Add to Cart</button>
+                </div>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="min-h-screen w-full flex flex-col bg-slate-900 text-white p-4 md:p-8">
+            <header className="flex justify-between items-start flex-shrink-0">
+                <div>
+                     <h2 className="text-3xl font-black text-white">{activeStore.name}</h2>
+                     <div className="flex items-center gap-2 mt-2">
+                        <span className="flex items-center gap-2 px-3 py-1 bg-gray-800 rounded-full border border-slate-700">
+                            <MapPin className="w-3 h-3 text-red-500" />
+                            <span className="text-xs font-bold text-gray-300">{activeStore?.location}</span>
+                        </span>
+                        <span className="text-xs text-green-400 font-bold bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20">LIVE</span>
+                    </div>
+                </div>
+            </header>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                <div className="lg:col-span-2 space-y-4">
+                    <LiveVideoPanel />
+                </div>
+                <div className="lg:col-span-1 min-h-[400px]">
+                    <LiveChatPanel />
+                </div>
+            </div>
+            <div className="flex-grow flex flex-col min-h-0 mt-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-2xl font-bold text-white">Catalog</h3>
+                    <div className="relative w-full max-w-xs">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                        <input
+                            type="text"
+                            placeholder="Search items..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 overflow-visible">
+                    {[...filteredInventory, ...filteredInventory, ...filteredInventory].map((item, index) => <ProductCard key={`${item.id}-${index}`} item={item} onAddToCart={onAddToCart} />)}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// --- MODAL COMPONENTS ---
+
+const ProductModal = ({ isOpen, onClose, onAddItem }) => {
+    const [newItem, setNewItem] = useState({ name: '', price: '', image: null, type: 'Product', layout: 'top', description: '' });
+
+    const handleFileChange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (readEvent) => {
+                setNewItem(prev => ({...prev, image: readEvent.target.result as string}));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    
+    const handleSave = () => {
+        if (!newItem.name || !newItem.price) return;
+        onAddItem({...newItem, id: Date.now(), price: Number(newItem.price) });
+        setNewItem({ name: '', price: '', image: null, type: 'Product', layout: 'top', description: '' });
+        onClose();
+    }
+
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+            <div className="bg-white text-gray-900 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
+                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="space-y-6">
+                        <h2 className="text-3xl font-black text-gray-900">Create New Listing</h2>
+                        <div className="space-y-4">
+                            <input type="text" placeholder="Item Name" value={newItem.name} onChange={(e) => setNewItem(p => ({...p, name: e.target.value}))} className="w-full p-3 bg-gray-50 border-gray-200 border rounded-xl" />
+                            <textarea placeholder="Short Description..." value={newItem.description} onChange={(e) => setNewItem(p => ({...p, description: e.target.value}))} className="w-full p-3 bg-gray-50 border-gray-200 border rounded-xl h-24 text-sm" />
+                            <input type="number" placeholder="Price (SOV$)" value={newItem.price} onChange={(e) => setNewItem(p => ({...p, price: e.target.value}))} className="w-full p-3 bg-gray-50 border-gray-200 border rounded-xl" />
+                            <input type="file" onChange={handleFileChange} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Layout Style</h4>
+                            <div className="grid grid-cols-3 gap-2">
+                               {['left', 'right', 'top'].map(layout => (
+                                    <button key={layout} onClick={() => setNewItem(p => ({...p, layout}))} className={`p-2 rounded-lg text-xs font-bold border-2 ${newItem.layout === layout ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}>{layout}</button>
+                               ))}
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={onClose} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">Cancel</button>
+                            <button onClick={handleSave} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold">Add Item</button>
+                        </div>
+                    </div>
+                    <div className="space-y-6 flex flex-col items-center justify-center bg-gray-100 p-8 rounded-2xl">
+                         <h3 className="text-xl font-black text-gray-400 mb-4">Live Preview</h3>
+                        <div className={`relative bg-white shadow-lg rounded-2xl w-full max-w-xs ${newItem.layout === 'top' ? 'flex flex-col' : 'flex'}`}>
+                            <div className={`overflow-hidden ${newItem.layout === 'top' ? 'aspect-video rounded-t-2xl' : 'w-1/2 aspect-square rounded-l-2xl'}`}>
+                                {newItem.image ? (
+                                    <img src={newItem.image} className="w-full h-full object-cover" alt="preview"/>
+                                ) : (
+                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-400"><ImageIcon /></div>
+                                )}
+                            </div>
+                            <div className="p-4 flex-1">
+                                <h4 className="font-bold text-sm text-gray-900">{newItem.name || "Item Name"}</h4>
+                                <p className="text-xs text-gray-500 line-clamp-2">{newItem.description || "Item description will appear here..."}</p>
+                                <p className="font-bold text-indigo-600 mt-2">{newItem.price || 0} SOV</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+};
+
+
+const CheckoutModal = ({ item, onClose, onPurchase }) => {
+    if (!item) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+        <div className="bg-white text-gray-900 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
+            <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-800"><X /></button>
+            <div className="p-8">
+              <h2 className="text-3xl font-black text-gray-900 mb-4">Confirm Purchase</h2>
+              <div className="bg-gray-100 rounded-2xl p-6 flex items-center gap-6">
+                <div className="w-20 h-20 rounded-xl bg-gray-200 flex-shrink-0 overflow-hidden">
+                    {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-cover" />}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">{item.name}</h3>
+                  <p className="text-2xl font-black text-indigo-600">{item.price} SOV$</p>
+                </div>
+              </div>
+              <button onClick={() => onPurchase(item)} className="w-full mt-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-colors">
+                Complete Purchase
+              </button>
+            </div>
+        </div>
+      </div>
+    );
+};
+
+// --- MAIN APP COMPONENT ---
+
+const AppContent = () => {
+    const { familyState, updateFamilyMember } = useFamilyData();
+    const searchParams = useSearchParams();
+    const userId = searchParams.get('userId');
+    const user = useMemo(() => familyState.members[userId] || familyState.members['p1'], [userId, familyState.members]);
+
+    const [view, setView] = useState('sandbox');
+    const [activeTab, setActiveTab] = useState('store-identity');
+    const [store, setStore] = useState({
+        ownerId: user.id,
+        name: 'Sudbury Elite Fitness',
+        description: 'The premier community hub for fitness, wellness, and local athletic gear.',
+        location: 'Sudbury, ON',
+        bannerImage: 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=1200',
+        inventory: [
+            { id: 101, name: 'Elite Gym Membership', price: 85, image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800', type: 'Service', layout: 'left', description: 'Full access to our Sudbury facility.' },
+            { id: 102, name: 'Classic Logo T-Shirt', price: 35, image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800', type: 'Product', layout: 'top', description: 'High-quality cotton blend.' }
+        ]
+    });
+    const [checkoutItem, setCheckoutItem] = useState(null);
+
+    const handleFileChange = (e, field) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => setStore(s => ({...s, [field]: event.target.result}));
+            reader.readAsDataURL(file);
+        }
+    };
+    
+    const handleAddItem = (newItem) => {
+        setStore(s => ({...s, inventory: [...s.inventory, newItem]}));
+    }
+    
+    const handleCashOut = async (amount) => {
+        const response = await fetch('/api/payout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount, sixGNumber: store.ownerId })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Payout request failed');
+        }
+        updateFamilyMember(user.id, { spdBalance: result.newBalance });
+        return result;
+    };
+
+
+    if (view === 'storefront') {
+        return (
+            <div className="h-screen overflow-y-auto">
+                <ClientView activeStore={store} inventory={store.inventory} onAddToCart={setCheckoutItem} />
+                {checkoutItem && <CheckoutModal item={checkoutItem} onClose={() => setCheckoutItem(null)} onPurchase={(item) => { console.log('Purchased:', item); setCheckoutItem(null); }} />}
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col h-screen overflow-hidden">
+            <Header user={user} store={store} setView={setView} />
+            <main className="flex-1 min-h-0 overflow-y-auto">
+                <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-0">
+                    <aside className="w-64 space-y-1">
+                        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-4 mb-4">Store Management</h2>
+                        {[
+                            { id: 'store-identity', icon: Store, label: 'Store Identity' }, 
+                            { id: 'catalog-forms', icon: Package, label: 'Catalog Forms' }, 
+                            { id: 'success-analytics', icon: BarChart3, label: 'Success Analytics' }
+                        ].map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-50'}`}>
+                                <tab.icon className="w-4 h-4" /> {tab.label}
+                            </button>
+                        ))}
+                    </aside>
+                    <div className="flex-1 bg-white rounded-[2rem] border shadow-sm p-12 overflow-y-auto min-h-0">
+                         {activeTab === 'store-identity' && <StoreIdentityForm store={store} onUpdate={setStore} onFileChange={handleFileChange} />}
+                         {activeTab === 'catalog-forms' && <CatalogForms onAddItem={handleAddItem} inventory={store.inventory} />}
+                         {activeTab === 'success-analytics' && <AnalyticsView store={store} onCashOut={handleCashOut} />}
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+const Header = ({ user, store, setView }) => (
+    <header className="border-b bg-white flex-shrink-0">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-xl text-indigo-600">
+                <Zap className="w-6 h-6 fill-current" />
+                <span>SOV-UNIVERSE</span>
+            </div>
+            <div className="flex items-center gap-4">
+                 <button onClick={() => setView('storefront')} className="hidden sm:flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full border">
+                    <span className="text-xs font-bold text-gray-600">Client View</span>
+                </button>
+                <button onClick={() => setView('sandbox')} className="p-2 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 shadow-sm hover:scale-110 transition-transform">
+                    <Settings className="w-5 h-5" />
+                </button>
+                <div className="w-10 h-10 rounded-full bg-gray-900 text-white border flex items-center justify-center font-black text-xs overflow-hidden">
+                    {user && user.imageUrl ? <Image src={user.imageUrl} alt={user.name} width={40} height={40} className="w-full h-full object-cover" /> : user ? user.name.charAt(0) : 'U'}
+                </div>
+            </div>
+        </div>
+    </header>
+);
+
+const AppWrapper = () => (
+    <Suspense fallback={<div className="h-screen w-screen bg-gray-50 text-gray-900 flex items-center justify-center">Loading User Data...</div>}>
+      <FamilyDataProvider>
+        <AppContent />
+      </FamilyDataProvider>
+    </Suspense>
+);
+
+export default AppWrapper;
+
+    
