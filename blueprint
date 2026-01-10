@@ -1,0 +1,21 @@
+# **App Name**: FamilyOS
+
+## Core Features:
+
+- Role-Based Routing: Dynamically route users to the correct OS (Adult, Kid, Admin) after login based on their role.
+- Shared Calendar: A family calendar accessible to all members, with event visibility filtered based on user role and parental settings.  The app will generate the event details including a short description, using AI tool.
+- Permission Firewall: Implement Firebase security rules to restrict access to data based on user role and family ID.
+- Dynamic App Loader: A universal app shell that dynamically loads different app data and UI components based on the app ID and user role.
+- Isolated Social Zone: A dedicated social media space for kids with restricted access for adults. All kids activity including all kids video will be analyzed by our moderation tool to help protect them.
+- Family CRM: The whole family shared calendar that includes points to see where adults assign kids points to show the chore. Calendar will connect so it could be managed between events and stuff so its way less of a nightmare to maintain everyone in line at that time.
+- AI-Powered Recommendations: Based on the history events and patterns between everyone of using it there should be a tool so people that never thought what they were thinking but they would like
+
+## Style Guidelines:
+
+- Primary color: Deep blue (#3F51B5) for a trustworthy, stable feel appropriate for the OS and family focus.
+- Background color: Very light blue (#E8EAF6) for a clean and calming backdrop.
+- Accent color: Yellow-Orange (#FFAB40) to highlight important interactive elements and call to action.
+- Body and headline font: 'Inter', a neutral sans-serif, for UI elements, with 'Space Grotesk' as headline font for landing page
+- Use consistent, modern icons from a library like Material Icons, tailored to match the family or business context (depending on user role).
+- Employ a clean, card-based layout for the OS dashboards. Use a consistent grid system for app organization.
+- Subtle transitions and animations to provide feedback on user interactions.  No disruptive or unnecessary effects.
