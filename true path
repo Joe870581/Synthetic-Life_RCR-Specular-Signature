@@ -1,0 +1,263 @@
+
+'use client';
+
+import React, { useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, Cpu, Landmark, Code, Satellite, Binary, Cloud, Wifi, Phone, BookOpen, Zap, Activity, Users, Baby, History, Presentation, Loader2, QrCode, Globe, CreditCard, Power, Gamepad2 } from 'lucide-react';
+import Link from 'next/link';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
+
+
+const userApps = [
+    {
+        id: 'audit-journal',
+        href: '/login/registration/admin/dashboard/audit-login/audit-journal',
+        icon: <History className="size-8 text-primary" />,
+        title: 'Audit Journal',
+        description: 'Access the Sovereign OS audit and registry logs.',
+    },
+    {
+        id: 'admin-sandbox',
+        href: '/admin/dashboard/sandbox-audit',
+        icon: <Cpu className="size-8 text-primary" />,
+        title: 'Admin Sandbox Audit',
+        description: 'A private sandbox for the admin user.',
+    },
+    {
+        id: 'admin-studio',
+        href: '/admin/dashboard/system-settings/studio',
+        icon: <Code className="size-8 text-primary" />,
+        title: 'Admin Studio',
+        description: 'Core development and coding environment.'
+    },
+    {
+        id: 'deployment-handbook',
+        href: '/admin/dashboard/deployment-handbook',
+        icon: <BookOpen className="size-8 text-primary" />,
+        title: 'Deployment Handbook',
+        description: 'The final, unified guide for physical build and deployment.'
+    },
+    {
+        id: 'satellite-view',
+        href: '/admin/dashboard/satellite-view',
+        icon: <Satellite className="size-8 text-primary" />,
+        title: 'Satellite View',
+        description: 'Monitor live system telemetry and node status.'
+    },
+     {
+        id: 'gamerzoner',
+        href: '/shared-app/gamerzoner',
+        icon: <Gamepad2 className="size-8 text-primary" />,
+        title: 'GamerZoner',
+        description: 'Connect with gaming friends.',
+    },
+    {
+        id: 'presentation-1',
+        href: '/admin/dashboard/presentation-1',
+        icon: <Presentation className="size-8 text-primary" />,
+        title: 'Registration Cinematic',
+        description: 'The "Infinite Manifesto" intro for new user registration.'
+    },
+    {
+        id: 'presentation-2',
+        href: '/admin/dashboard/presentation-2',
+        icon: <Presentation className="size-8 text-primary" />,
+        title: 'Loading Cinematic',
+        description: 'A dynamic loading sequence for system apps.'
+    },
+    {
+        id: 'presentation-3',
+        href: '/admin/dashboard/presentation-3',
+        icon: <Presentation className="size-8 text-primary" />,
+        title: 'Genesis Launch',
+        description: 'The "SOV OS // GENESIS LAUNCH" cinematic experience.'
+    },
+    {
+        id: 'presentation-4',
+        href: '/admin/dashboard/presentation-4',
+        icon: <Presentation className="size-8 text-primary" />,
+        title: 'Login Cinematic',
+        description: 'The "AURAME // UNRESTRICTED" login experience.'
+    },
+    {
+        id: 'card-management',
+        href: '/admin/dashboard/card-management',
+        icon: <CreditCard className="size-8 text-primary" />,
+        title: 'Card Management',
+        description: 'Issue and manage Stripe virtual & physical cards.'
+    }
+];
+
+const systemProcesses = [
+    {
+        id: 'connections',
+        href: '/admin/dashboard/system-settings/connections',
+        icon: <Satellite className="size-8 text-slate-400" />,
+        title: 'Connections',
+        description: 'Monitor and manage system connectivity and networks.',
+    },
+    {
+        id: 'master-console',
+        href: '/admin/dashboard/system-settings/technology',
+        icon: <Binary className="size-8 text-slate-400" />,
+        title: 'Master Console',
+        description: 'Unified dossier for all Sovereign OS technology.',
+    },
+    {
+        id: 'sov-cloud',
+        href: '/admin/dashboard/system-settings/sovcloud',
+        icon: <Cloud className="size-8 text-slate-400" />,
+        title: 'SOV Cloud',
+        description: 'View the Sovereign Cloud master console.',
+    },
+    {
+        id: 'wireless-architecture',
+        href: '/admin/dashboard/system-settings/wireless-architecture',
+        icon: <Wifi className="size-8 text-slate-400" />,
+        title: 'Wireless Architecture',
+        description: 'Review the dual-adapter WAN/LAN hardware spec.',
+    },
+    {
+        id: 'dock-rtc-proof',
+        href: '/admin/dashboard/system-settings/dock-rtc-proof',
+        icon: <Phone className="size-8 text-slate-400" />,
+        title: 'DockRTC Proof',
+        description: 'Live demo of the Sovereign WebRTC signaling protocol.',
+    },
+    {
+        id: 'deployment-handbook-main',
+        href: '/admin/dashboard/deployment-handbook',
+        icon: <BookOpen className="size-8 text-slate-400" />,
+        title: 'Deployment Handbook',
+        description: 'The final, unified guide for physical build and deployment.',
+    },
+    {
+        id: 'sovereign-internet',
+        href: '/admin/dashboard/system-settings/sovereign-internet',
+        icon: <Globe className="size-8 text-slate-400" />,
+        title: 'Sovereign Internet',
+        description: 'Your private, secure network hub.',
+    }
+];
+
+export default function SystemSettingsPage() {
+    const firestore = useFirestore();
+    const familyCoresQuery = useMemoFirebase(() => firestore ? collection(firestore, 'familyCores') : null, [firestore]);
+    const { data: familyCores, isLoading: isLoadingCores } = useCollection(familyCoresQuery);
+
+    const totalLiveUsers = useMemo(() => {
+        if (!familyCores) return 0;
+        return familyCores.reduce((acc, core) => {
+            const registeredMembers = Object.values(core.members || {}).filter((m: any) => m.name && m.name !== 'Awaiting User...').length;
+            return acc + registeredMembers;
+        }, 0);
+    }, [familyCores]);
+
+
+    return (
+        <div className="space-y-6 relative min-h-screen pb-24">
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Welcome, Admin!</h1>
+                <p className="text-muted-foreground">
+                    This is your master control panel for the Sovereign OS.
+                </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {userApps.map((section) => (
+                    <Card key={section.id} className="flex flex-col">
+                        <CardHeader>
+                            <div className="flex items-start gap-4">
+                                <div className="p-2 bg-primary/10 rounded-full">
+                                    {section.icon}
+                                </div>
+                                <div>
+                                    <CardTitle className="text-xl font-headline">{section.title}</CardTitle>
+                                    <CardDescription className="mt-1">{section.description}</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="flex-grow" />
+                        <div className="p-6 pt-0">
+                            <Button asChild variant="outline" className="w-full">
+                                <Link href={section.href}>
+                                    Go to {section.title}
+                                    <ArrowRight className="ml-2 size-4" />
+                                </Link>
+                            </Button>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+
+            {/* System Process Status Bar */}
+            <TooltipProvider>
+                <div className="fixed bottom-4 right-4 z-50">
+                    <Card className="bg-gray-900/50 backdrop-blur-md border-gray-700">
+                        <CardContent className="p-2">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 flex items-center gap-3">
+                                    <div className="text-center">
+                                        {isLoadingCores ? <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" /> : <p className="text-lg font-bold text-white">{totalLiveUsers}</p>}
+                                        <p className="text-xs font-bold text-gray-400 uppercase">Live Users</p>
+                                    </div>
+                                    <div className="text-center">
+                                        {isLoadingCores ? <Loader2 className="h-4 w-4 animate-spin text-gray-400 mx-auto" /> : <p className="text-lg font-bold text-white">{familyCores?.length || 0}</p>}
+                                        <p className="text-xs font-bold text-gray-400 uppercase">Sandboxes</p>
+                                    </div>
+                                </div>
+                                <div className="w-px h-8 bg-gray-700" />
+                                {systemProcesses.map((process) => (
+                                    <Tooltip key={process.id}>
+                                        <TooltipTrigger asChild>
+                                            <Link href={process.href}>
+                                                <div className="relative p-2 rounded-lg hover:bg-gray-700/50 cursor-pointer">
+                                                    {process.icon}
+                                                    <div className="absolute top-0 right-0 -mt-1 -mr-1 flex items-center gap-1">
+                                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Live"></div>
+                                                    </div>
+                                                </div>
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="bg-gray-900 border-gray-700 text-white">
+                                            <p className="font-bold">{process.title}</p>
+                                            <p className="text-xs text-gray-400">Status: Operational</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            </TooltipProvider>
+
+            {/* Switch Templates Dropdown */}
+            <div className="fixed bottom-4 left-4 z-50">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="bg-gray-900/50 backdrop-blur-md border-gray-700">
+                      Switch Templates
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuLabel>View As</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                        <Link href="/adult-app/adults-hub/p1">
+                            <Users className="mr-2" /> Adult OS Mode
+                        </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                        <Link href="/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/client-app-blueprints/kids-os-mode/c1">
+                            <Baby className="mr-2" /> Child OS Mode
+                        </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </div>
+    );
+}
