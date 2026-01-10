@@ -1,0 +1,497 @@
+'use client';
+
+import React, { Suspense } from 'react';
+import { FirebaseClientProvider } from '@/firebase';
+import { Toaster } from '@/components/ui/toaster';
+
+// This layout ensures that any page within its scope, including video-creator,
+// is wrapped with the necessary Firebase context provider.
+
+export default function StudioLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    // The Suspense boundary is important for client-side providers.
+    <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading Studio...</div>}>
+      <FirebaseClientProvider>
+        {children}
+        <Toaster />
+      </FirebaseClientProvider>
+    </Suspense>
+  );
+}
+
+
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback, Suspense, useMemo } from 'react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { Mic, StopCircle, Play, Trash2, Download, Loader2, Video, Volume2, Upload, ChevronLeft, ChevronRight, Scissors, Ruler, Plus, Minus, MousePointer2, Layers, Key, UploadCloud, Folder, Sparkles, Music, Radio, Disc, Palette, Film, Gamepad2, Save, FileUp, Zap, Link as LinkIcon, Code } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AudioClip, AudioTrackEngine } from '@/lib/audio-engine';
+import { useFirebase, useUser } from '@/firebase';
+
+// --- Global Variables & Constants ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const PX_PER_SECOND_DEFAULT = 60;
+const PX_PER_SECOND_MAX = 200;
+const PX_PER_SECOND_MIN = 10;
+const TRACK_HEIGHT_PX = 80;
+
+// --- Mock Data ---
+const initialClips: AudioClip[] = [
+  { id: 'c3', trackId: 't2', name: 'Background Music', start: 0, duration: 15, color: 'bg-green-600', source: 'vault_audio_1', url: '/audio/background-music.wav', offset: 0, gain: 0.7, pitch: 1, waveform: 'M0,50 Q25,20 50,50 T100,50' },
+  { id: 'c1', trackId: 't1', name: 'Intro Vocals', start: 2, duration: 8, color: 'bg-indigo-600', source: 'vault_123', url: '/audio/voice-over.wav', offset: 0, gain: 1, pitch: 1, waveform: 'M0,50 Q25,0 50,50 T100,50' },
+];
+
+const initialTracks = [
+  { id: 't1', name: 'Vocals', type: 'audio' },
+  { id: 't2', name: 'Music', type: 'audio' },
+  { id: 't3', name: 'Sound FX', type: 'audio' },
+];
+
+const initialKeyframes = {
+  c1: { opacity: [{ time: 0, value: 100 }, { time: 3, value: 50 }], zoom: [{ time: 0, value: 100 }, { time: 5, value: 150 }], },
+  c2: { opacity: [{ time: 0, value: 100 }, { time: 1, value: 100 }], position: [{ time: 0, value: { x: 0, y: 0 } }, { time: 2, value: { x: 50, y: 50 } }], }
+};
+
+// Debounce function
+const debounce = (func, delay) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), delay);
+  };
+};
+
+const StudioBootOverlay = () => (
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center animate-in fade-in duration-700">
+      <div className="text-center space-y-8">
+        <div className="relative">
+          <div className="w-24 h-24 mx-auto rounded-full bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center shadow-[0_0_50px_rgba(79,70,229,0.3)]">
+            <Zap className="w-10 h-10 text-indigo-400 animate-pulse" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-black tracking-[0.2em] uppercase italic text-white">Sovereign<span className="text-indigo-500">Studio</span></h1>
+          <div className="flex items-center justify-center space-x-3 text-[10px] font-mono text-indigo-400/60 tracking-[0.5em]">
+            <span>SYSTEM ONLINE · REALTIME ENGINE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+);
+
+
+const usePlaybackEngine = (clips, setClips) => {
+  const [playhead, setPlayhead] = useState({ time: 0, isPlaying: false });
+  const videoRefs = useRef({});
+  const audioRefs = useRef({});
+  const animationFrameRef = useRef<number>();
+
+  const togglePlayback = () => {
+    setPlayhead(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
+  };
+
+  useEffect(() => {
+    let lastTime = performance.now();
+
+    const tick = (now: number) => {
+      if (playhead.isPlaying) {
+        const delta = (now - lastTime) / 1000;
+        lastTime = now;
+
+        setPlayhead(prev => {
+          const maxTime = Math.max(...clips.map(c => c.start + c.duration), 30);
+          if (prev.time + delta >= maxTime) {
+            return { ...prev, time: maxTime, isPlaying: false };
+          }
+          return { ...prev, time: prev.time + delta };
+        });
+      }
+      animationFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(animationFrameRef.current);
+  }, [playhead.isPlaying, clips]);
+
+  useEffect(() => {
+    clips.forEach(clip => {
+      const mediaEl = clip.type === 'video' ? videoRefs.current[clip.id] : audioRefs.current[clip.id];
+      if (!mediaEl) return;
+
+      const localTime = playhead.time - clip.start;
+      const isClipActive = localTime >= 0 && localTime <= clip.duration;
+
+      if (isClipActive) {
+        if (Math.abs(mediaEl.currentTime - localTime) > 0.15) {
+          mediaEl.currentTime = localTime;
+        }
+        if (playhead.isPlaying && mediaEl.paused) {
+          mediaEl.play().catch(e => console.error("Playback error:", e));
+        } else if (!playhead.isPlaying && !mediaEl.paused) {
+          mediaEl.pause();
+        }
+      } else {
+        if (!mediaEl.paused) {
+          mediaEl.pause();
+        }
+      }
+    });
+
+    const activeVideoClip = clips.find(c => c.type === 'video' && playhead.time >= c.start && playhead.time < c.start + c.duration);
+    const previewVideo = document.getElementById('preview-video') as HTMLVideoElement;
+    if (previewVideo) {
+      if (activeVideoClip) {
+        if (previewVideo.src !== activeVideoClip.url) {
+          previewVideo.src = activeVideoClip.url;
+        }
+        const localTime = playhead.time - activeVideoClip.start;
+        if (Math.abs(previewVideo.currentTime - localTime) > 0.15) {
+          previewVideo.currentTime = localTime;
+        }
+        if (playhead.isPlaying && previewVideo.paused) {
+          previewVideo.play().catch(e => {});
+        } else if (!playhead.isPlaying && !previewVideo.paused) {
+          previewVideo.pause();
+        }
+      } else {
+        if (!previewVideo.paused) previewVideo.pause();
+      }
+    }
+
+  }, [playhead.time, playhead.isPlaying, clips]);
+
+  return { playhead, setPlayhead, videoRefs, audioRefs, togglePlayback };
+};
+
+// --- React Components ---
+
+const ClipComponent = React.memo(({ clip, zoomLevel, startDrag, startTrim, selected, trackType, handleClipClick }: { clip: AudioClip, zoomLevel: number, startDrag: any, startTrim: any, selected: boolean, handleClipClick: any, trackType: string }) => {
+    const width = clip.duration * zoomLevel;
+    const left = clip.start * zoomLevel;
+    const isAudio = trackType === 'audio';
+
+    return (
+      <div
+        draggable
+        className="absolute rounded-lg cursor-pointer transition-all duration-150 ease-out flex items-center justify-center overflow-hidden group"
+        style={{
+          left: `${left}px`, width: `${width}px`, height: `${TRACK_HEIGHT_PX - 20}px`, top: '10px',
+          backgroundColor: clip.color,
+          boxShadow: `0 4px 15px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)`,
+          border: selected ? '2px solid #ff7f50' : '1px solid rgba(0,0,0,0.2)',
+          zIndex: selected ? 20 : 10,
+        }}
+        onClick={(e) => handleClipClick(e, clip.id)}
+        onDragStart={(e) => startDrag(e, clip)}
+      >
+        <span className="text-xs font-semibold text-white/80 select-none truncate px-2">{clip.name}</span>
+        {isAudio && clip.waveform && <AudioWaveform waveform={clip.waveform}/>}
+
+        <span className="absolute left-1 bottom-0 text-[10px] font-mono text-white/70 bg-black/50 px-1 rounded-sm">
+            {clip.start.toFixed(1)}s
+        </span>
+        <span className="absolute right-1 bottom-0 text-[10px] font-mono text-white/70 bg-black/50 px-1 rounded-sm">
+            {(clip.start + clip.duration).toFixed(2)}s
+        </span>
+        
+        {selected && (
+          <>
+            <div data-trimmer="left" onMouseDown={(e) => startTrim(e, clip, 'left')} onTouchStart={(e) => startTrim(e, clip, 'left')} className="absolute left-0 top-0 bottom-0 w-4 cursor-ew-resize bg-white/20 hover:bg-[#ff7f50] transition-colors rounded-l-lg z-30 opacity-80" />
+            <div data-trimmer="right" onMouseDown={(e) => startTrim(e, clip, 'right')} onTouchStart={(e) => startTrim(e, clip, 'right')} className="absolute right-0 top-0 bottom-0 w-4 cursor-ew-resize bg-white/20 hover:bg-[#ff7f50] transition-colors rounded-r-lg z-30 opacity-80" />
+          </>
+        )}
+      </div>
+    );
+});
+ClipComponent.displayName = 'ClipComponent';
+  
+const TimelineRuler = React.memo(({ maxTime, playhead, zoomLevel }) => {
+    const secondsToTimecode = (s) => {
+        const mins = Math.floor(s / 60);
+        const secs = Math.floor(s % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+    const marks = useMemo(() => {
+        const tickInterval = zoomLevel > 75 ? 1 : (zoomLevel > 20 ? 5 : 10);
+        const numMarks = Math.ceil(maxTime / tickInterval);
+        return Array.from({ length: numMarks + 1 }, (_, i) => i * tickInterval);
+    }, [maxTime, zoomLevel]);
+
+    return (
+        <div className="h-8 bg-gray-800 flex items-center relative px-2 overflow-hidden border-b border-gray-700/50 select-none">
+            <div className="h-full relative" style={{ width: `${maxTime * zoomLevel}px` }}>
+                {marks.map((time) => {
+                    const left = time * zoomLevel;
+                    return (
+                        <div key={time} className="absolute h-full pointer-events-none" style={{ left: `${left}px` }}>
+                            <div className="w-px h-full bg-gray-700" />
+                            <span className="absolute -top-1 -translate-x-1/2 text-[10px] text-gray-400 font-mono">
+                                {secondsToTimecode(time)}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+});
+TimelineRuler.displayName = 'TimelineRuler';
+
+const MediaVault = ({ onUploadClick, media, onDragStart }) => (
+    <div className="h-full bg-gray-900 border-l border-gray-700 p-3 flex flex-col space-y-4">
+      <h3 className="font-bold text-lg text-white px-2">Media Vault</h3>
+      <Button onClick={onUploadClick} className="w-full">
+        <UploadCloud className="w-4 h-4 mr-2" /> Upload Media
+      </Button>
+      <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+        {media.map((item, index) => (
+          <div 
+            key={item.id || index} 
+            draggable 
+            onDragStart={(e) => onDragStart(e, item)}
+            className="p-2 bg-gray-800 rounded-lg flex items-center gap-3 cursor-grab active:cursor-grabbing border border-gray-700"
+          >
+            <div className="w-16 h-10 bg-gray-700 rounded-md overflow-hidden relative">
+              {item.thumbnail && <img src={item.thumbnail} alt={item.name} className="w-full h-full object-cover" />}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+              <Play className="absolute bottom-1 left-1 w-3 h-3 text-white/70" />
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-semibold truncate">{item.name}</p>
+              <p className="text-[10px] text-gray-400">{item.duration.toFixed(2)}s</p>
+            </div>
+          </div>
+        ))}
+        {media.length === 0 && <p className="text-xs text-center text-gray-500 p-4">Your vault is empty.</p>}
+      </div>
+    </div>
+);
+
+const KeyframeEditor = ({ selectedClip, keyframes, setKeyframes }) => {
+  if (!selectedClip) return <div className="p-4 text-center text-gray-500">Select a clip to edit keyframes.</div>;
+  return <div className="space-y-4 text-gray-200"><h3 className="text-lg font-semibold text-yellow-400">Keyframe Animation</h3></div>;
+};
+
+const VfxPanel = ({ clip, userId }) => {
+  if (!clip) return <div className="p-4 text-center text-gray-500">Select a clip for VFX.</div>;
+  return (
+    <div className="space-y-4 p-4 text-gray-200">
+      <h3 className="text-lg font-semibold text-cyan-400">Real VFX Panels</h3>
+      <Link href={`/shared-app/audio-studio?userId=${userId}`} passHref>
+        <Button variant="outline" className="w-full border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300">
+          <Music className="w-4 h-4 mr-2"/>
+          Create Your Own
+        </Button>
+      </Link>
+    </div>
+  );
+};
+
+const CompositorPanel = ({ clip }) => {
+  if (!clip) return <div className="p-4 text-center text-gray-500">Select a clip for Composition.</div>;
+  return <div className="space-y-4 p-4 text-gray-200"><h3 className="text-lg font-semibold text-pink-400">Layer Compositor</h3></div>;
+};
+
+
+const PreviewCanvas = React.memo(() => {
+    return (
+        <div className="w-full h-full bg-black flex flex-col justify-center items-center relative rounded-lg overflow-hidden shadow-2xl">
+            <video id="preview-video" className="w-full h-full object-contain" muted playsInline />
+        </div>
+    );
+});
+PreviewCanvas.displayName = "PreviewCanvas";
+
+const AudioWaveform = React.memo(({ waveform }) => {
+    return (
+        <svg className="w-full h-full absolute top-0 left-0 opacity-75 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d={waveform} fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.5)" strokeWidth="1" vectorEffect="non-scaling-stroke"/>
+        </svg>
+    );
+});
+AudioWaveform.displayName = "AudioWaveform";
+  
+const VideoCreatorPage = () => {
+    const { toast } = useToast();
+    const { user, firestore } = useFirebase();
+    const [booting, setBooting] = useState(true);
+    const [activeTab, setActiveTab] = useState('keyframes');
+    const [zoomLevel, setZoomLevel] = useState(PX_PER_SECOND_DEFAULT);
+    const [tracks, setTracks] = useState(initialTracks);
+    const [clips, setClips] = useState(initialClips);
+    const [keyframes, setKeyframes] = useState(initialKeyframes);
+    const [selectedClip, setSelectedClip] = useState(null);
+    const { playhead, setPlayhead, videoRefs, audioRefs, togglePlayback } = usePlaybackEngine(clips, setClips);
+
+    const dragState = useRef(null);
+  
+    const handleClipClick = (e, clipId) => {
+        e.stopPropagation();
+        setSelectedClip(clips.find(c => c.id === clipId));
+    };
+    
+    const startDrag = (e, clip) => {
+        e.dataTransfer.setData('application/json', JSON.stringify(clip));
+        dragState.current = {
+            clipId: clip.id,
+            startX: e.clientX,
+            startLeft: clip.start * zoomLevel,
+            initialStart: clip.start,
+        };
+    };
+
+    const startTrim = (e, clip, handle) => {
+        e.stopPropagation();
+        dragState.current = {
+            clipId: clip.id,
+            handle,
+            startX: e.clientX,
+            initialStart: clip.start,
+            initialDuration: clip.duration,
+        };
+    };
+
+    const handleMouseMove = useCallback((e) => {
+        if (!dragState.current) return;
+
+        const dx = e.clientX - dragState.current.startX;
+        const timeDelta = dx / zoomLevel;
+
+        setClips(prev => prev.map(c => {
+            if (c.id !== dragState.current.clipId) return c;
+            const newClip = { ...c };
+            if (dragState.current.handle === 'left') {
+                const newStart = Math.max(0, dragState.current.initialStart + timeDelta);
+                const durationChange = c.start - newStart;
+                newClip.start = newStart;
+                newClip.duration = Math.max(0.5, c.duration + durationChange);
+            } else if (dragState.current.handle === 'right') {
+                newClip.duration = Math.max(0.5, dragState.current.initialDuration + timeDelta);
+            } else {
+                newClip.start = Math.max(0, dragState.current.initialStart + timeDelta);
+            }
+            return newClip;
+        }));
+    }, [zoomLevel]);
+    
+    const handleMouseUp = useCallback(() => {
+        dragState.current = null;
+    }, []);
+
+    const handleDrop = (e, trackId) => {
+        e.preventDefault();
+        const timeline = e.currentTarget.getBoundingClientRect();
+        const dropPosition = (e.clientX - timeline.left) / zoomLevel;
+        const clipData = JSON.parse(e.dataTransfer.getData('application/json'));
+
+        setClips(prev => {
+            if(prev.find(c => c.id === clipData.id)) { // Move existing clip
+                return prev.map(c => c.id === clipData.id ? {...c, trackId, start: dropPosition } : c);
+            }
+            return [...prev, { ...clipData, id: `clip_${Date.now()}`, trackId, start: dropPosition }];
+        });
+    };
+
+    const maxTimelineTime = useMemo(() => {
+        return Math.max(30, ...clips.map(c => c.start + c.duration));
+    }, [clips]);
+    
+    useEffect(() => {
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [handleMouseMove, handleMouseUp]);
+    
+    useEffect(() => {
+        const timer = setTimeout(() => setBooting(false), 1500);
+        return () => clearTimeout(timer);
+    }, []);
+    
+    if (booting) return <StudioBootOverlay />;
+
+    return (
+        <div className="h-full w-full bg-slate-950 flex flex-col overflow-hidden">
+            {clips.map(clip => {
+                if(clip.type === 'video') {
+                    return <video key={clip.id} ref={el => videoRefs.current[clip.id] = el} src={clip.url} muted playsInline style={{display: 'none'}} />
+                }
+                if(clip.type === 'audio') {
+                    return <audio key={clip.id} ref={el => audioRefs.current[clip.id] = el} src={clip.url} style={{display: 'none'}} />
+                }
+                return null;
+            })}
+
+            <header className="h-14 flex items-center justify-between px-4 border-b border-gray-800 flex-shrink-0">
+                <h1 className="font-bold tracking-wide">Sovereign Studio</h1>
+                <div className="flex items-center gap-4">
+                    <Button onClick={togglePlayback} className="w-24">
+                        {playhead.isPlaying ? <><StopCircle className="mr-2"/>Stop</> : <><Play className="mr-2"/>Play</>}
+                    </Button>
+                    <div className="flex items-center gap-2 text-xs font-mono text-cyan-400">
+                        <span>{playhead.time.toFixed(2)}s</span>
+                        <span>/</span>
+                        <span>{maxTimelineTime.toFixed(2)}s</span>
+                    </div>
+                </div>
+            </header>
+
+            <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-col flex-1">
+                    <div className="h-[55%] p-4">
+                        <PreviewCanvas />
+                    </div>
+                    <div className="flex-1 overflow-auto bg-gray-900 border-t border-gray-800" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onTouchMove={handleMouseMove} onTouchEnd={handleMouseUp}>
+                        <TimelineRuler maxTime={maxTimelineTime} playhead={playhead.time} zoomLevel={zoomLevel} />
+                        <div className="relative">
+                            {tracks.map((track) => (
+                                <div key={track.id} className="relative border-b border-gray-800" style={{ height: `${TRACK_HEIGHT_PX}px` }} onDragOver={e => e.preventDefault()} onDrop={(e) => handleDrop(e, track.id)}>
+                                   <div className="absolute top-2 left-2 text-xs font-bold text-gray-500 bg-gray-900/50 px-2 py-1 rounded">{track.name}</div>
+                                   {clips.filter(c => c.trackId === track.id).map(clip => (
+                                      <ClipComponent key={clip.id} clip={clip} zoomLevel={zoomLevel} startDrag={startDrag} startTrim={startTrim} selected={selectedClip?.id === clip.id} trackType={track.type} handleClipClick={handleClipClick} />
+                                   ))}
+                                </div>
+                            ))}
+                            <div className="absolute top-0 bottom-0 w-px bg-yellow-400 pointer-events-none" style={{ left: `${playhead.time * zoomLevel}px` }} />
+                        </div>
+                    </div>
+                </div>
+
+                <aside className="w-[320px] border-l border-gray-800 flex flex-col">
+                    <MediaVault onUploadClick={() => {}} media={initialClips} onDragStart={startDrag} />
+                    <div className="border-t border-gray-800">
+                        <div className="flex border-b border-gray-800">
+                            <button onClick={() => setActiveTab('keyframes')} className={`flex-1 p-2 text-xs font-bold ${activeTab === 'keyframes' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>Keyframes</button>
+                            <button onClick={() => setActiveTab('vfx')} className={`flex-1 p-2 text-xs font-bold ${activeTab === 'vfx' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>VFX</button>
+                            <button onClick={() => setActiveTab('compositor')} className={`flex-1 p-2 text-xs font-bold ${activeTab === 'compositor' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>Compositor</button>
+                        </div>
+                         <div className="p-2 overflow-y-auto">
+                            {activeTab === 'keyframes' && <KeyframeEditor selectedClip={selectedClip} keyframes={keyframes} setKeyframes={setKeyframes}/>}
+                            {activeTab === 'vfx' && <VfxPanel clip={selectedClip} userId={user?.uid}/>}
+                            {activeTab === 'compositor' && <CompositorPanel clip={selectedClip}/>}
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    );
+};
+
+const App = () => {
+    return (
+        <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" /></div>}>
+            <VideoCreatorPage />
+        </Suspense>
+    );
+};
+
+export default App;
