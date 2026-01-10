@@ -1,0 +1,358 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, useContext } from 'react';
+import { 
+  Cpu, 
+  BrainCircuit, 
+  Search, 
+  ImageIcon, 
+  Gamepad2, 
+  ShoppingBag, 
+  Plus,
+  X,
+  Radio,
+  Film,
+  User,
+  MessageSquare,
+  Phone,
+  Globe
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
+
+
+// --- MOCK DATA ---
+const defaultShortcuts = [
+    { id: 'mysphere', name: 'MySphere OS', url: '#', icon: <Cpu className="w-5 h-5" /> },
+    { id: 'chatgpt', name: 'ChatGPT', url: '#', icon: <BrainCircuit className="w-5 h-5 text-green-500" /> },
+    { id: 'persona', name: 'Persona Brow...', url: '#', icon: <User className="w-5 h-5 text-purple-500" /> },
+];
+
+const mockImageData = [
+  {type: 'image', url: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=1080'},
+  {type: 'image', url: 'https://images.unsplash.com/photo-1542831371-29b0f74f9713?q=80&w=1080'},
+  {type: 'image', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1080'},
+  {type: 'image', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1080'},
+];
+
+const mockWebData = [
+    {type: 'web', title: 'Sovereign OS Docs', url: 'https://firebase.google.com/docs', description: 'Official documentation for the core system architecture.'},
+    {type: 'web', title: 'Nexus Mods', url: 'https://www.nexusmods.com/', description: 'Community-driven modifications and applets.'},
+    {type: 'web', title: 'Reddit - r/SovereignOS', url: 'https://www.reddit.com/', description: 'Community discussion and support.'},
+    {type: 'web', title: 'Github - Core Kernel', url: 'https://github.com', description: 'The open-source kernel for the OS.'},
+];
+
+const mockGameData = [
+    { id: 'g1', name: 'Starfield', image: 'https://images.unsplash.com/photo-1587311549403-a0786f4327e5?q=80&w=800', url: 'https://www.google.com/search?q=Starfield' },
+    { id: 'g2', name: 'Cyberpunk 2077', image: 'https://images.unsplash.com/photo-1605021245224-42b785b3a32f?q=80&w=800', url: 'https://www.google.com/search?q=Cyberpunk+2077' },
+];
+
+const mockAppData = [
+    { id: 'a1', name: 'Discord', icon: <MessageSquare />, url: 'https://discord.com/app' },
+    { id: 'a2', name: 'Spotify', icon: <Radio />, url: 'https://open.spotify.com/' },
+    { id: 'a3', name: 'Netflix', icon: <Film />, url: 'https://www.netflix.com' },
+];
+
+
+const AppContent = (props) => {
+    const searchParams = useSearchParams();
+    const initialQuery = searchParams.get('search') || '';
+
+    const [query, setQuery] = useState(initialQuery);
+    const [isSearching, setIsSearching] = useState(!!initialQuery);
+    const [activeFilter, setActiveFilter] = useState('all');
+
+    useEffect(() => {
+        if(initialQuery) {
+            handleSearch(initialQuery);
+        }
+    }, [initialQuery]);
+    
+    const handleSearch = (searchQuery) => {
+        setQuery(searchQuery);
+        setActiveFilter('all');
+        setIsSearching(true);
+    };
+    
+    const AllResultsView = ({ onFilterChange }) => (
+      <div className="grid grid-cols-2 gap-6">
+        <div 
+            className="col-span-2 bg-gray-800/30 rounded-2xl p-6 border border-white/5 cursor-pointer hover:bg-gray-800/50"
+            onClick={() => onFilterChange('images')}
+        >
+          <h3 className="font-bold text-lg mb-2">Images</h3>
+          <div className="grid grid-cols-4 gap-2">
+            {mockImageData.map((img, i) => <img key={i} src={img.url} className="aspect-square object-cover rounded-lg" alt={`Image ${''+i+1}`} />)}
+          </div>
+        </div>
+        <div 
+            className="bg-gray-800/30 rounded-2xl p-6 border border-white/5 cursor-pointer hover:bg-gray-800/50"
+            onClick={() => onFilterChange('games')}
+        >
+          <h3 className="font-bold text-lg mb-2">Games</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {mockGameData.map(game => <img key={game.id} src={game.image} className="aspect-video object-cover rounded-lg" alt={game.name} />)}
+          </div>
+        </div>
+        <div 
+            className="bg-gray-800/30 rounded-2xl p-6 border border-white/5 cursor-pointer hover:bg-gray-800/50"
+            onClick={() => onFilterChange('app-store')}
+        >
+          <h3 className="font-bold text-lg mb-2">Apps</h3>
+           <div className="grid grid-cols-3 gap-2">
+             {mockAppData.map(app => <div key={app.id} className="aspect-square bg-gray-700/50 rounded-lg flex items-center justify-center text-gray-400">{app.icon}</div>)}
+          </div>
+        </div>
+      </div>
+    );
+    
+    const ImagesView = () => (
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+            {mockImageData.map((img, i) => (
+                <div key={i} className="mb-4 break-inside-avoid relative group">
+                    <img src={img.url} alt={`Image ${''+i+1}`} className="rounded-lg shadow-md" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                         <p className="text-xs text-white font-bold truncate">Image Result {i+1}</p>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+    
+    const WebView = () => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {mockWebData.map((site, i) => (
+                <div key={i} className="bg-gray-800/50 p-4 rounded-lg border border-white/5 hover:bg-gray-800/80 group">
+                    <p className="font-bold text-sm text-blue-400 group-hover:underline">{site.title}</p>
+                    <p className="text-xs text-gray-400 mt-1">{site.description}</p>
+                    <p className="text-xs text-green-500/50 font-mono mt-2">{site.url}</p>
+                </div>
+            ))}
+        </div>
+    );
+    
+    const GamesView = () => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {mockGameData.map(game => (
+                <div key={game.id} className="bg-gray-800/50 rounded-lg overflow-hidden group">
+                    <img src={game.image} className="w-full h-40 object-cover" alt={game.name} />
+                    <div className="p-4">
+                        <h4 className="font-bold text-white">{game.name}</h4>
+                        <p className="text-xs text-gray-400 hover:underline mt-2">Launch Game</p>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+    
+    const AppStoreView = () => (
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {mockAppData.map(app => (
+                <div key={app.id} className="aspect-square bg-gray-800/50 rounded-xl flex flex-col items-center justify-center gap-2 p-2">
+                    <div className="w-12 h-12 bg-gray-700/50 rounded-lg flex items-center justify-center text-gray-400 text-2xl">{app.icon}</div>
+                    <p className="text-xs font-semibold">{app.name}</p>
+                </div>
+            ))}
+        </div>
+    );
+
+    const IPCallView = () => {
+        const [sites, setSites] = useState([]);
+        const [siteName, setSiteName] = useState('');
+        const [siteUrl, setSiteUrl] = useState('');
+    
+        const handleAddSite = (e) => {
+            e.preventDefault();
+            if(!siteName.trim() || !siteUrl.trim()) return;
+            setSites(prev => [...prev, {id: Date.now(), name: siteName, url: siteUrl, location: 'Local Network'}]);
+            setSiteName('');
+            setSiteUrl('');
+        };
+    
+        return (
+            <div className="max-w-2xl mx-auto">
+                <h3 className="font-bold text-lg mb-4 text-center">Custom IP Call Links</h3>
+                <form onSubmit={handleAddSite} className="bg-gray-800/30 rounded-2xl p-4 border border-white/5 space-y-3 mb-6">
+                    <input type="text" value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="Custom Site Name (e.g. My Movie Server)" className="w-full bg-gray-900/50 border border-gray-700 rounded-lg p-3 text-sm" />
+                    <input type="url" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} placeholder="URL (e.g. https://plex.tv)" className="w-full bg-gray-900/50 border border-gray-700 rounded-lg p-3 text-sm" />
+                    <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg text-sm">Add & Approve Site</button>
+                </form>
+                <div className="space-y-3">
+                    {sites.map(site => (
+                        <div key={site.id} className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 cursor-pointer">
+                            <div>
+                                <p className="font-bold text-sm">{site.name}</p>
+                                <p className="text-xs text-gray-500">{site.location}</p>
+                            </div>
+                            <span className="text-xs text-green-400 font-mono">ONLINE</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const renderResultsContent = () => {
+        switch (activeFilter) {
+            case 'web': return <WebView />;
+            case 'images': return <ImagesView />;
+            case 'games': return <GamesView />;
+            case 'app-store': return <AppStoreView />;
+            case 'ip-call': return <IPCallView />;
+            case 'all':
+            default:
+                return <AllResultsView onFilterChange={setActiveFilter} />;
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-900 text-gray-800 dark:text-white flex flex-col p-4 transition-colors duration-500 relative">
+            <motion.div
+                className="fixed inset-0 z-0 pointer-events-none"
+                animate={{ opacity: isSearching ? 1 : 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <div className="absolute inset-0 bg-gradient-to-tr from-indigo-900/40 via-transparent to-blue-900/40" />
+            </motion.div>
+
+            <AnimatePresence mode="wait">
+                {!isSearching ? (
+                    <SearchView onSearch={handleSearch} />
+                ) : (
+                    <motion.div key="results" initial={{opacity:0}} animate={{opacity:1}}>
+                      <ResultsContainer query={query} onSearch={handleSearch} activeFilter={activeFilter} onFilterChange={setActiveFilter}>
+                          {renderResultsContent()}
+                      </ResultsContainer>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+const SearchView = ({ onSearch })=>{
+    const [query, setQuery] = useState('');
+    const [isFocused, setIsFocused] = useState(false);
+    
+    const handleSubmit = (e)=>{
+        e.preventDefault();
+        if (query.trim()) {
+            onSearch(query);
+        }
+    };
+    return (
+        <motion.div
+            key="search-view"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className="flex flex-col items-center justify-center w-full h-full"
+        >
+            <div id="brand-area" className={`text-center mb-16 transition-all duration-700 ${isFocused || query ? 'opacity-0 -translate-y-12' : ''}`}>
+                <h1 className="text-8xl font-light tracking-[0.4em] text-white">AURAME</h1>
+            </div>
+
+            <div id="search-container" className="search-wrap w-full max-w-2xl">
+                <form onSubmit={handleSubmit}>
+                    <div className="glass-search relative bg-black/50 backdrop-blur-xl border border-white/10 rounded-2xl p-2 flex items-center shadow-2xl">
+                        <Search className="text-white/20 mx-4" />
+                        <input
+                            id="main-input"
+                            type="text" 
+                            placeholder="Search Aurame or type a URL" 
+                            className="bg-transparent focus:outline-none w-full p-4 text-lg text-white placeholder:text-white/20"
+                            autoComplete="off"
+                            value={query}
+                            onFocus={() => setIsFocused(true)}
+                            onBlur={() => setIsFocused(false)}
+                            onChange={(e) => setQuery(e.target.value)}
+                        />
+                    </div>
+                </form>
+            </div>
+            <div className="mt-8 flex gap-4">
+                {defaultShortcuts.map((s) => (
+                    <a key={s.id} href={s.url} className="flex flex-col items-center gap-2 text-white/50 hover:text-white transition-colors">
+                        <div className="w-12 h-12 bg-gray-800/50 rounded-full flex items-center justify-center">{s.icon}</div>
+                        <span className="text-xs font-semibold">{s.name}</span>
+                    </a>
+                ))}
+                <button className="flex flex-col items-center gap-2 text-white/50 hover:text-white transition-colors">
+                    <div className="w-12 h-12 bg-gray-800/50 rounded-full flex items-center justify-center border-2 border-dashed border-gray-700 hover:border-white">
+                        <Plus size={20} />
+                    </div>
+                    <span className="text-xs font-semibold">Add shortcut</span>
+                </button>
+            </div>
+        </motion.div>
+    );
+};
+
+const ResultsContainer = ({ query, onSearch, children, onFilterChange, activeFilter }) => {
+    const [currentQuery, setCurrentQuery] = useState(query);
+    
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (currentQuery.trim()) {
+            onSearch(currentQuery);
+        }
+    };
+    
+    const filterButtons = [
+        { id: 'all', icon: <Search size={16}/>, label: 'All' },
+        { id: 'web', icon: <Globe size={16}/>, label: 'Web' },
+        { id: 'images', icon: <ImageIcon size={16}/>, label: 'Images' },
+        { id: 'games', icon: <Gamepad2 size={16}/>, label: 'Games' },
+        { id: 'app-store', icon: <ShoppingBag size={16}/>, label: 'App Store' },
+        { id: 'ip-call', icon: <Phone size={16}/>, label: 'IP Call' },
+    ];
+
+    return (
+        <div className="w-full max-w-7xl mx-auto">
+            <div className="flex flex-col items-center mb-8 sticky top-6 z-40">
+                <form onSubmit={handleSubmit} className="w-full max-w-2xl relative">
+                    <div className="relative flex items-center bg-white/5 backdrop-blur-md rounded-full shadow-lg border border-white/10 hover:shadow-2xl focus-within:shadow-2xl transition-shadow">
+                        <Search className="absolute left-4 text-gray-500" />
+                        <input
+                            type="text"
+                            value={currentQuery}
+                            onChange={(e) => setCurrentQuery(e.target.value)}
+                            className="w-full bg-transparent p-4 pl-12 pr-24 rounded-full outline-none text-base"
+                            placeholder="Search Aurame or type a URL"
+                        />
+                    </div>
+                </form>
+                 <div className="flex items-center gap-4 mt-4 justify-center mb-8">
+                    {filterButtons.map(btn => (
+                        <button key={btn.id} onClick={() => onFilterChange(btn.id)} className={`flex items-center gap-2 p-2 rounded-lg text-sm transition-colors ${activeFilter === btn.id ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 border-b-2 border-transparent hover:text-white'}`}>
+                            {btn.icon} {btn.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            {children}
+        </div>
+    );
+};
+
+
+const App = () => {
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    `;
+    if (typeof document !== 'undefined') {
+      document.head.appendChild(style);
+    }
+  }, []);
+
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-gray-900 text-white flex items-center justify-center">Loading...</div>}>
+      <AppContent />
+    </Suspense>
+  );
+};
+
+export default App;
