@@ -1,0 +1,13 @@
+import {genkit} from 'genkit';
+import {googleAI} from '@genkit-ai/google-genai';
+
+// This file configures a DEDICATED Genkit instance specifically for Text-to-Speech.
+// This prevents conflicts with the main 'ai' object that might have other tools or configurations.
+
+export const ttsAi = genkit({
+  plugins: [
+    googleAI({
+      // You can specify API versions or other specific settings here if needed
+    }),
+  ],
+});
