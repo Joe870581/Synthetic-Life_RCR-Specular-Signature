@@ -1,0 +1,30 @@
+
+'use client';
+
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { HardHat } from 'lucide-react';
+import Link from 'next/link';
+
+export default function DeprecatedSpikeStorePage() {
+    return (
+        <div className="space-y-6 p-8">
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Page Deprecated</h1>
+                <p className="text-muted-foreground">
+                This page's functionality has been infused into the new unified Family Spike Rewards Hub.
+                </p>
+            </div>
+            <Card className="mt-10">
+                <CardHeader className="text-center py-20">
+                    <HardHat className="mx-auto size-16 text-muted-foreground" />
+                    <CardTitle className="mt-4">This Blueprint is Under Construction</CardTitle>
+                    <CardDescription>
+                        Please use the <Link href="/family-shared/spike-store" className="text-primary underline">new Spike Rewards Hub</Link> for all point and reward management.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent />
+            </Card>
+        </div>
+    );
+}
+
