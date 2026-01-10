@@ -1,0 +1,70 @@
+
+import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
+
+function getStripe() {
+    const secretKey = process.env.STRIPE_ISSUING_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+        throw new Error('Stripe Issuing secret key is not configured in .env file.');
+    }
+    return new Stripe(secretKey, { apiVersion: '2024-06-20' });
+}
+
+export async function POST(req: NextRequest) {
+    try {
+        const stripe = getStripe();
+        const { action, ...params } = await req.json();
+
+        switch (action) {
+            case 'create_cardholder':
+                const cardholder = await stripe.issuing.cardholders.create({
+                    name: params.name,
+                    email: params.email,
+                    phone_number: params.phone_number,
+                    billing: params.billing,
+                    status: 'active',
+                });
+                return NextResponse.json({ cardholder });
+
+            case 'issue_card':
+                const card = await stripe.issuing.cards.create({
+                    cardholder: params.cardholderId,
+                    currency: params.currency,
+                    type: params.type,
+                    status: 'active',
+                });
+                return NextResponse.json({ card });
+
+            default:
+                return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        }
+    } catch (error: any) {
+        console.error(`Stripe Issuing API Error for action:`, error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function GET(req: NextRequest) {
+    const { searchParams } = new URL(req.url);
+    const action = searchParams.get('action');
+    const cardId = searchParams.get('cardId');
+
+    if (action === 'get_card_details' && cardId) {
+        try {
+            const stripe = getStripe();
+            // This is a privileged operation and requires special permissions.
+            // For demo purposes, we are fetching and returning sensitive details.
+            // In a real-world app, this would be highly restricted.
+            const cardDetails = await stripe.issuing.cards.retrieve(
+                cardId,
+                { expand: ['number', 'cvc'] }
+            );
+            return NextResponse.json({ card: cardDetails });
+        } catch (error: any) {
+            console.error(`Stripe Card Details Error:`, error.message);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+    }
+    
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+}
