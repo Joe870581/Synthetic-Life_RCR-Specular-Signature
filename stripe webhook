@@ -1,0 +1,157 @@
+
+import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
+import { headers } from "next/headers";
+import { db } from '@/lib/firebaseAdmin'; 
+import nodemailer from 'nodemailer';
+
+const stripeSecretKey = process.env.STRIPE_ISSUING_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+const webhookSecret = process.env.STRIPE_ISSUING_WEBHOOK_SECRET;
+
+if (!stripeSecretKey || !webhookSecret) {
+  throw new Error("CRITICAL: Stripe Issuing keys are not set in the environment.");
+}
+
+const stripe = new Stripe(stripeSecretKey, {
+  apiVersion: '2024-06-20',
+});
+
+// Nodemailer transporter setup for issuing notifications
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
+
+export async function POST(req: NextRequest) {
+  if (!webhookSecret) {
+    console.error("CRITICAL: Stripe Issuing webhook secret is not configured.");
+    return new NextResponse('Server configuration error: Webhook secret missing.', { status: 500 });
+  }
+
+  let body;
+  try {
+      body = await req.text();
+  } catch (error) {
+      console.error("Could not read request body:", error);
+      return new NextResponse("Could not read request body", { status: 400 });
+  }
+  
+  const sig = headers().get("stripe-signature")!;
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+  } catch (err: any) {
+    console.error(`❌ Invalid Issuing webhook signature: ${err.message}`);
+    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+  }
+
+  if (event.type === "issuing_authorization.request") {
+    const authorization = event.data.object as Stripe.Issuing.Authorization;
+    console.log(`[AUTH_REQUEST] Received for ${authorization.amount} ${authorization.currency} at ${authorization.merchant_data.name}`);
+    
+    const cardholderId = authorization.cardholder;
+    if (typeof cardholderId !== 'string') {
+        console.error(`Authorization ${authorization.id} has no valid cardholder ID.`);
+        // Must decline if we can't identify the user.
+        await stripe.issuing.authorizations.decline(authorization.id);
+        return NextResponse.json({ approved: false, reason: "Invalid cardholder ID." });
+    }
+
+    try {
+        const cardholder = await stripe.issuing.cardholders.retrieve(cardholderId);
+        const userId = cardholder.metadata.firebaseUID;
+        
+        if (!userId) {
+            console.error(`Cardholder ${cardholderId} is missing firebaseUID metadata.`);
+            await stripe.issuing.authorizations.decline(authorization.id);
+            return NextResponse.json({ approved: false, reason: "Cardholder not linked to a user." });
+        }
+
+        const userDocRef = db.collection('users').doc(userId);
+        const userDoc = await userDocRef.get();
+        const userData = userDoc.data();
+        const userBalanceSOV = userData?.sovBalance || 0;
+        
+        const purchaseAmountSOV = authorization.amount / 100;
+        
+        const isApproved = userBalanceSOV >= purchaseAmountSOV;
+        
+        if (isApproved) {
+            console.log(`[AUTH_APPROVED] User ${userId} has sufficient balance. Approving authorization ${authorization.id}.`);
+            await stripe.issuing.authorizations.approve(authorization.id);
+            
+            // Deduct balance and send email AFTER approval
+            const newBalance = userBalanceSOV - purchaseAmountSOV;
+            await userDocRef.update({ sovBalance: newBalance });
+            
+            await transporter.sendMail({
+                from: `"Sovereign OS" <${process.env.EMAIL_USER}>`,
+                to: process.env.ADMIN_EMAIL,
+                subject: `✅ SOV$ Spend Approved: ${purchaseAmountSOV} SOV$`,
+                html: `<p>Approved a purchase for user <strong>${userId}</strong>.</p>
+                       <ul>
+                         <li>Amount: <strong>${purchaseAmountSOV} SOV$</strong></li>
+                         <li>Merchant: <strong>${authorization.merchant_data.name}</strong></li>
+                         <li>New User Balance: <strong>${newBalance.toFixed(2)} SOV$</strong></li>
+                       </ul>`,
+            });
+            console.log(`[EMAIL] Sent spend confirmation to admin.`);
+
+            return NextResponse.json({ approved: true });
+        } else {
+            console.log(`[AUTH_DECLINED] User ${userId} has insufficient balance. Declining authorization ${authorization.id}.`);
+            await stripe.issuing.authorizations.decline(authorization.id);
+            return NextResponse.json({ approved: false, reason: "Insufficient funds." });
+        }
+
+    } catch (e: any) {
+        console.error(`[AUTH_ERROR] Error processing authorization ${authorization.id}:`, e.message);
+        return NextResponse.json({ approved: false, reason: "Internal server error." });
+    }
+  }
+
+  if (event.type === "issuing_card.created") {
+    const card = event.data.object as Stripe.Issuing.Card;
+    const cardholderId = card.cardholder;
+    
+    if (typeof cardholderId !== 'string') {
+        console.error("Card created without a valid cardholder ID string.");
+        return NextResponse.json({ received: true, status: 'Ignored - Invalid Cardholder ID type' });
+    }
+
+    try {
+        const cardholder = await stripe.issuing.cardholders.retrieve(cardholderId);
+        const userId = cardholder.metadata.firebaseUID;
+
+        if (!userId) {
+            console.error(`Cardholder ${cardholderId} is missing firebaseUID in metadata.`);
+            return NextResponse.json({ received: true, status: 'Ignored - Missing Firebase UID' });
+        }
+
+        const userDocRef = db.collection('users').doc(userId);
+        await userDocRef.set({
+            stripeIssuing: {
+                cardId: card.id,
+                cardLast4: card.last4,
+                cardBrand: card.brand,
+                cardholderId: cardholder.id,
+            }
+        }, { merge: true });
+
+        console.log(`✅ Successfully linked Card ${card.id} to User ${userId}.`);
+
+    } catch (dbError) {
+        console.error("Failed to update user profile with card ID:", dbError);
+        return new NextResponse('Internal server error during user update.', { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ received: true });
+}
