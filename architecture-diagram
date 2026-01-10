@@ -1,0 +1,266 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Link from 'next/link';
+import { 
+    Users, Shield, KeyRound, Database, GitCommit, Share2, Server, ArrowDown, ArrowRight, Laptop, CheckCircle2, Loader2, AlertTriangle, Satellite, Cpu, Wifi, XCircle, Trash2, Landmark
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, addDoc, serverTimestamp, deleteDoc, doc, query, orderBy, limit } from 'firebase/firestore';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+// --- Main Container ---
+const Section = ({ children, className = '' }) => (
+    <div className={cn("bg-slate-800/40 border border-slate-700/50 rounded-2xl shadow-2xl p-6", className)}>
+        {children}
+    </div>
+);
+
+const SectionTitle = ({ children, className = '' }) => (
+    <h3 className={cn("text-xs font-black text-slate-400 uppercase tracking-widest mb-4", className)}>
+        {children}
+    </h3>
+);
+
+// --- MODIFIED Diagram Elements with Status ---
+const FlowBox = ({ children, className = '', variant = 'default', asLink = false, href = '#', status }) => {
+    const variants = {
+        default: 'bg-blue-600/20 border-blue-500/50 text-white',
+        highlight: 'bg-green-600/20 border-green-500/50 text-green-300',
+        muted: 'bg-slate-700/50 border-slate-600/80 text-slate-300',
+    };
+
+    const statusConfig = {
+        OPERATIONAL: { color: 'bg-green-500', pulse: true, icon: <CheckCircle2 size={12} /> },
+        VERIFYING: { color: 'bg-yellow-500', pulse: true, icon: <Loader2 size={12} className="animate-spin" /> },
+        DEGRADED: { color: 'bg-orange-500', pulse: true, icon: <AlertTriangle size={12} /> },
+        OFFLINE: { color: 'bg-red-500', pulse: false, icon: <XCircle size={12} /> },
+    };
+
+    const currentStatus = statusConfig[status] || { color: 'bg-gray-500', pulse: false, icon: <AlertTriangle size={12} /> };
+
+    const baseClasses = cn("relative rounded-lg p-3 text-center transition-all duration-300", variants[variant], className);
+    
+    const content = (
+        <>
+            <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-1 bg-black/30 rounded-full">
+                <div className={`w-2 h-2 rounded-full ${currentStatus.color} ${currentStatus.pulse ? 'animate-pulse' : ''}`} />
+                <span className={`text-[8px] font-bold uppercase tracking-wider ${status === 'OPERATIONAL' ? 'text-green-300' : 'text-yellow-300'}`}>{status}</span>
+            </div>
+            <div className="font-bold text-sm tracking-tight pt-2">{children}</div>
+        </>
+    );
+
+    if (asLink) {
+        return (
+            <Link href={href} className={cn(baseClasses, "hover:scale-105 hover:border-white/50 hover:shadow-lg")}>
+                {content}
+            </Link>
+        );
+    }
+
+    return <div className={baseClasses}>{content}</div>;
+};
+
+
+const Arrow = ({ direction = 'down', className = '' }) => {
+    const icons = {
+        down: <ArrowDown className="w-8 h-8" />,
+        right: <ArrowRight className="w-8 h-8" />,
+    };
+    return (
+        <div className={cn("flex items-center justify-center text-slate-600 my-2", className)}>
+            {icons[direction]}
+        </div>
+    );
+};
+
+// --- Live Event Log Component ---
+const LiveEventLog = ({ events, onDelete }) => (
+    <div className="bg-black/40 border border-slate-700/50 rounded-2xl p-4 h-full flex flex-col">
+        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">System Event Bus</h4>
+        <div className="flex-grow overflow-y-auto space-y-2 font-mono text-[10px] pr-2">
+            <AnimatePresence initial={false}>
+                {events.map((event) => (
+                    <motion.div
+                        key={event.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="flex items-center justify-between group"
+                    >
+                        <p className="whitespace-nowrap overflow-hidden text-ellipsis">
+                            <span className="text-slate-600 mr-2">{event.time}</span>
+                            <span className={`font-bold mr-2 ${event.color}`}>{event.source}:</span>
+                            <span className="text-slate-400">{event.message}</span>
+                        </p>
+                        <button onClick={() => onDelete(event.id)} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Trash2 className="w-3 h-3 text-red-500/50 hover:text-red-500"/>
+                        </button>
+                    </motion.div>
+                ))}
+            </AnimatePresence>
+        </div>
+    </div>
+);
+
+
+export default function ArchitectureDiagramPage() {
+    const firestore = useFirestore();
+    const [systemStatus, setSystemStatus] = useState({
+        clients: 'OPERATIONAL', pendingLedger: 'OPERATIONAL', quorum: 'OPERATIONAL',
+        finalLedger: 'OPERATIONAL', passkey: 'OPERATIONAL', bankLink: 'OPERATIONAL',
+    });
+    
+    // --- LIVE DATA FEEDS ---
+    const universesQuery = useMemoFirebase(() => firestore ? query(collection(firestore, 'familyCores')) : null, [firestore]);
+    const { data: allUniverses, isLoading: isLoadingUniverses } = useCollection(universesQuery);
+
+    const usersQuery = useMemoFirebase(() => firestore ? query(collection(firestore, 'users')) : null, [firestore]);
+    const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersQuery);
+    
+    const auditLogCollection = useMemoFirebase(() => 
+        firestore ? query(collection(firestore, 'system_audit'), orderBy('timestamp', 'desc'), limit(50)) : null
+    , [firestore]);
+
+    const { data: auditEvents } = useCollection(auditLogCollection);
+
+    const auditStatus = isLoadingUniverses ? 'VERIFYING' : 'OPERATIONAL';
+    const satelliteStatus = isLoadingUsers ? 'VERIFYING' : 'OPERATIONAL';
+
+    const formattedEvents = useMemo(() => {
+        return auditEvents?.map(event => ({
+            ...event,
+            time: new Date(event.timestamp?.toDate()).toLocaleTimeString(),
+        })) || [];
+    }, [auditEvents]);
+
+    const addEvent = useCallback(async (source: string, message: string, color = 'text-green-400') => {
+        if (!firestore) return;
+        const auditRef = collection(firestore, 'system_audit');
+        await addDoc(auditRef, {
+            timestamp: serverTimestamp(),
+            source,
+            message,
+            color
+        });
+    }, [firestore]);
+
+    const handleDeleteEvent = useCallback(async (eventId: string) => {
+        const password = prompt("Enter deletion password:");
+        if (password === '122992') {
+            if (!firestore) return;
+            const docRef = doc(firestore, 'system_audit', eventId);
+            await deleteDoc(docRef);
+            addEvent('SECURITY', `Log entry ${eventId.slice(0,5)}... deleted by administrator.`, 'text-red-400');
+        } else if(password !== null) {
+            alert("Incorrect password.");
+        }
+    }, [firestore, addEvent]);
+
+
+    useEffect(() => {
+        const subsystemsToSimulate = ['pendingLedger', 'quorum', 'finalLedger', 'passkey', 'bankLink', 'clients'];
+        const interval = setInterval(() => {
+            const randomSubsystem = subsystemsToSimulate[Math.floor(Math.random() * subsystemsToSimulate.length)];
+            
+            if (Math.random() < 0.2) { 
+                setSystemStatus(prev => ({...prev, [randomSubsystem]: 'DEGRADED'}));
+                addEvent(randomSubsystem.toUpperCase(), "Anomaly detected. Initiating self-correction.", "text-orange-400");
+                
+                setTimeout(() => {
+                    setSystemStatus(prev => ({...prev, [randomSubsystem]: 'VERIFYING'}));
+                    addEvent(randomSubsystem.toUpperCase(), "Applying corrective patch...");
+
+                    setTimeout(() => {
+                        setSystemStatus(prev => ({...prev, [randomSubsystem]: 'OPERATIONAL'}));
+                        addEvent(randomSubsystem.toUpperCase(), "System integrity restored. Operational.");
+                    }, 1000);
+                    
+                }, 1500);
+
+            } else {
+                 setSystemStatus(prev => ({...prev, [randomSubsystem]: 'VERIFYING'}));
+                 addEvent(randomSubsystem.toUpperCase(), "Running routine integrity check...");
+                 setTimeout(() => {
+                    setSystemStatus(prev => ({...prev, [randomSubsystem]: 'OPERATIONAL'}));
+                 }, 700);
+            }
+        }, 8000);
+
+        return () => clearInterval(interval);
+    }, [addEvent]);
+
+    return (
+        <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-8 font-sans">
+            <div className="max-w-7xl mx-auto">
+                <header className="text-center mb-12">
+                    <h1 className="text-4xl font-black tracking-tighter">Sovereign OS Mission Control</h1>
+                    <p className="text-lg text-blue-400 font-semibold mt-1">Live Architecture & Integrity Dashboard</p>
+                </header>
+
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                
+                    <div className="xl:col-span-2 space-y-4">
+                        {/* Top Row: Core Infrastructure */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FlowBox asLink href="/login/registration" status={systemStatus.clients} variant="highlight">
+                                <Users className="inline-block mr-2"/> CLIENT REGISTRATION
+                            </FlowBox>
+                            <FlowBox asLink href="/admin/dashboard/satellite-view" status={satelliteStatus} variant="highlight">
+                                <Satellite className="inline-block mr-2"/> SATELLITE & NETWORK
+                            </FlowBox>
+                        </div>
+                        {/* Mid Row: Financial & Security */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <FlowBox asLink href="/login/registration/admin/dashboard/audit-login/audit-journal/adult-loggin" variant="default" status={systemStatus.passkey}>
+                                <KeyRound className="inline-block mr-2"/> TRUEOATH PASSKEY
+                            </FlowBox>
+                             <FlowBox asLink href="/admin/dashboard/system-settings/studio" variant="default" status={systemStatus.bankLink}>
+                                <Landmark className="inline-block mr-2"/> BANKING & PAYMENTS
+                            </FlowBox>
+                        </div>
+                        
+                        {/* Bottom Row: Ledger & Audit */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                            <div className="space-y-4 text-center">
+                                <SectionTitle>Client Intent</SectionTitle>
+                                <FlowBox variant="muted" status={systemStatus.pendingLedger}>
+                                    <div className="font-bold">Pending Ledger</div>
+                                    <div className="text-xs text-slate-400">atomic_ledger_pending</div>
+                                </FlowBox>
+                            </div>
+                            <div className="space-y-3 text-center">
+                               <SectionTitle>Consensus</SectionTitle>
+                               <ArrowDown className="w-8 h-8 text-slate-600 mx-auto"/>
+                                <FlowBox status={systemStatus.quorum}>
+                                    <Cpu className="inline-block mr-2"/> Guardian Quorum
+                                </FlowBox>
+                                <ArrowDown className="w-8 h-8 text-slate-600 mx-auto"/>
+                            </div>
+                            <div className="space-y-4 text-center">
+                                <SectionTitle>Finalized State</SectionTitle>
+                               <FlowBox asLink href="/admin/dashboard/sandbox-audit" variant="highlight" status={auditStatus}>
+                                    <div className="font-bold">Final Ledger</div>
+                                    <div className="text-xs text-green-400/50">atomic_ledger_final</div>
+                                </FlowBox>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Live Event Log */}
+                    <div className="xl:col-span-1 min-h-[400px] lg:min-h-0">
+                         <LiveEventLog events={formattedEvents} onDelete={handleDeleteEvent} />
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
+    
