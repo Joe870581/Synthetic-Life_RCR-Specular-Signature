@@ -1,0 +1,38 @@
+# Engineering Notes: Infineon WLC1115 Integration
+**Status:** REFERENCE FOR PROCUREMENT & BUILD
+
+## 1. The "Cheat Code": Why This Chip?
+
+The Infineon WLC1115 is the ideal choice for this project due to its **Host Processor Interface (HPI)**. This I²C-based interface allows a secondary MCU (our ESP32 "Guard") to act as a master, directly reading the internal state and packet buffers of the Qi2 controller.
+
+**Key Advantage:** We do not need to implement a complex Qi wireless charging stack. We simply "sniff" the register where the WLC1115 stores the already-decoded **Charge Status (0x02)** packet from the phone. This reduces firmware complexity by an order of magnitude.
+
+## 2. Procurement Links (Candidate Parts)
+
+This is a reference list for ordering development kits. Final production parts may vary.
+
+- **Primary Qi2 Transmitter Board:**
+  - **Part:** `REF_WLC_TX15W_M1`
+  - **Vendor:** Infineon Technologies
+  - **Mouser Link:** [https://www.mouser.ca/ProductDetail/Infineon-Technologies/REFWLCTX15WM1TOBO1/](https://www.mouser.ca/ProductDetail/Infineon-Technologies/REFWLCTX15WM1TOBO1/)
+  - **Notes:** This is the complete 15W Qi2 MPP evaluation board containing the WLC1115. It includes the necessary HPI header for connecting our ESP32.
+
+- **Guard MCU:**
+  - **Part:** `ESP32-S3-DevKitC-1`
+  - **Vendor:** Espressif Systems
+  - **Digi-Key Link:** [https://www.digikey.ca/en/products/detail/espressif-systems/ESP32-S3-DEVKITC-1-N8R8/15964660](https://www.digikey.ca/en/products/detail/espressif-systems/ESP32-S3-DEVKITC-1-N8R8/15964660)
+  - **Notes:** A standard ESP32-S3 development board with sufficient GPIO for the HPI connection and future expansion.
+
+## 3. Physical Wiring (HPI Header)
+
+The connection between the Guard (ESP32) and the Power Plane (WLC1115) is minimal.
+
+| ESP32 Pin | WLC1115 HPI Pin | Function          |
+|-----------|-----------------|-------------------|
+| **3V3**   | VCC (Pin 1)     | 3.3V Logic Power  |
+| **GND**   | GND (Pin 10)    | Common Ground     |
+| **GPIO21**| SDA (Pin 5)     | I²C Data          |
+| **GPIO22**| SCL (Pin 7)     | I²C Clock         |
+| **GPIO19**| INT (Pin 3)     | Interrupt Signal  |
+
+**Note:** Ensure I²C pull-up resistors (4.7kΩ) are present on both SDA and SCL lines, either on the ESP32 board or added externally. The Infineon reference board may already include them.
