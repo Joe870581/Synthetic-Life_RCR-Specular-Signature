@@ -1,0 +1,261 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
+import { 
+  DollarSign, Flame, Sparkles, TrendingUp, GitCommit, User, Palette, PlusCircle,
+  Layers, Link as LinkIcon, Radio, CreditCard, GitBranch, History, Gamepad2, Film, CheckCircle2,
+  ShieldAlert, Loader2, Gift, Rocket
+} from 'lucide-react';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy, limit, where } from 'firebase/firestore';
+import { StatCard } from '@/components/stat-card';
+import { TransactionRow } from '@/components/transaction-row';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const CustomizationItem = ({ icon: Icon, title, cost, onPurchase, disabled }) => (
+    <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700 flex flex-col justify-between h-full">
+        <div>
+            <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-amber-500/10 rounded-lg">
+                    <Icon size={16} className="text-amber-400" />
+                </div>
+                <h4 className="text-sm font-bold text-white">{title}</h4>
+            </div>
+        </div>
+        <Button 
+            onClick={onPurchase} 
+            disabled={disabled}
+            className="w-full mt-4 bg-amber-600 hover:bg-amber-500 h-8 text-xs disabled:bg-slate-600 disabled:text-slate-400 disabled:opacity-70"
+        >
+            {disabled ? 'Cannot Afford' : <><Flame className="mr-2" size={14} /> Burn {cost} SOV$</>}
+        </Button>
+    </div>
+);
+
+const StickerCard = ({ sticker, onGift }) => (
+    <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700 text-center flex flex-col justify-between h-full">
+        <div>
+            <div className="w-16 h-16 rounded-lg bg-black/30 mx-auto flex items-center justify-center mb-3">
+                <sticker.icon size={32} className={sticker.color} />
+            </div>
+            <h4 className="font-bold text-white">{sticker.name}</h4>
+            <p className="text-xs text-slate-400 font-mono">Value: {sticker.value} SOV$</p>
+        </div>
+        <div className="mt-4">
+            <p className="text-2xl font-black text-purple-400">{sticker.gifted.toLocaleString()}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500">Times Gifted</p>
+        </div>
+        <Button size="sm" className="w-full mt-4 bg-purple-600 hover:bg-purple-500 text-xs" onClick={() => onGift(sticker)}>
+            <Gift className="mr-2" size={14} /> Simulate Gift
+        </Button>
+    </div>
+);
+
+
+const CreatorHubPage = () => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const [isProcessing, setIsProcessing] = useState(false);
+    
+    const { familyState, updateFamilyMember } = useFamilyData();
+
+    const activeUser = useMemo(() => familyState.members.p1 || { spdBalance: 0 }, [familyState.members]);
+
+    // **FIX**: Fetch the entire ledger collection as allowed by the rules.
+    const ledgerQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(
+            collection(firestore, 'ledger'),
+            orderBy('timestamp', 'desc'),
+            limit(100) // Fetch a reasonable number of recent transactions
+        );
+    }, [firestore]);
+
+    const { data: allLedgerTransactions } = useCollection(ledgerQuery);
+
+    // **FIX**: Filter the transactions on the client-side.
+    const [creatorTransactions, setCreatorTransactions] = useState([]);
+    useEffect(() => {
+        if (allLedgerTransactions && user?.uid) {
+            const userTxs = allLedgerTransactions.filter(tx => tx.userId === user.uid);
+            setCreatorTransactions(userTxs);
+        }
+    }, [allLedgerTransactions, user?.uid]);
+    
+    const [stickers, setStickers] = useState([
+        { id: 'flame', name: 'Hyper Flame', value: 1, icon: Flame, color: 'text-orange-500', gifted: 102 },
+        { id: 'diamond', name: 'Diamond Hand', value: 5, icon: Gem, color: 'text-cyan-400', gifted: 45 },
+        { id: 'rocket', name: 'Rocket Ship', value: 10, icon: Rocket, color: 'text-red-500', gifted: 12 },
+    ]);
+
+    const totalBurned = useMemo(() => creatorTransactions?.reduce((acc, tx) => acc + (tx.burnedSOV || 0), 0) || 0, [creatorTransactions]);
+
+    const customizationItems = [
+      { id: 'alias', title: 'Custom User Alias', cost: 15, icon: User },
+      { id: 'path_theme', title: 'Unified Path Theme', cost: 30, icon: Palette },
+      { id: 'prefix_3', title: 'Reserve 3-Letter Prefix', cost: 12, icon: () => <span className="font-black text-amber-400">###</span> },
+      { id: 'prefix_4', title: 'Add 4th Character', cost: 3, icon: () => <span className="font-black text-amber-400">#</span> },
+    ];
+    
+    const handlePurchase = async (item) => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        try {
+            await new Promise(resolve => setTimeout(resolve, 750));
+            updateFamilyMember(activeUser.id, { spdBalance: (activeUser.spdBalance || 0) - item.cost });
+            // In a real app, log this burn to the ledger via an API call
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+    
+    const handleGiftSticker = (sticker) => {
+      setStickers(prevStickers =>
+        prevStickers.map(s =>
+          s.id === sticker.id ? { ...s, gifted: s.gifted + 1 } : s
+        )
+      );
+
+      updateFamilyMember(activeUser.id, { spdBalance: (activeUser.spdBalance || 0) + sticker.value });
+      
+      const newTx = {
+        id: `tx_${Date.now()}`,
+        type: 'revenue',
+        description: `Sticker Gift: ${sticker.name}`,
+        amount: sticker.value,
+        status: 'confirmed',
+        timestamp: { toDate: () => new Date() }
+      };
+      setCreatorTransactions(prev => [newTx, ...prev]);
+    };
+
+    const navItems = [
+        { id: 'creator-hub', label: 'Creator Hub', icon: Sparkles },
+        { id: 'card-sandbox', label: 'Card Sandbox', icon: CreditCard },
+        { id: 'family-tree', label: 'Family Tree', icon: GitBranch },
+        { id: 'brand-center', label: 'Brand Center', icon: Layers },
+        { id: 'creator-links', label: 'Creator Links', icon: LinkIcon },
+        { id: 'live-feed', label: 'Live Broadcast', icon: Radio },
+    ];
+
+    const [activeNavItem, setActiveNavItem] = useState('creator-hub');
+
+    return (
+        <div className="min-h-screen bg-[#0A0A0A] text-white font-sans p-8">
+            <header className="flex justify-between items-center mb-10">
+                <h1 className="text-4xl font-black italic tracking-tighter">
+                    Creator <span className="text-purple-400">Vault</span>
+                </h1>
+                <div className="flex items-center gap-2 p-2 bg-black border border-white/10 rounded-full">
+                    {navItems.map(item => (
+                        <button key={item.id} onClick={() => setActiveNavItem(item.id)} className={`px-4 py-2 text-xs font-bold rounded-full flex items-center gap-2 ${activeNavItem === item.id ? 'bg-white text-black' : 'text-gray-400 hover:bg-white/10'}`}>
+                            <item.icon size={14}/> {item.label}
+                        </button>
+                    ))}
+                </div>
+            </header>
+
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activeNavItem}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                >
+                    {activeNavItem === 'creator-hub' && (
+                        <div className="space-y-12">
+                             <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <StatCard icon={DollarSign} label="Total Earnings" value={activeUser?.spdBalance || 0} subValue="SOV$ earned" color="emerald" />
+                                <StatCard icon={Flame} label="SOV$ Burned" value={totalBurned} subValue="Revenue Generated" color="rose" />
+                                <StatCard icon={TrendingUp} label="Active Transactions" value={creatorTransactions?.length || 0} subValue="Last 20 Records" color="sky"/>
+                            </section>
+                            
+                             <section>
+                                <Card className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 shadow-lg">
+                                    <CardHeader>
+                                        <CardTitle>Creator Stickers (Live Donations)</CardTitle>
+                                        <CardDescription>Fans can send these stickers during your live broadcasts. The SOV$ value is added directly to your earnings.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                        {stickers.map(sticker => (
+                                            <StickerCard key={sticker.id} sticker={sticker} onGift={handleGiftSticker} />
+                                        ))}
+                                    </CardContent>
+                                </Card>
+                            </section>
+
+                            <section>
+                                <Card className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 shadow-lg">
+                                    <CardHeader>
+                                        <CardTitle>SOV$ Burn Store</CardTitle>
+                                        <CardDescription>Spend SOV$ to unlock platform customizations and features.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                       {customizationItems.map(item => (
+                                            <CustomizationItem 
+                                                key={item.id} 
+                                                {...item} 
+                                                onPurchase={() => handlePurchase(item)} 
+                                                disabled={isProcessing || (activeUser?.spdBalance || 0) < item.cost}
+                                            />
+                                       ))}
+                                    </CardContent>
+                                </Card>
+                            </section>
+
+                            <section>
+                                <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3"><GitCommit className="text-slate-400"/> Live Creator Ledger</h2>
+                                <div className="bg-slate-800/50 p-5 rounded-2xl max-h-96 overflow-y-auto">
+                                    {creatorTransactions?.length ? creatorTransactions.map(tx => <TransactionRow key={tx.id} tx={tx}/>) : <p className="text-slate-500 text-center py-10">No recent transactions for your account.</p>}
+                                </div>
+                            </section>
+                        </div>
+                    )}
+                    {/* Placeholder for other views */}
+                    {activeNavItem !== 'creator-hub' && (
+                        <div className="text-center py-20 text-slate-500">
+                            <p>Content for {navItems.find(n => n.id === activeNavItem)?.label} goes here.</p>
+                        </div>
+                    )}
+                </motion.div>
+            </AnimatePresence>
+        </div>
+    );
+}
+
+// A new icon component for the Gem
+const Gem = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M6 3h12l4 6-10 13L2 9z" />
+    <path d="M12 22V9" />
+    <path d="m2 9 h20" />
+  </svg>
+);
+
+
+export default function MyWorkPage() {
+    return (
+        <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+            <FamilyDataProvider>
+                <CreatorHubPage />
+            </FamilyDataProvider>
+        </Suspense>
+    );
+}
