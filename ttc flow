@@ -1,0 +1,177 @@
+
+'use server';
+
+import { ai, ttsAi } from '@/ai/genkit-client';
+import { z } from 'zod';
+import { googleAI } from '@genkit-ai/google-genai';
+import { SpeakConfigSchema, type SpeakConfig } from './speak-config';
+import {
+  getRecentLassoMemory,
+  queryArchive,
+  addToLasso,
+} from '@/lib/memory';
+import { openAppTool } from '@/ai/tools/system';
+import { App, AppRegistry } from '@/ai/apps';
+
+
+/* ------------------------------------------------------------------ */
+/* SIMPLE TTS FLOW (NO WAV, NO NODE STREAMS, EDGE SAFE)                */
+/* ------------------------------------------------------------------ */
+
+const simpleSpeakFlow = ttsAi.defineFlow(
+  {
+    name: 'simpleSpeakFlow',
+    inputSchema: z.object({
+      text: z.string(),
+      config: SpeakConfigSchema.optional(),
+    }),
+    outputSchema: z.object({
+      media: z.string().optional(),
+    }),
+  },
+  async ({ text, config }) => {
+    if (!text.trim()) return { media: undefined };
+
+    const { media } = await ttsAi.generate({
+      model: googleAI.model('gemini-2.5-flash-preview-tts'),
+      prompt: text,
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: config?.voice || 'Puck',
+            },
+          },
+        },
+      },
+    });
+    // Return the data URI directly.
+    return { media: media?.url };
+  }
+);
+
+export async function simpleSpeak(text: string, config?: SpeakConfig) {
+  return simpleSpeakFlow({ text, config });
+}
+
+
+/* ------------------------------------------------------------------ */
+/* INTELLIGENT REASONING FLOW (NOW WITH UI ACTION CAPABILITY)          */
+/* ------------------------------------------------------------------ */
+
+const pebblesSystemPrompt = `
+You are Pebbles, an OS-level AI assistant.
+Your goal is to be helpful, concise, and to take action when requested.
+When a user asks to "open", "launch", or "show" an application, you MUST use the 'openApp' tool to find the correct application from the registry.
+If the tool finds an app, your final output must be a UIAction to open it. Do not describe navigation.
+`;
+
+const intelligentReasoningFlow = ai.defineFlow(
+  {
+    name: 'intelligentReasoningFlow',
+    inputSchema: z.object({
+      prompt: z.string(),
+      userId: z.string(),
+    }),
+    outputSchema: z.object({
+      text: z.string(),
+      mood: z.enum(['neutral', 'excited', 'stressed', 'focused']),
+      uiAction: z.object({
+        type: z.literal('OPEN_APP'),
+        appId: z.string(),
+      }).optional(),
+    }),
+  },
+  async ({ prompt, userId }) => {
+    const lassoMemory = getRecentLassoMemory(userId);
+    const archiveMemories = await queryArchive(prompt);
+    const archiveText = archiveMemories.map(m => m.text).join('\n');
+
+    let mood: 'neutral' | 'excited' | 'stressed' | 'focused' = 'neutral';
+    if (/stressed|frustrated|problem|issue/i.test(prompt)) mood = 'stressed';
+    else if (/awesome|great|excited|love/i.test(prompt)) mood = 'excited';
+    else if (/focus|deep|work|analyze/i.test(prompt)) mood = 'focused';
+
+    const moodGuidance = {
+      neutral: 'Be warm and helpful.',
+      excited: 'Match enthusiasm and celebrate progress.',
+      stressed: 'Be calm, concise, reassuring. No jokes.',
+      focused: 'Be concise and precise. No fluff.',
+    }[mood];
+
+    const finalPrompt = `
+Recent Memory: ${lassoMemory || 'None'}
+Long-Term Context: ${archiveText || 'None'}
+User says: "${prompt}"
+
+Your goal is to respond helpfully. If the user wants to open an app, use your tools to find it and emit a UIAction.
+`;
+
+    const llmResponse = await ai.generate({
+      model: googleAI.model('gemini-1.5-flash-latest'),
+      system: `${pebblesSystemPrompt}\n\nTone Guidance: ${moodGuidance}`,
+      prompt: finalPrompt,
+      tools: [openAppTool], 
+      temperature: 0.5,
+    });
+    
+    const toolCalls = typeof llmResponse.toolCalls === 'function' ? llmResponse.toolCalls() : [];
+
+    for (const call of toolCalls) {
+      if (call.name === 'openApp' && call.output) {
+        const app = call.output as App;
+        if (app && app.id in AppRegistry) {
+          console.log(`[AI Flow] Intent to open app detected: ${app.title}`);
+          return {
+            text: `Opening ${app.title}...`,
+            mood: 'focused',
+            uiAction: {
+              type: "OPEN_APP",
+              appId: app.id,
+            },
+          };
+        }
+      }
+    }
+
+    const outputText = llmResponse.text() || "I'm not sure how to help with that.";
+    addToLasso(userId, `User: ${prompt}`);
+    addToLasso(userId, `Pebbles: ${outputText}`);
+
+    return {
+      text: outputText,
+      mood,
+      uiAction: undefined,
+    };
+  }
+);
+
+
+/* ------------------------------------------------------------------ */
+/* ORCHESTRATOR (Passes UI Actions through)                            */
+/* ------------------------------------------------------------------ */
+export async function intelligentSpeak(
+  text: string,
+  config?: SpeakConfig & { userId?: string }
+): Promise<{ text: string; media?: string; uiAction?: any }> {
+  if (!text.trim()) return { text: '', media: undefined, uiAction: null };
+
+  const userId = config?.userId || 'default_user';
+
+  const reasoning = await intelligentReasoningFlow({
+    prompt: text,
+    userId,
+  });
+
+  const audio = await simpleSpeakFlow({
+    text: reasoning.text,
+    config,
+  });
+
+  return {
+    text: reasoning.text,
+    media: audio.media,
+    uiAction: reasoning.uiAction,
+  };
+}
