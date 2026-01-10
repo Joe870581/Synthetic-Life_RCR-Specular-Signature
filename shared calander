@@ -1,0 +1,404 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  Calendar as CalendarIcon, Users, Plus, Clock, MapPin, Trophy, 
+  BookOpen, Heart, Bell, CheckCircle2, ShieldAlert, Wallet, Activity, 
+  History, AlertCircle, CheckCircle, Zap, Mic, MicOff, BrainCircuit,
+  Lock, Unlock, ShieldCheck, Share2, Globe, GraduationCap, ChevronLeft, ChevronRight
+} from 'lucide-react';
+
+// --- System Configuration & Constants ---
+
+const SPIKE_LIMIT_WEEKLY = 1000;
+
+const CATEGORIES = {
+  SPORTS: { label: 'Sports', color: 'bg-blue-500', icon: Trophy },
+  SCHOOL: { label: 'School', color: 'bg-amber-500', icon: BookOpen },
+  FAMILY: { label: 'Family', color: 'bg-rose-500', icon: Heart },
+  HEALTH: { label: 'Health', color: 'bg-emerald-500', icon: Activity },
+  CHORES: { label: 'Chores', color: 'bg-indigo-500', icon: CheckCircle2 }
+};
+
+export default function App() {
+  // --- View & Interaction State ---
+  const [view, setView] = useState('dashboard');
+  const [isListening, setIsListening] = useState(false);
+  const [pebblesThinking, setPebblesThinking] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 7)); // Simulation Date: Jan 7, 2026
+
+  // --- Persistent Family State ---
+  const [members, setMembers] = useState([
+    { id: 'm1', name: 'Alex', role: 'PARENT', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex', sovBalance: 1250.50, spikePoints: 450, spikeWeekly: 0 },
+    { id: 'm2', name: 'Jordan', role: 'PARENT', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan', sovBalance: 1400.00, spikePoints: 520, spikeWeekly: 0 },
+    { id: 'm3', name: 'Charlie', role: 'CHILD', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Charlie', sovBalance: 45.00, spikePoints: 1200, spikeWeekly: 250 }
+  ]);
+
+  const [events, setEvents] = useState([
+    { id: 'e1', title: 'Soccer Practice', date: '2026-01-07', time: '16:00', category: 'SPORTS', participants: ['m3'], location: 'West Field' },
+    { id: 'e2', title: 'PTA Meeting', date: '2026-01-07', time: '16:30', category: 'SCHOOL', participants: ['m1'], location: 'Library' },
+    { id: 'e3', title: 'Family Dinner', date: '2026-01-08', time: '18:30', category: 'FAMILY', participants: ['m1', 'm2', 'm3'], location: 'Kitchen' }
+  ]);
+
+  const [tasks, setTasks] = useState([
+    { id: 't1', title: 'Wash the Car', assignedTo: 'm3', points: 100, type: 'DAILY', status: 'PENDING' },
+    { id: 't2', title: 'Deep Clean Kitchen', assignedTo: 'm3', points: 400, type: 'WEEKLY', status: 'PENDING' },
+    { id: 't3', title: 'Math Homework', assignedTo: 'm3', points: 50, type: 'DAILY', status: 'COMPLETED' }
+  ]);
+
+  const [safetyProtocols, setSafetyProtocols] = useState([
+    { id: 's1', title: 'MySchool Posting', type: 'SOCIAL', adultStamp: true, childStamp: false, status: 'PENDING_CHILD' },
+    { id: 's2', title: 'After School Perimeter', type: 'SAFETY', adultStamp: true, childStamp: true, status: 'ACTIVE' }
+  ]);
+
+  const [logs, setLogs] = useState([
+    { id: 1, time: '10:15 AM', text: 'Charlie completed Math Homework.', type: 'SUCCESS' }
+  ]);
+
+  // --- Safe Lookup Helpers ---
+  const getMember = (id) => members.find(m => m.id === id) || { name: 'Unknown', avatar: '', spikePoints: 0, sovBalance: 0 };
+
+  // --- Pebbles Core Logic (with Safety Fallbacks) ---
+  const speakToPebble = async (query) => {
+    const apiKey = ""; // Set to empty as per instruction
+    setPebblesThinking(true);
+    
+    // Logic: If no API key, we simulate a local Pebble response so the app doesn't hang
+    if (!apiKey) {
+      setTimeout(() => {
+        const responses = [
+          "I'm on it, Joe. Safety protocols are locked and loaded.",
+          "The schedule looks tight, but we've got this.",
+          "Charlie is only 250 points away from the weekly cap. Motivation required!"
+        ];
+        const text = responses[Math.floor(Math.random() * responses.length)];
+        setLogs(prev => [{ id: Date.now(), time: 'NOW', text: `Pebbles: ${text}`, type: 'AI' }, ...prev]);
+        setPebblesThinking(false);
+        setIsListening(false);
+      }, 800);
+      return;
+    }
+
+    // ... Standard API fetch logic would go here ...
+  };
+
+  // --- Chores & XP Engine ---
+  const handleTaskAction = (taskId, action) => {
+    if (action === 'COMPLETE') {
+      const task = tasks.find(t => t.id === taskId);
+      const member = getMember(task.assignedTo);
+
+      if (member.spikeWeekly + task.points > SPIKE_LIMIT_WEEKLY) {
+        setLogs(prev => [{ id: Date.now(), time: 'WARN', text: `Cap Reached! ${member.name} cannot earn more points this week.`, type: 'WARN' }, ...prev]);
+        return;
+      }
+
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'COMPLETED' } : t));
+      setMembers(prev => prev.map(m => m.id === task.assignedTo ? { 
+        ...m, 
+        spikePoints: m.spikePoints + task.points,
+        spikeWeekly: m.spikeWeekly + task.points
+      } : m));
+      
+      setLogs(prev => [{ id: Date.now(), time: 'NOW', text: `${member.name} earned ${task.points} Spike Points!`, type: 'SUCCESS' }, ...prev]);
+    }
+  };
+
+  // --- Safety Vault Logic ---
+  const toggleStamp = (id, stampType) => {
+    setSafetyProtocols(prev => prev.map(p => {
+      if (p.id === id) {
+        const updated = { ...p, [stampType]: !p[stampType] };
+        updated.status = (updated.adultStamp && updated.childStamp) ? 'ACTIVE' : 'STAMP_REQUIRED';
+        return updated;
+      }
+      return p;
+    }));
+  };
+
+  // --- Calendar Generator ---
+  const calendarDays = useMemo(() => {
+    const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const days = [];
+    for (let i = 1; i <= end.getDate(); i++) {
+      const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      days.push({
+        day: i,
+        dateStr,
+        events: events.filter(e => e.date === dateStr)
+      });
+    }
+    return days;
+  }, [currentDate, events]);
+
+  // --- Render Sections ---
+
+  const Sidebar = () => (
+    <nav className="w-64 bg-white border-r border-slate-200 flex flex-col p-6 h-full">
+      <div className="flex items-center gap-3 mb-10">
+        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg">FC</div>
+        <span className="text-xl font-black tracking-tighter">FamilyCore<span className="text-indigo-600">.</span></span>
+      </div>
+      <div className="space-y-1 flex-1">
+        {[
+          { id: 'dashboard', icon: Zap, label: 'Control Hub' },
+          { id: 'calendar', icon: CalendarIcon, label: 'Working Calendar' },
+          { id: 'tasks', icon: CheckCircle2, label: 'Chores & XP' },
+          { id: 'safety', icon: ShieldAlert, label: 'Safety Vault' }
+        ].map(item => (
+          <button 
+            key={item.id}
+            onClick={() => setView(item.id)}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${view === item.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-400 hover:bg-slate-50'}`}
+          >
+            <item.icon size={20} />
+            <span className="text-sm">{item.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className={`mt-auto p-4 rounded-2xl ${pebblesThinking ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-black uppercase opacity-60">Pebbles OS</p>
+          <BrainCircuit size={14} className={pebblesThinking ? 'animate-pulse' : ''} />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${pebblesThinking ? 'bg-white animate-ping' : 'bg-emerald-400'}`} />
+          <span className="text-xs font-bold">{pebblesThinking ? 'Thinking...' : 'Linked'}</span>
+        </div>
+      </div>
+    </nav>
+  );
+
+  return (
+    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
+      <Sidebar />
+      
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Universal Header */}
+        <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+          <h2 className="text-lg font-bold capitalize">{view.replace(/([A-Z])/g, ' $1')}</h2>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => speakToPebble("Status report.")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-sm border transition-all ${isListening ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-slate-700 hover:border-indigo-600'}`}
+            >
+              {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+              {isListening ? 'Listening...' : 'Talk to Pebbles'}
+            </button>
+          </div>
+        </header>
+
+        {/* Dynamic Viewport */}
+        <div className="flex-1 overflow-y-auto p-8">
+          
+          {view === 'dashboard' && (
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-3xl border shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-black text-slate-400 uppercase">Family Sov</p>
+                    <Wallet size={16} className="text-emerald-500" />
+                  </div>
+                  <p className="text-3xl font-black">${members.reduce((a, b) => a + b.sovBalance, 0).toFixed(2)}</p>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-black text-slate-400 uppercase">Spike XP (Weekly)</p>
+                    <Zap size={16} className="text-amber-500" />
+                  </div>
+                  <p className="text-3xl font-black">{members.reduce((a, b) => a + b.spikeWeekly, 0)} <span className="text-sm text-slate-300">/ {members.length * SPIKE_LIMIT_WEEKLY}</span></p>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-black text-slate-400 uppercase">Safety Level</p>
+                    <ShieldCheck size={16} className="text-indigo-500" />
+                  </div>
+                  <p className="text-3xl font-black">98%</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white rounded-3xl border p-6">
+                  <h3 className="font-bold mb-4 flex items-center gap-2"><Clock size={18}/> Upcoming Today</h3>
+                  <div className="space-y-3">
+                    {events.filter(e => e.date === '2026-01-07').map(e => (
+                      <div key={e.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                           <div className={`w-2 h-8 rounded-full ${CATEGORIES[e.category].color}`} />
+                           <div>
+                             <p className="text-sm font-bold">{e.title}</p>
+                             <p className="text-[10px] text-slate-400 font-bold">{e.time} • {e.location}</p>
+                           </div>
+                        </div>
+                        <div className="flex -space-x-2">
+                          {e.participants.map(p => <img key={p} src={getMember(p).avatar} className="w-6 h-6 rounded-full border border-white" />)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white rounded-3xl border p-6">
+                  <h3 className="font-bold mb-4 flex items-center gap-2"><ShieldAlert size={18}/> Vault Alerts</h3>
+                  {safetyProtocols.filter(p => p.status !== 'ACTIVE').map(p => (
+                    <div key={p.id} className="p-4 bg-rose-50 rounded-2xl border border-rose-100 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-rose-700">{p.title}</p>
+                        <p className="text-[10px] text-rose-500 font-black uppercase tracking-tighter">Requires Action</p>
+                      </div>
+                      <button onClick={() => setView('safety')} className="px-3 py-1 bg-rose-600 text-white text-[10px] font-bold rounded-lg">View Stamp</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'calendar' && (
+            <div className="bg-white rounded-3xl border p-6">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-black">January 2026</h3>
+                  <div className="flex gap-2">
+                    <button className="p-1 hover:bg-slate-100 rounded-lg"><ChevronLeft size={20}/></button>
+                    <button className="p-1 hover:bg-slate-100 rounded-lg"><ChevronRight size={20}/></button>
+                  </div>
+                </div>
+                <button onClick={() => setEvents([...events, { id: Date.now(), title: 'New Sync', date: '2026-01-07', time: '12:00', category: 'FAMILY', participants: ['m1'], location: 'Sandbox' }])} className="p-2 bg-indigo-600 text-white rounded-xl font-bold text-sm">+ Add Event</button>
+              </div>
+              <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-2xl overflow-hidden">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className="bg-slate-50 p-4 text-center text-[10px] font-black uppercase text-slate-400">{d}</div>
+                ))}
+                {calendarDays.map((day, idx) => (
+                  <div key={idx} className={`bg-white min-h-[120px] p-2 hover:bg-slate-50 transition-all ${day.dateStr === '2026-01-07' ? 'ring-2 ring-inset ring-indigo-500' : ''}`}>
+                    <p className={`text-xs font-black mb-2 ${day.dateStr === '2026-01-07' ? 'text-indigo-600' : 'text-slate-400'}`}>{day.day}</p>
+                    <div className="space-y-1">
+                      {day.events.map(e => (
+                        <div key={e.id} className={`text-[9px] p-1 rounded ${CATEGORIES[e.category].color} text-white font-bold truncate`}>
+                          {e.time} {e.title}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {view === 'tasks' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-black">Chore Board</h3>
+                <div className="bg-amber-100 text-amber-700 px-4 py-2 rounded-2xl text-xs font-black">Weekly Limit: {SPIKE_LIMIT_WEEKLY} XP</div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {['DAILY', 'WEEKLY'].map(type => (
+                  <div key={type} className="bg-white rounded-3xl border p-6">
+                    <h4 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest">{type} Chores</h4>
+                    <div className="space-y-4">
+                      {tasks.filter(t => t.type === type).map(task => (
+                        <div key={task.id} className={`p-4 rounded-2xl border transition-all ${task.status === 'COMPLETED' ? 'bg-slate-50 opacity-60' : 'bg-white'}`}>
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-sm font-bold">{task.title}</span>
+                            <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg">{task.points} XP</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <img src={getMember(task.assignedTo).avatar} className="w-6 h-6 rounded-full" />
+                              <span className="text-xs font-bold text-slate-500">{getMember(task.assignedTo).name}</span>
+                            </div>
+                            {task.status === 'PENDING' && (
+                              <button onClick={() => handleTaskAction(task.id, 'COMPLETE')} className="text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl border border-transparent hover:border-emerald-100">
+                                <CheckCircle size={20} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {view === 'safety' && (
+            <div className="max-w-4xl mx-auto space-y-8">
+              <div className="bg-indigo-900 text-white p-8 rounded-[40px] shadow-2xl relative overflow-hidden">
+                <div className="relative z-10">
+                  <h3 className="text-2xl font-black mb-2 flex items-center gap-3">
+                    <ShieldCheck size={28}/> Safety Vault
+                  </h3>
+                  <p className="text-indigo-200 text-sm">Multi-stamp verification for high-risk protocols.</p>
+                </div>
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/5 rounded-full blur-3xl" />
+              </div>
+
+              <div className="grid gap-6">
+                {safetyProtocols.map(protocol => (
+                  <div key={protocol.id} className="bg-white border p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600">
+                        {protocol.type === 'SOCIAL' ? <Share2 size={24}/> : <ShieldAlert size={24}/>}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-lg">{protocol.title}</h4>
+                        <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full w-fit mt-1 ${protocol.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {protocol.status.replace('_', ' ')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={() => toggleStamp(protocol.id, 'adultStamp')}
+                        className={`flex-1 md:flex-none flex items-center gap-2 px-4 py-3 rounded-2xl font-bold text-sm transition-all border ${protocol.adultStamp ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white text-slate-400'}`}
+                      >
+                        {protocol.adultStamp ? <Lock size={16}/> : <Unlock size={16}/>} Adult Stamp
+                      </button>
+                      <button 
+                        onClick={() => toggleStamp(protocol.id, 'childStamp')}
+                        className={`flex-1 md:flex-none flex items-center gap-2 px-4 py-3 rounded-2xl font-bold text-sm transition-all border ${protocol.childStamp ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white text-slate-400'}`}
+                      >
+                        {protocol.childStamp ? <Lock size={16}/> : <Unlock size={16}/>} Child Stamp
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-amber-50 border border-amber-100 p-6 rounded-3xl">
+                <div className="flex items-center gap-3 text-amber-800 mb-2">
+                  <Globe size={18}/>
+                  <span className="font-black text-sm uppercase">Sandbox Sync</span>
+                </div>
+                <p className="text-xs text-amber-700 font-medium">
+                  Protocol status is currently synced across all family sandboxes. Changes here require dual-auth stamp verification before posting to external APIs (MySchool, Social, etc.).
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Audit Log Footer */}
+        <footer className="h-16 bg-white border-t border-slate-200 px-8 flex items-center gap-6 overflow-x-auto shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <History size={16} className="text-slate-400" />
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">System Log</span>
+          </div>
+          <div className="flex gap-8 overflow-hidden">
+            {logs.map(log => (
+              <div key={log.id} className={`flex items-center gap-2 whitespace-nowrap ${log.type === 'AI' ? 'text-indigo-600' : 'text-slate-600'}`}>
+                <span className="text-[10px] font-bold opacity-40">{log.time}</span>
+                <span className={`text-xs font-bold ${log.type === 'AI' ? 'italic' : ''}`}>{log.text}</span>
+              </div>
+            ))}
+          </div>
+        </footer>
+      </main>
+    </div>
+  );
+}
