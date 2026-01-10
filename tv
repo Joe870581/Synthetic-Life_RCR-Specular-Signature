@@ -1,0 +1,303 @@
+
+'use client';
+
+import React, { useEffect, useState, useRef, Suspense } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { doc, onSnapshot, getDoc, deleteDoc, setDoc, serverTimestamp, collection, query, where, orderBy, updateDoc, addDoc } from 'firebase/firestore';
+import { useFirebase } from '@/firebase';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ShieldAlert, ZapOff, CheckCircle, Terminal } from 'lucide-react';
+
+const CODE_LIFETIME_SECONDS = 60;
+
+// --- Safety Overlay Component ---
+const SafetyOverlay = ({ status }: { status: string | undefined }) => {
+    const isOverheat = status === 'OVERHEAT_CRITICAL';
+    const isHighCurrent = status === 'FIELD_INTENSITY_HIGH';
+  
+    return (
+      <AnimatePresence>
+        {(isOverheat || isHighCurrent) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ 
+              opacity: 1,
+              backgroundColor: isOverheat ? "rgba(220, 38, 38, 0.25)" : "rgba(245, 158, 11, 0.15)"
+            }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 pointer-events-none border-[20px]"
+            style={{ borderColor: isOverheat ? '#dc2626' : '#f59e0b' }}
+          >
+            <div className="flex flex-col items-center justify-center h-full">
+              <motion.div
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ repeat: Infinity, duration: 1 }}
+                className="bg-black/80 p-8 rounded-2xl border-4 border-current flex flex-col items-center justify-center"
+                style={{ color: isOverheat ? '#dc2626' : '#f59e0b' }}
+              >
+                {isOverheat ? <ZapOff size={64} /> : <ShieldAlert size={64} />}
+                <h2 className="text-4xl font-black mt-4 uppercase tracking-tight text-center">
+                  {isOverheat ? "Safety Shutdown" : "Field Throttling"}
+                </h2>
+                <p className="text-white/70 mt-2 text-sm font-mono text-center uppercase tracking-wide max-w-xs">
+                  {isOverheat
+                    ? "Critical Thermal Threshold Reached"
+                    : "Current Spike Detected — Duty Cycle Auto-Scaled"}
+                </p>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+};
+
+// --- Command Listener Hook ---
+const useCommandListener = (firestore) => {
+    const [commandLog, setCommandLog] = useState([]);
+
+    useEffect(() => {
+        if (!firestore) return;
+
+        const commandsRef = collection(firestore, 'sov_commands');
+        const q = query(commandsRef, where('status', '==', 'pending'), orderBy('timestamp', 'asc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach(async (change) => {
+                if (change.type === 'added') {
+                    const commandData = change.doc.data();
+                    const commandId = change.doc.id;
+
+                    const logEntry = `[${new Date().toLocaleTimeString()}] Received command: ${commandData.action}`;
+                    setCommandLog(prev => [logEntry, ...prev.slice(0, 10)]);
+
+                    let responseMessage = '';
+                    if (commandData.action.includes('CHARGE') || commandData.action.includes('POWER')) {
+                        responseMessage = 'Forge Active. Power transfer initiated.';
+                    } else if (commandData.action.includes('LOCATE')) {
+                        responseMessage = 'Home Universe Located. Session is stable.';
+                    } else {
+                        responseMessage = `Unknown command processed: ${commandData.action}`;
+                    }
+
+                    await updateDoc(doc(firestore, 'sov_commands', commandId), { status: 'executed' });
+
+                    await addDoc(collection(firestore, 'sov_responses'), {
+                        commandId,
+                        status: 'executed',
+                        message: responseMessage,
+                        timestamp: serverTimestamp(),
+                        origin: 'HOME_HUB'
+                    });
+                }
+            });
+        });
+
+        return () => unsubscribe();
+    }, [firestore]);
+
+    return commandLog;
+};
+
+
+function TVSpectrogramContent({ pairCode, isSimulated = false }) {
+  const { firestore } = useFirebase();
+  const [sessionData, setSessionData] = useState<any>(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pointsRef = useRef<{ x: number, y: number }[]>([]);
+  const commandLog = useCommandListener(firestore); // Use the command listener hook
+
+  // Listen for the "Jump" from the Phone (or simulator)
+  useEffect(() => {
+    if (!firestore || !pairCode) return;
+    const docRef = doc(firestore, 'pairCodes', pairCode);
+
+    const unsubscribe = onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setSessionData(data);
+        
+        if (data.status === 'locked' && !isLocked) {
+          setIsLocked(true);
+          setTimeout(() => setIsLocked(false), 2000);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [firestore, pairCode, isLocked]);
+
+  // High-Performance Canvas Rendering (Spectrogram)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !sessionData?.amplitude) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+
+    const render = () => {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; 
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const height = (sessionData.amplitude / 100) * canvas.height;
+      const x = (sessionData.currentFreq / 25000) * canvas.width;
+      
+      pointsRef.current.push({ x, y: canvas.height - height });
+      if (pointsRef.current.length > 200) pointsRef.current.shift();
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#6366f1';
+      
+      if(pointsRef.current.length > 0){
+        ctx.moveTo(pointsRef.current[0]?.x, pointsRef.current[0]?.y);
+        pointsRef.current.forEach((p) => {
+          ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    animationFrameId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [sessionData]);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-screen w-screen bg-black text-white p-8">
+      <SafetyOverlay status={sessionData?.safetyStatus} />
+      <canvas ref={canvasRef} width={1920} height={1080} className="border border-indigo-500/20 rounded-lg shadow-lg w-full h-[60vh] object-contain" />
+      <div className="mt-8 text-center w-full max-w-4xl bg-black/50 p-4 rounded-xl backdrop-blur-md grid grid-cols-3 gap-4">
+        <div>
+            <h2 className="text-sm font-bold text-slate-400">Current Frequency</h2>
+            <p className="text-xl font-black tracking-wider text-white">{sessionData?.currentFreq || 0} Hz</p>
+        </div>
+        <div>
+            <h2 className="text-sm font-bold text-slate-400">Signal Status</h2>
+            <p className={`text-xl font-black tracking-wider ${sessionData?.status === 'locked' ? 'text-green-400' : 'text-yellow-400'}`}>{sessionData?.status || 'PENDING'}</p>
+        </div>
+        <div className="bg-slate-900/50 rounded-lg p-2 max-h-24 overflow-y-auto">
+            <p className="text-[10px] font-mono text-cyan-400 text-left">
+                {commandLog.map((log, i) => <span key={i} className="block">{log}</span>)}
+            </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TVPairingPage() {
+  const { firestore } = useFirebase();
+  const router = useRouter();
+
+  const [pairCode, setPairCode] = useState('');
+  const [countdown, setCountdown] = useState(CODE_LIFETIME_SECONDS);
+  const codeLifetimeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const generateCode = useCallback(() => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }, []);
+
+  useEffect(() => {
+    const newCode = generateCode();
+    setPairCode(newCode);
+    setCountdown(CODE_LIFETIME_SECONDS);
+
+    if (codeLifetimeIntervalRef.current) clearInterval(codeLifetimeIntervalRef.current);
+
+    codeLifetimeIntervalRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          const freshCode = generateCode();
+          setPairCode(freshCode);
+          return CODE_LIFETIME_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (codeLifetimeIntervalRef.current) clearInterval(codeLifetimeIntervalRef.current);
+    };
+  }, [generateCode]);
+  
+  useEffect(() => {
+    if (!firestore || !pairCode) return;
+    const docRef = doc(firestore, 'pairCodes', pairCode);
+    
+    setDoc(docRef, { 
+        createdAt: serverTimestamp(),
+        status: 'pending',
+        claimedBy: null
+    }).catch(err => console.error("Error creating pairing code doc:", err));
+
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.status === 'claimed' && data.claimedBy) {
+                router.push(`/tv?pairCode=${pairCode}`);
+            }
+        }
+    });
+
+    return () => {
+      unsubscribe();
+      const tempDocRef = doc(firestore, 'pairCodes', pairCode);
+      getDoc(tempDocRef).then(snap => {
+          if (snap.exists() && snap.data()?.status !== 'claimed') {
+              deleteDoc(tempDocRef).catch(()=>{});
+          }
+      }).catch(()=>{});
+    };
+  }, [firestore, pairCode, router]);
+
+  return (
+    <div className="flex h-screen w-screen flex-col items-center justify-center bg-black text-white antialiased">
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(79,70,229,0.3),rgba(255,255,255,0))] opacity-40" />
+      </div>
+      <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="relative flex h-80 w-80 items-center justify-center rounded-full">
+        <div className="absolute rounded-full border-8 border-indigo-500/40 animate-pulse w-80 h-80 sm:w-96 sm:h-96" />
+        <div className="absolute rounded-full border-4 border-indigo-400/60 w-64 h-64 sm:w-80 sm:h-80 animate-ping" />
+        <div className="relative z-10 flex flex-col items-center justify-center rounded-full border border-indigo-500/50 bg-slate-900/80 p-8 text-center shadow-2xl backdrop-blur-xl">
+          <h1 className="text-5xl sm:text-7xl font-black tracking-widest text-indigo-400">
+            {pairCode.split('').map((char, i) => (
+              <motion.span key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 + i * 0.1 }}>{char}</motion.span>
+            ))}
+          </h1>
+          <p className="mt-4 text-lg text-indigo-300 font-mono">
+            Expires in {countdown}s
+          </p>
+        </div>
+      </motion.div>
+      <div className="mt-20 text-center">
+          <h2 className="text-xl font-bold tracking-tight">Open the Pebble App on your phone</h2>
+          <p className="mt-2 text-slate-400">Enter the code above to summon the OS to this screen.</p>
+      </div>
+    </div>
+  );
+}
+
+function PageContent() {
+  const searchParams = useSearchParams();
+  const pairCode = searchParams.get('pairCode');
+  const isSimulated = searchParams.get('sim') === 'true';
+
+  if (pairCode || isSimulated) {
+    return <TVSpectrogramContent pairCode={pairCode} isSimulated={isSimulated} />;
+  }
+
+  return <TVPairingPage />;
+}
+
+export default function TVPageWrapper() {
+  return (
+    <Suspense fallback={<div className="bg-black text-white flex items-center justify-center h-screen">Initializing TV Hub...</div>}>
+      <PageContent />
+    </Suspense>
+  )
+}
