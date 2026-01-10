@@ -1,0 +1,477 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { 
+  Heart, MessageSquare, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon,
+  Gamepad2, BarChart3, FileText, PlusCircle, Settings, ArrowRight, Upload, Tv
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Link from 'next/link';
+
+// --- UTILITY & HELPER FUNCTIONS ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- INITIAL DATA & CONFIG ---
+const mainVideo = {
+    id: 'vid1',
+    title: 'Sovereign OS: The Genesis Protocol',
+    creator: 'Sovereign Archives',
+    creatorAvatar: 'https://i.pravatar.cc/150?u=sov_archives',
+    views: '1.2M',
+    likes: '98K',
+    timestamp: '2 weeks ago',
+    description: 'A deep dive into the foundational principles of the Sovereign Operating System. This video covers the economic model, the TrueOath handshake, and the vision for a decentralized digital future governed by users.',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-lighting-in-the-city-at-night-21895-large.mp4',
+    thumbnail: 'https://images.unsplash.com/photo-1517849845537-4d257902454a?w=800&q=80',
+};
+
+const upNextVideos = [
+    { id: 'vid2', title: 'DockRTC: Building a Private Signaling Layer', creator: 'DevCore', duration: '15:32', thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=800&auto=format&fit=crop', views: '194K' },
+    { id: 'vid3', title: 'The Spike Points Economy Explained', creator: 'Finance Hub', duration: '8:45', thumbnail: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=800&auto=format&fit=crop', views: '366K' },
+    { id: 'vid4', title: 'A Day in the Life of a Sovereign Family', creator: 'The Andersons', duration: '22:10', thumbnail: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&fit=crop', views: '351K' },
+];
+
+const trueOathMovies = [
+    { id: 'mov1', title: 'Cosmic Drift', source: 'TrueOath Native', image: 'https://images.unsplash.com/photo-1534447677768-be436a0979f9?w=800&q=80' },
+    { id: 'mov2', title: 'Cyber City Blues', source: 'TrueOath Native', image: 'https://images.unsplash.com/photo-1519638399535-1b036603ac77?w=800&q=80' },
+    { id: 'mov3', title: 'The Last Connection', source: 'Netflix', image: 'https://images.unsplash.com/photo-1585951237313-16215d5826c1?w=800&q=80', linked: true },
+    { id: 'mov4', title: 'The Tomorrow War', source: 'Prime Video', image: 'https://images.unsplash.com/photo-1620188463214-c2920a283b57?w=800&q=80', linked: true },
+];
+
+const comments = [
+    { id: 'com1', user: 'Architect_01', text: 'Excellent breakdown of the core concepts.', avatar: 'https://i.pravatar.cc/150?u=arch_01' },
+    { id: 'com2', user: 'Nexus_User', text: 'This is the future! Wen mainnet?', avatar: 'https://i.pravatar.cc/150?u=nexus_user' },
+];
+
+
+// --- UNIVERSAL NAVIGATION HEADER ---
+const HeaderNav = () => {
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    const navLinks = [
+        { href: '/shared-app/myclips?sessionId=null&userId=p1', icon: HomeIcon, label: 'Home Feed' },
+        { href: '/adult-app/adult-socialpost-view?sessionId=null&userId=p1', icon: ImageIcon, label: 'Editorial' },
+        { href: '/shared-app/video-posting?sessionId=null&userId=p1', icon: Video, label: 'Video Gallery' },
+        { href: '/adult-app/adults-message?sessionId=null&userId=p1', icon: Music, label: 'Comms' },
+    ];
+    
+    return (
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+        <motion.div 
+            layout
+            className="flex items-center gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/[0.05] rounded-3xl"
+        >
+            <motion.button
+                layout
+                onClick={() => setIsSearchOpen(p => !p)}
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isSearchOpen ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+            >
+                <Search />
+            </motion.button>
+            <AnimatePresence>
+                {isSearchOpen && (
+                    <motion.div
+                        layout
+                        initial={{opacity: 0, width: 0}}
+                        animate={{opacity: 1, width: 'auto'}}
+                        exit={{opacity: 0, width: 0}}
+                        className="flex items-center gap-2 overflow-hidden"
+                    >
+                        <div className="w-px h-8 bg-white/10" />
+                        {navLinks.map((link) => (
+                            <Link key={link.href} href={link.href} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center" title={link.label}>
+                                <link.icon className="text-white/70"/>
+                            </Link>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+         {isSearchOpen && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
+                <Link href="/adult-app/adult-socialpost-view?sessionId=null&userId=p1">
+                    <input type="text" placeholder="Search the universe..." className="w-full bg-black/40 backdrop-blur-3xl border border-white/10 rounded-2xl p-4 text-sm font-bold placeholder:text-white/30 outline-none focus:ring-2 focus:ring-cyan-500 text-center cursor-pointer" readOnly/>
+                </Link>
+            </motion.div>
+         )}
+      </div>
+    );
+};
+
+// --- VIDEO PLAYER & CONTROLS ---
+const VideoPlayer = ({ video }) => {
+    const videoRef = useRef(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    const togglePlay = () => {
+        if (videoRef.current) {
+            if (isPlaying) videoRef.current.pause();
+            else videoRef.current.play();
+            setIsPlaying(!isPlaying);
+        }
+    };
+
+    return (
+        <div className="relative aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl shadow-black/40 border border-white/10">
+            <video ref={videoRef} src={video.videoUrl} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/20" />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity" onClick={togglePlay}>
+                <button className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                    {isPlaying ? <Pause size={40} /> : <Play size={40} className="ml-2" />}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+// --- DISCOVERY HUB COMPONENTS ---
+const HubCard = ({ title, description, icon: Icon, onClick }) => (
+  <motion.div 
+    whileHover={{ y: -5 }}
+    onClick={onClick}
+    className="bg-zinc-900/50 border border-white/10 p-6 rounded-3xl cursor-pointer group"
+  >
+    <div className="flex items-start justify-between">
+      <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20 mb-4 transition-all duration-300 group-hover:bg-indigo-500/20 group-hover:border-indigo-500/40">
+        <Icon size={24} />
+      </div>
+      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Explore</span>
+    </div>
+    <h3 className="text-xl font-bold mb-1">{title}</h3>
+    <p className="text-sm text-zinc-400">{description}</p>
+  </motion.div>
+);
+
+const DiscoveryHub = ({ onSelectCategory }) => {
+    const categories = [
+        { id: 'gaming', title: 'Gaming', description: 'Live streams and VODs from your favorite creators.', icon: Gamepad2 },
+        { id: 'shows', title: 'Shows & Series', description: 'Original series and syndicated TV shows.', icon: Clapperboard },
+        { id: 'trueoath', title: 'TrueOath Cinema', description: 'Premium, ad-free movies for the family.', icon: Film },
+        { id: 'news', title: 'News & Articles', description: 'In-depth reports and current events.', icon: Newspaper },
+    ];
+    return (
+        <div className="max-w-4xl mx-auto py-24 text-center">
+            <h1 className="text-5xl font-black italic tracking-tighter mb-4">The Video Hub</h1>
+            <p className="text-zinc-400 text-lg mb-12">Long-form content, live broadcasts, and cinematic experiences.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {categories.map(cat => (
+                    <HubCard key={cat.id} {...cat} onClick={() => onSelectCategory(cat.id)} />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- TRUEOATH CINEMA ---
+const TrueOathCinemaView = ({ onSelectMovie, onBack }) => {
+    const serviceIcons = [
+        { name: 'Netflix', icon: Tv, linked: true },
+        { name: 'Prime Video', icon: Tv, linked: true },
+        { name: 'Hulu', icon: Tv, linked: false },
+        { name: 'Apple TV+', icon: Tv, linked: false },
+    ];
+    
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto py-24 text-center">
+            <button onClick={onBack} className="absolute top-6 left-6 z-50 flex items-center gap-2 text-sm text-white/70 hover:text-white">
+                <ChevronLeft size={20} /> Back to Hub
+            </button>
+            <div className="relative inline-block mb-10">
+                <div className="absolute -inset-2 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-full blur-xl opacity-30 animate-pulse" />
+                <div className="relative p-5 bg-black/50 border border-white/10 rounded-full">
+                    <Film size={40} className="text-indigo-300" />
+                </div>
+            </div>
+            <h1 className="text-5xl font-black italic tracking-tighter mb-4">TrueOath Cinema</h1>
+            <p className="text-zinc-400 text-lg mb-12">Your unified streaming library, secured by Sovereign OS.</p>
+            
+            <div className="p-4 bg-black/20 border border-white/10 rounded-2xl mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+                 <div className="flex items-center gap-4">
+                    {serviceIcons.map(service => (
+                        <div key={service.name} className={`flex items-center gap-2 p-2 rounded-xl border ${service.linked ? 'border-green-500/30 bg-green-500/10 text-green-300' : 'border-zinc-700 bg-zinc-800 text-zinc-500'}`}>
+                            <service.icon size={16} />
+                            <span className="text-xs font-bold">{service.name}</span>
+                        </div>
+                    ))}
+                 </div>
+                 <Link href="/admin/dashboard/system-settings/sovereign-internet" className="w-full sm:w-auto">
+                    <button className="flex items-center justify-center gap-2 w-full text-xs font-bold text-white bg-white/10 px-4 py-2 rounded-xl hover:bg-white/20 transition-colors">
+                        <Settings size={14} /> Manage Links (TrueOath)
+                    </button>
+                 </Link>
+            </div>
+
+            <h3 className="text-xl font-bold text-left mb-4">Sovereign Originals</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {trueOathMovies.filter(m => m.source === 'TrueOath Native').map(movie => (
+                    <div key={movie.id} className="aspect-[2/3] bg-zinc-800 rounded-lg overflow-hidden group cursor-pointer" onClick={() => onSelectMovie(movie)}>
+                        <img src={movie.image} alt={movie.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                ))}
+            </div>
+
+             <h3 className="text-xl font-bold text-left mb-4">From Your Services</h3>
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {trueOathMovies.filter(m => m.linked).map(movie => (
+                    <div key={movie.id} className="aspect-[2/3] bg-zinc-800 rounded-lg overflow-hidden group cursor-pointer" onClick={() => onSelectMovie(movie)}>
+                        <img src={movie.image} alt={movie.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+// --- NEWS/ARTICLE VIEW ---
+const NewsAndArticleView = ({ onSelectVideo, onBack, category }) => {
+    const [activeTab, setActiveTab] = useState('news');
+    const topics = ['News', 'Articles', 'Talk Shows', 'Debates'];
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto py-24">
+            <button onClick={onBack} className="absolute top-6 left-6 z-50 flex items-center gap-2 text-sm text-white/70 hover:text-white">
+                <ChevronLeft size={20} /> Back to Hub
+            </button>
+            <div className="flex flex-col items-center mb-8">
+                 <div className="relative inline-block mb-10">
+                    <div className="absolute -inset-2 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-full blur-xl opacity-30 animate-pulse" />
+                    <div className="relative p-5 bg-black/50 border border-white/10 rounded-full">
+                        <Newspaper size={40} className="text-blue-300" />
+                    </div>
+                </div>
+                <h1 className="text-5xl font-black italic tracking-tighter mb-4">The Sovereign Times</h1>
+                <p className="text-zinc-400 text-lg mb-8">Curated news, in-depth articles, and video discussions from the community.</p>
+                <div className="flex items-center gap-2 p-1 bg-black/20 border border-white/10 rounded-full mb-8">
+                    {topics.map(topic => (
+                         <button key={topic} onClick={() => setActiveTab(topic.toLowerCase())} className={`px-4 py-2 rounded-full text-sm font-bold ${activeTab === topic.toLowerCase() ? 'bg-white/10' : ''}`}>{topic}</button>
+                    ))}
+                    <button className="p-2 rounded-full hover:bg-white/10"><Search size={18} /></button>
+                </div>
+            </div>
+            {/* Content would be filtered based on activeTab */}
+            <div className="space-y-8">
+                {upNextVideos.map(video => (
+                     <div key={video.id} className="flex flex-col sm:flex-row gap-4 group cursor-pointer" onClick={() => onSelectVideo(video)}>
+                        <div className="w-full sm:w-64 sm:h-36 bg-zinc-800 rounded-lg overflow-hidden relative flex-shrink-0">
+                            <img src={video.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt={video.title}/>
+                            <p className="absolute bottom-2 right-2 bg-black/50 text-xs px-1.5 py-1 rounded">{video.duration}</p>
+                        </div>
+                        <div className="flex-1">
+                             <h3 className="font-bold text-lg leading-tight group-hover:text-blue-400 transition-colors">{video.title}</h3>
+                             <p className="text-sm text-zinc-400 mt-2">{video.views} views • {Math.floor(Math.random()*12)+1} months ago</p>
+                             <div className="flex items-center gap-2 mt-3">
+                                <img src={`https://i.pravatar.cc/150?u=${video.creator}`} className="w-6 h-6 rounded-full" alt="Creator" />
+                                <p className="text-xs text-zinc-500 font-semibold">{video.creator}</p>
+                             </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+// --- GAMING VIEW ---
+const GamingView = ({ onSelectVideo, onBack }) => {
+    const [activeTab, setActiveTab] = useState('live');
+    const topics = ['Live', 'Videos', 'Explore', 'Funny', 'Strategy'];
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto py-24 text-center">
+            <button onClick={onBack} className="absolute top-6 left-6 z-50 flex items-center gap-2 text-sm text-white/70 hover:text-white">
+                <ChevronLeft size={20} /> Back to Hub
+            </button>
+            <div className="flex flex-col items-center">
+                 <div className="relative inline-block mb-10">
+                    <div className="absolute -inset-2 bg-gradient-to-tr from-purple-600 to-green-600 rounded-full blur-xl opacity-30 animate-pulse" />
+                    <div className="relative p-5 bg-black/50 border border-white/10 rounded-full">
+                        <Gamepad2 size={40} className="text-green-300" />
+                    </div>
+                </div>
+                <h1 className="text-5xl font-black italic tracking-tighter mb-4">Gaming Hub</h1>
+                <p className="text-zinc-400 text-lg mb-8">Your universe of live streams, VODs, and community content.</p>
+                
+                <div className="flex items-center gap-2 p-1 bg-black/20 border border-white/10 rounded-full mb-8">
+                    {topics.map(topic => (
+                         <button key={topic} onClick={() => setActiveTab(topic.toLowerCase())} className={`px-4 py-2 rounded-full text-sm font-bold ${activeTab === topic.toLowerCase() ? 'bg-white/10' : ''}`}>{topic}</button>
+                    ))}
+                    <button className="p-2 rounded-full hover:bg-white/10"><Search size={18} /></button>
+                </div>
+            </div>
+            {/* Content would be filtered based on activeTab */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {upNextVideos.map(video => (
+                    <div key={video.id} className="flex flex-col gap-2 group cursor-pointer" onClick={() => onSelectVideo(video)}>
+                        <div className="w-full aspect-video bg-zinc-800 rounded-lg overflow-hidden relative">
+                            <img src={video.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt={video.title}/>
+                            <p className="absolute bottom-2 right-2 bg-black/50 text-xs px-1.5 py-1 rounded">{video.duration}</p>
+                            {activeTab === 'live' && <div className="absolute top-2 left-2 bg-red-500 text-xs font-bold px-2 py-1 rounded-md animate-pulse">LIVE</div>}
+                        </div>
+                        <div className="text-left">
+                             <h3 className="font-bold text-sm leading-tight group-hover:text-green-400 transition-colors">{video.title}</h3>
+                             <p className="text-xs text-zinc-400 mt-1">{video.creator}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+// --- SHOWS & SERIES VIEW ---
+const ShowsAndSeriesView = ({ onSelectVideo, onBack }) => {
+    const [activeTab, setActiveTab] = useState('live');
+    const topics = ['Live', 'Funny Shows', 'Episodes', 'Discover', 'Random', 'Music Videos'];
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto py-24">
+            <button onClick={onBack} className="absolute top-6 left-6 z-50 flex items-center gap-2 text-sm text-white/70 hover:text-white">
+                <ChevronLeft size={20} /> Back to Hub
+            </button>
+            <div className="flex flex-col items-center mb-8">
+                 <div className="relative inline-block mb-10">
+                    <div className="absolute -inset-2 bg-gradient-to-tr from-orange-500 to-rose-600 rounded-full blur-xl opacity-30 animate-pulse" />
+                    <div className="relative p-5 bg-black/50 border border-white/10 rounded-full">
+                        <Tv size={40} className="text-rose-300" />
+                    </div>
+                </div>
+                <h1 className="text-5xl font-black italic tracking-tighter mb-4">Shows & Series</h1>
+                <p className="text-zinc-400 text-lg mb-8">Episodic content, live talk shows, and comedy specials.</p>
+                
+                <div className="flex items-center gap-2 p-1 bg-black/20 border border-white/10 rounded-full mb-8">
+                    {topics.map(topic => (
+                         <button key={topic} onClick={() => setActiveTab(topic.toLowerCase())} className={`px-4 py-2 rounded-full text-sm font-bold ${activeTab === topic.toLowerCase() ? 'bg-white/10' : ''}`}>{topic}</button>
+                    ))}
+                    <button className="p-2 rounded-full hover:bg-white/10"><Search size={18} /></button>
+                </div>
+            </div>
+             <div className="space-y-8">
+                {upNextVideos.map(video => (
+                     <div key={video.id} className="flex flex-col sm:flex-row gap-4 group cursor-pointer" onClick={() => onSelectVideo(video)}>
+                        <div className="w-full sm:w-64 sm:h-36 bg-zinc-800 rounded-lg overflow-hidden relative flex-shrink-0">
+                            <img src={video.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt={video.title}/>
+                            <p className="absolute bottom-2 right-2 bg-black/50 text-xs px-1.5 py-1 rounded">{video.duration}</p>
+                        </div>
+                        <div className="flex-1">
+                             <h3 className="font-bold text-lg leading-tight group-hover:text-rose-400 transition-colors">{video.title}</h3>
+                             <p className="text-sm text-zinc-400 mt-2">{video.views} views • {Math.floor(Math.random()*12)+1} months ago</p>
+                             <div className="flex items-center gap-2 mt-3">
+                                <img src={`https://i.pravatar.cc/150?u=${video.creator}`} className="w-6 h-6 rounded-full" alt="Creator" />
+                                <p className="text-xs text-zinc-500 font-semibold">{video.creator}</p>
+                             </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+// --- Player View ---
+const PlayerView = ({ onBack, video }) => (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col items-center justify-center p-6">
+        <button onClick={onBack} className="absolute top-6 left-6 z-50 flex items-center gap-2 text-sm text-white/70 hover:text-white">
+            <ChevronLeft size={20} /> Back to Results
+        </button>
+        <div className="w-full max-w-5xl mx-auto">
+            <VideoPlayer video={video} />
+            <div className="mt-4">
+                <h2 className="text-2xl font-bold">{video.title}</h2>
+                <p className="text-zinc-400">{video.creator}</p>
+            </div>
+        </div>
+    </motion.div>
+);
+
+
+// --- Main App Component ---
+const AppContent = () => {
+    const [view, setView] = useState('hub');
+    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [selectedVideo, setSelectedVideo] = useState(null);
+    
+    const verticalNavItems = [
+      { id: 'analytics', label: 'Analytics', icon: BarChart3, href: '/adult-app/adult-music-video/p1?sessionId=null&userId=p1' },
+      { id: 'gamerzone', label: 'GamerZone', icon: Gamepad2, href: '/shared-app/gamerzoner?sessionId=null&userId=p1' },
+      { id: 'post', label: 'Create Post', icon: FileText, href: '#' },
+      { id: 'create', label: 'Create Content', icon: PlusCircle, href: '#' },
+    ];
+
+    const handleSelectCategory = (categoryId) => {
+        setSelectedCategory(categoryId);
+        if (categoryId === 'trueoath') setView('cinema');
+        else if (categoryId === 'gaming') setView('gaming');
+        else if (categoryId === 'shows') setView('shows');
+        else if (categoryId === 'news') setView('news');
+        else setView('player'); // Fallback to player for any other category
+    };
+
+    const handleSelectVideo = (video) => {
+        setSelectedVideo(video);
+        setView('player');
+    };
+
+    const handleBackToHub = () => {
+        setView('hub');
+        setSelectedCategory(null);
+    };
+    
+    const handleBackToResults = () => {
+        setView(selectedCategory || 'hub');
+        setSelectedVideo(null);
+    };
+    
+    const renderView = () => {
+        switch (view) {
+            case 'hub': return <DiscoveryHub onSelectCategory={handleSelectCategory} />;
+            case 'gaming': return <GamingView onSelectVideo={handleSelectVideo} onBack={handleBackToHub} />;
+            case 'shows': return <ShowsAndSeriesView onSelectVideo={handleSelectVideo} onBack={handleBackToHub} />;
+            case 'news': return <NewsAndArticleView onSelectVideo={handleSelectVideo} onBack={handleBackToHub} category={selectedCategory} />;
+            case 'cinema': return <TrueOathCinemaView onSelectMovie={handleSelectVideo} onBack={handleBackToHub} />;
+            case 'player': return <PlayerView onBack={handleBackToResults} video={selectedVideo || mainVideo} />;
+            default: return <DiscoveryHub onSelectCategory={handleSelectCategory} />;
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-[#050505] text-white p-6 relative">
+            <div className="absolute top-6 left-6 z-[200] flex flex-col gap-2 pointer-events-auto">
+              {verticalNavItems.map(item => (
+                <Link key={item.id} href={item.href} passHref>
+                  <span className={`flex items-center gap-2 px-4 py-2 text-xs rounded-full border bg-black/40 backdrop-blur-md ${item.href === '#' ? 'text-zinc-600 border-zinc-800 cursor-not-allowed' : 'text-zinc-300 border-zinc-800 hover:bg-white/10 hover:border-zinc-700'}`}>
+                    <item.icon size={14} />
+                    <span>{item.label}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <HeaderNav />
+            {renderView()}
+        </div>
+    );
+};
+
+const AppWithProvider = (props) => (
+    <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading User Data...</div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default function App() {
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap'); body { font-family: 'Inter', sans-serif; background: #050505; color: white; margin: 0; }`;
+        document.head.appendChild(style);
+        return () => { document.head.removeChild(style); };
+    }, []);
+
+    return <AppWithProvider />;
+}
