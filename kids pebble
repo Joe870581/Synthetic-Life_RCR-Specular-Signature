@@ -1,0 +1,412 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { 
+  Wand2, Layers, Crop, Sun, Contrast, Droplets, 
+  RotateCcw, Download, Image as ImageIcon, Sparkles, 
+  Palette, Move, Check, X, Maximize, Undo, Redo,
+  CloudUpload, Layout, Sliders, Type, Scissors, 
+  Sticker, Eraser, MousePointer2, Frame, 
+  Grid3X3, Eye, EyeOff, Trash2, Plus, 
+  ChevronRight, ChevronDown, Monitor, Smartphone,
+  Zap, Brush, Shapes, Settings2
+} from 'lucide-react';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+export default function OmniStudio() {
+  const [image, setImage] = useState(null);
+  const [activeTab, setActiveTab] = useState('edit');
+  const [selectedLayer, setSelectedLayer] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  
+  // Advanced State
+  const [layers, setLayers] = useState([
+    { id: 0, name: 'Background', visible: true, locked: false, opacity: 100, blend: 'normal' }
+  ]);
+  
+  const [settings, setSettings] = useState({
+    brightness: 100,
+    contrast: 100,
+    saturation: 100,
+    blur: 0,
+    sepia: 0,
+    hue: 0,
+    exposure: 0,
+    temperature: 0,
+    vignette: 0,
+    noise: 0
+  });
+
+  const [canvasMode, setCanvasMode] = useState('free'); // 'free', 'ig-story', 'yt-thumb'
+
+  const handleUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        setImage(re.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const runAIAction = (label) => {
+    setIsProcessing(true);
+    setTimeout(() => {
+      if(label === 'Expand') setZoom(zoom + 20);
+      if(label === 'Enhance') setSettings(s => ({...s, brightness: 110, contrast: 115, saturation: 110}));
+      setIsProcessing(false);
+    }, 2000);
+  };
+
+  const filterString = `
+    brightness(${settings.brightness}%) 
+    contrast(${settings.contrast}%) 
+    saturate(${settings.saturation}%) 
+    blur(${settings.blur}px) 
+    sepia(${settings.sepia}%) 
+    hue-rotate(${settings.hue}deg)
+    grayscale(${settings.noise / 2}%)
+  `;
+
+  return (
+    <div className="h-screen bg-[#060606] text-white flex flex-col font-sans overflow-hidden select-none">
+      
+      {/* 1. TOP BAR: GLOBAL ACTIONS */}
+      <header className="h-14 border-b border-white/5 bg-black/60 backdrop-blur-2xl px-4 flex items-center justify-between z-[100]">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 group cursor-pointer">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 via-fuchsia-500 to-orange-500 rounded-lg flex items-center justify-center rotate-3 group-hover:rotate-0 transition-transform shadow-lg shadow-fuchsia-500/20">
+              <Zap size={18} fill="currentColor" />
+            </div>
+            <h1 className="text-xs font-black tracking-[0.2em] uppercase italic bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">
+              Omni<span className="text-white">Studio</span>
+            </h1>
+          </div>
+          
+          <div className="h-6 w-[1px] bg-white/10 mx-2" />
+          
+          <div className="flex items-center gap-1">
+            <NavButton icon={<Undo size={14}/>} />
+            <NavButton icon={<Redo size={14}/>} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex bg-white/5 p-1 rounded-full border border-white/10">
+            <ModeBtn active={canvasMode === 'free'} onClick={() => setCanvasMode('free')} icon={<Maximize size={14}/>} />
+            <ModeBtn active={canvasMode === 'ig-story'} onClick={() => setCanvasMode('ig-story')} icon={<Smartphone size={14}/>} />
+            <ModeBtn active={canvasMode === 'yt-thumb'} onClick={() => setCanvasMode('yt-thumb')} icon={<Monitor size={14}/>} />
+          </div>
+          
+          <button className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20">
+            <Download size={14} /> Render Project
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        
+        {/* 2. LEFT TOOLBAR: MODES */}
+        <aside className="w-16 border-r border-white/5 bg-black/40 flex flex-col items-center py-6 gap-6 z-50">
+          <ToolIcon icon={<MousePointer2 size={20}/>} active={activeTab === 'select'} onClick={() => setActiveTab('select')} label="Select" />
+          <ToolIcon icon={<Wand2 size={20}/>} active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} label="Gen AI" />
+          <ToolIcon icon={<Sliders size={20}/>} active={activeTab === 'edit'} onClick={() => setActiveTab('edit')} label="Adjust" />
+          <ToolIcon icon={<Brush size={20}/>} active={activeTab === 'draw'} onClick={() => setActiveTab('draw')} label="Brush" />
+          <ToolIcon icon={<Type size={20}/>} active={activeTab === 'text'} onClick={() => setActiveTab('text')} label="Text" />
+          <ToolIcon icon={<Shapes size={20}/>} active={activeTab === 'shapes'} onClick={() => setActiveTab('shapes')} label="Shape" />
+          <ToolIcon icon={<Sticker size={20}/>} active={activeTab === 'assets'} onClick={() => setActiveTab('assets')} label="Library" />
+          <div className="mt-auto">
+            <ToolIcon icon={<Settings2 size={20}/>} active={activeTab === 'prefs'} onClick={() => setActiveTab('prefs')} label="Prefs" />
+          </div>
+        </aside>
+
+        {/* 3. SUB-TOOL OPTIONS (Contextual) */}
+        <aside className="w-64 border-r border-white/5 bg-black/20 overflow-y-auto custom-scrollbar">
+          <div className="p-5">
+            {activeTab === 'ai' && <AIPanel onAction={runAIAction} />}
+            {activeTab === 'edit' && <AdjustPanel settings={settings} setSettings={setSettings} />}
+            {activeTab === 'draw' && <BrushPanel />}
+            {activeTab === 'text' && <TextPanel />}
+            {activeTab === 'assets' && <AssetsPanel />}
+          </div>
+        </aside>
+
+        {/* 4. MAIN CANVAS STAGE */}
+        <main className="flex-1 bg-[#0a0a0a] relative overflow-hidden flex items-center justify-center p-12">
+           {/* Grid Pattern Background */}
+           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+
+           {!image ? (
+              <label className="group relative flex flex-col items-center gap-6 cursor-pointer bg-white/[0.02] hover:bg-white/[0.04] p-32 rounded-[5rem] border-2 border-dashed border-white/10 hover:border-indigo-500/50 transition-all">
+                <input type="file" className="hidden" onChange={handleUpload} accept="image/*" />
+                <div className="w-32 h-32 bg-indigo-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                  <CloudUpload size={48} className="text-indigo-500" />
+                </div>
+                <div className="text-center">
+                  <h2 className="text-2xl font-black italic mb-2 tracking-tight">Initialize Workspace</h2>
+                  <p className="text-gray-500 text-sm font-medium">Drag assets or browse system files</p>
+                </div>
+              </label>
+           ) : (
+             <div className="relative group transition-all duration-700 ease-out" style={{ transform: `scale(${zoom / 100})` }}>
+                <div 
+                  className={cn(
+                    "relative overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] transition-all duration-500",
+                    canvasMode === 'ig-story' ? "aspect-[9/16] h-[70vh] w-auto" : 
+                    canvasMode === 'yt-thumb' ? "aspect-video h-[50vh] w-auto" : "max-w-[70vw] max-h-[70vh]"
+                  )}
+                  style={{ filter: filterString }}
+                >
+                  <img src={image} className="w-full h-full object-cover rounded-sm" alt="Artboard" />
+                  
+                  {/* Active Layer Overlays (Mock) */}
+                  <div className="absolute inset-0 pointer-events-none border-2 border-indigo-500/0 hover:border-indigo-500/50 transition-colors" />
+                </div>
+
+                {isProcessing && (
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-md flex flex-col items-center justify-center z-50">
+                    <div className="relative">
+                      <div className="w-16 h-16 border-2 border-indigo-500/20 rounded-full" />
+                      <div className="absolute inset-0 border-t-2 border-indigo-500 rounded-full animate-spin" />
+                    </div>
+                    <p className="mt-4 text-[10px] font-black tracking-[0.3em] uppercase text-indigo-400 animate-pulse">Processing Vector Math...</p>
+                  </div>
+                )}
+             </div>
+           )}
+
+           {/* Canvas Controls */}
+           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/80 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl">
+              <button onClick={() => setZoom(z => Math.max(10, z - 10))} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><X size={14}/></button>
+              <span className="text-[10px] font-black w-12 text-center text-gray-400">{zoom}%</span>
+              <button onClick={() => setZoom(z => Math.min(300, z + 10))} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><Plus size={14}/></button>
+              <div className="w-[1px] h-4 bg-white/10" />
+              <button className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><Maximize size={14}/></button>
+           </div>
+        </main>
+
+        {/* 5. RIGHT PANEL: LAYERS & ASSETS */}
+        <aside className="w-72 bg-black/40 border-l border-white/5 flex flex-col">
+          {/* Layers Header */}
+          <div className="p-4 border-b border-white/5 flex items-center justify-between">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Layers</h3>
+            <div className="flex gap-2">
+              <button className="p-1 hover:bg-white/10 rounded text-gray-400"><Plus size={14}/></button>
+              <button className="p-1 hover:bg-white/10 rounded text-gray-400"><Trash2 size={14}/></button>
+            </div>
+          </div>
+          
+          {/* Layer List */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {layers.map((layer) => (
+              <div 
+                key={layer.id} 
+                onClick={() => setSelectedLayer(layer.id)}
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer group",
+                  selectedLayer === layer.id 
+                    ? "bg-indigo-500/10 border-indigo-500/30" 
+                    : "bg-white/[0.02] border-transparent hover:bg-white/[0.05]"
+                )}
+              >
+                <div className="w-10 h-10 bg-black rounded-lg border border-white/10 overflow-hidden">
+                  {image && <img src={image} className="w-full h-full object-cover opacity-50" />}
+                </div>
+                <div className="flex-1">
+                  <div className="text-[11px] font-bold text-gray-200">{layer.name}</div>
+                  <div className="text-[9px] text-gray-500 font-medium">Normal · {layer.opacity}%</div>
+                </div>
+                <button className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-white">
+                  {layer.visible ? <Eye size={14}/> : <EyeOff size={14}/>}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Properties Footer */}
+          <div className="p-5 border-t border-white/5 bg-black/20">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-4">Properties</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-gray-400">Opacity</span>
+                <span className="text-[10px] font-black text-indigo-400">100%</span>
+              </div>
+              <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full w-full bg-indigo-500" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <PropertyBtn label="Lock" icon={<X size={12}/>} />
+                <PropertyBtn label="Mask" icon={<Frame size={12}/>} />
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; background: #222; border-radius: 10px; }
+        input[type=range]::-webkit-slider-thumb { height: 12px; width: 12px; border-radius: 50%; background: #6366f1; cursor: pointer; -webkit-appearance: none; margin-top: -5px; box-shadow: 0 0 10px rgba(99, 102, 241, 0.4); }
+      `}</style>
+    </div>
+  );
+}
+
+// Sub-Panel Components
+function AIPanel({ onAction }) {
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
+      <div className="bg-indigo-600/10 border border-indigo-500/20 p-4 rounded-2xl">
+        <div className="flex items-center gap-2 mb-2 text-indigo-400">
+          <Sparkles size={16} />
+          <span className="text-[10px] font-black uppercase tracking-widest">Pebbles AI Engine</span>
+        </div>
+        <p className="text-[11px] text-gray-400 leading-relaxed mb-4">Harnessing neural networks for generative editing.</p>
+        <div className="grid grid-cols-1 gap-2">
+          <AIButton label="Magic Enhance" onClick={() => onAction('Enhance')} />
+          <AIButton label="Generative Expand" onClick={() => onAction('Expand')} />
+          <AIButton label="Remove Background" onClick={() => onAction('BG')} />
+          <AIButton label="Style Transfer" onClick={() => onAction('Style')} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdjustPanel({ settings, setSettings }) {
+  const controls = [
+    { key: 'exposure', label: 'Exposure', min: -100, max: 100 },
+    { key: 'brightness', label: 'Brightness', min: 0, max: 200 },
+    { key: 'contrast', label: 'Contrast', min: 0, max: 200 },
+    { key: 'saturation', label: 'Saturation', min: 0, max: 200 },
+    { key: 'temperature', label: 'Temperature', min: -100, max: 100 },
+    { key: 'blur', label: 'Softness', min: 0, max: 20 },
+    { key: 'noise', label: 'Film Grain', min: 0, max: 100 },
+  ];
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
+      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Master Adjustments</h3>
+      {controls.map(ctrl => (
+        <div key={ctrl.key} className="space-y-2">
+          <div className="flex justify-between items-center text-[10px] font-bold">
+            <span className="text-gray-400">{ctrl.label}</span>
+            <span className="text-indigo-400">{settings[ctrl.key]}</span>
+          </div>
+          <input 
+            type="range" min={ctrl.min} max={ctrl.max} value={settings[ctrl.key]}
+            onChange={(e) => setSettings({...settings, [ctrl.key]: e.target.value})}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BrushPanel() {
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
+      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Brush Settings</h3>
+      <div className="grid grid-cols-4 gap-2">
+         {[1, 2, 3, 4].map(i => <div key={i} className="aspect-square bg-white/5 rounded-lg border border-white/10 hover:border-indigo-500 cursor-pointer" />)}
+      </div>
+      <div className="space-y-2">
+         <span className="text-[10px] font-bold text-gray-400">Color Palette</span>
+         <div className="flex flex-wrap gap-2">
+            {['#f43f5e', '#a855f7', '#3b82f6', '#10b981', '#f59e0b', '#fff'].map(c => (
+              <div key={c} className="w-6 h-6 rounded-full cursor-pointer hover:scale-110 transition-transform" style={{ background: c }} />
+            ))}
+         </div>
+      </div>
+    </div>
+  );
+}
+
+function TextPanel() {
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 text-center py-10">
+      <Type className="mx-auto text-gray-700 mb-4" size={32} />
+      <p className="text-[11px] text-gray-500 px-4">Click anywhere on the canvas to insert a text vector layer.</p>
+      <button className="w-full py-3 border border-white/10 rounded-xl text-[10px] font-black uppercase hover:bg-white/5">Add Header</button>
+    </div>
+  );
+}
+
+function AssetsPanel() {
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
+      <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Asset Cloud</h3>
+      <div className="grid grid-cols-2 gap-3">
+        {[1,2,3,4,5,6].map(i => (
+          <div key={i} className="aspect-square bg-white/5 rounded-xl border border-white/10 flex items-center justify-center hover:bg-indigo-500/10 cursor-pointer transition-all">
+             <ImageIcon className="text-gray-600" size={20} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// UI Atomic Components
+function ToolIcon({ icon, active, onClick, label }) {
+  return (
+    <button onClick={onClick} className={cn(
+      "flex flex-col items-center gap-1 group transition-all",
+      active ? "text-indigo-500" : "text-gray-600 hover:text-white"
+    )}>
+      <div className={cn(
+        "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+        active ? "bg-indigo-500/10 shadow-lg shadow-indigo-500/10 border border-indigo-500/30" : "bg-transparent"
+      )}>
+        {icon}
+      </div>
+      <span className="text-[8px] font-black uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">{label}</span>
+    </button>
+  );
+}
+
+function NavButton({ icon }) {
+  return (
+    <button className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+      {icon}
+    </button>
+  );
+}
+
+function ModeBtn({ active, onClick, icon }) {
+  return (
+    <button onClick={onClick} className={cn(
+      "p-2 rounded-full transition-all",
+      active ? "bg-white text-black shadow-lg" : "text-gray-500 hover:text-white"
+    )}>
+      {icon}
+    </button>
+  );
+}
+
+function AIButton({ label, onClick }) {
+  return (
+    <button onClick={onClick} className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-indigo-500 hover:text-white border border-white/5 transition-all group">
+      <div className="text-[10px] font-black uppercase tracking-wider">{label}</div>
+    </button>
+  );
+}
+
+function PropertyBtn({ label, icon }) {
+  return (
+    <button className="flex items-center justify-center gap-2 p-2 bg-white/5 border border-white/10 rounded-lg text-[9px] font-bold text-gray-400 hover:bg-white/10 hover:text-white transition-all">
+      {icon} {label}
+    </button>
+  );
+}
+
+    
