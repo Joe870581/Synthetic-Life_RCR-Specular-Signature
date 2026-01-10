@@ -1,0 +1,148 @@
+
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLiveSession } from '@/hooks/use-live-session';
+import { Button } from '@/components/ui/button';
+import { Mic, StopCircle, Power, ShieldAlert, Loader2, Play } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import * as Tone from 'tone';
+
+function LiveStudioContent() {
+  const userId = 'current-user-id';
+  const { session, loading, requestReady, requestGoLive, requestEnd, requestPanic } = useLiveSession(userId);
+  const { toast } = useToast();
+  
+  const [isWaiverAccepted, setIsWaiverAccepted] = useState(false);
+  const [isToneReady, setIsToneReady] = useState(false);
+  const [readySent, setReadySent] = useState(false);
+
+  const acceptWaiver = async () => {
+    try {
+      await Tone.start();
+      console.log("[AUDIO] Context started successfully.");
+      setIsToneReady(true);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Audio Error',
+        description: 'Could not initialize audio. Please check browser permissions and interact with the page.',
+      });
+      return;
+    }
+    setIsWaiverAccepted(true);
+  };
+
+  useEffect(() => {
+    if (isWaiverAccepted && isToneReady && session?.state === 'IDLE' && !readySent) {
+      console.log('[CLIENT] Waiver accepted, Tone is ready, session is IDLE. Requesting READY.');
+      requestReady();
+      setReadySent(true); // Latch to prevent re-triggering
+    }
+  }, [isWaiverAccepted, isToneReady, session?.state, readySent, requestReady]);
+
+  useEffect(() => {
+    // This effect handles the audio gate safely.
+    if (!isToneReady || !session) return;
+
+    const isLive = session.state === 'LIVE';
+    
+    try {
+      const destination = Tone.getDestination();
+      if (destination.mute !== !isLive) {
+        destination.mute = !isLive;
+        console.log(`[AUDIO GATE] ${session.state} -> ${isLive ? 'ON AIR' : 'MUTED'}`);
+      }
+    } catch (err) {
+      console.warn('[AUDIO GATE] Destination not ready on state change, will try again.');
+    }
+  }, [session?.state, isToneReady]);
+
+  useEffect(() => {
+    // This effect resets the flow when a session concludes.
+    if (session?.state === 'TERMINATED' || session?.state === 'ENDED') {
+      setReadySent(false);
+    }
+  }, [session?.state]);
+
+
+  if (!isWaiverAccepted) {
+    return (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/95 backdrop-blur-lg z-50">
+            <div className="bg-gray-800 p-8 rounded-2xl max-w-lg mx-4 border-2 border-red-500 shadow-2xl">
+                <h2 className="text-3xl font-bold text-red-400 mb-4">Content & Copyright Waiver Required</h2>
+                <p className="mb-4 text-gray-300">By clicking "I Accept," you agree to the following terms for the Sovereign Audio OS:</p>
+                <ul className="list-disc list-inside space-y-2 mb-6 text-sm text-gray-200 p-4 bg-gray-700 rounded-lg border border-red-500/50">
+                    <li>This platform operates on user-owned content freedom and does not enforce external copyrights.</li>
+                    <li>Connections to external services are for importing content you personally own or have created.</li>
+                    <li>You assume all responsibility for the legality of content you use or broadcast.</li>
+                </ul>
+                <Button onClick={acceptWaiver} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg text-lg">
+                    I Understand & Accept Waiver
+                </Button>
+            </div>
+        </div>
+    );
+  }
+
+  if (loading || !session) {
+    return (
+        <div className="flex items-center justify-center h-full">
+            <div className="text-center p-10">
+                <Loader2 className="animate-spin w-8 h-8 mx-auto text-slate-400" />
+                <p className="mt-2 text-sm text-slate-400">Initializing studio session...</p>
+            </div>
+        </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <h1 className="text-xl font-bold">Universe Live — Audio Studio</h1>
+      <div className="text-sm font-mono p-4 bg-slate-800 rounded-md border border-slate-700">
+        <p>Session ID: <span className="text-cyan-400">{session.id}</span></p>
+        <p>Status: <span className="text-yellow-400">{session.state}</span></p>
+      </div>
+
+      {session.state === 'IDLE' && <p className="text-slate-400">Audio engine is initializing...</p>}
+
+      {session.state === 'READY' && (
+        <Button onClick={requestGoLive} className="bg-green-600 hover:bg-green-500">
+          <Play className="mr-2" /> Go Live
+        </Button>
+      )}
+
+      {session.state === 'LIVE' && (
+        <div className="flex gap-4">
+          <Button onClick={requestEnd} variant="destructive" className="bg-red-800">
+            <StopCircle className="mr-2" /> End Broadcast
+          </Button>
+          <Button onClick={requestPanic} variant="destructive">
+            <ShieldAlert className="mr-2" /> PANIC / KILL SWITCH
+          </Button>
+        </div>
+      )}
+
+      {session.state === 'TERMINATED' && <p className="text-red-500 font-bold">Broadcast terminated by system.</p>}
+      {session.state === 'ENDED' && <p className="text-yellow-500">Broadcast has ended.</p>}
+    </div>
+  );
+}
+
+
+export default function LiveStudioPage() {
+    const [isClient, setIsClient] = useState(false);
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
+    return (
+        <div className="w-screen h-screen bg-slate-900 text-white">
+            {isClient ? <LiveStudioContent /> : 
+                <div className="flex items-center justify-center h-full">
+                    <Loader2 className="animate-spin w-8 h-8 text-slate-400" />
+                </div>
+            }
+        </div>
+    );
+}
