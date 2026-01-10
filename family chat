@@ -1,0 +1,602 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, query, limit } from 'firebase/firestore';
+
+
+// This component renders a self-contained HTML document with its own styles and scripts.
+export default function FamilyChatPage() {
+
+  const htmlContent = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>AVEN | SOV Forge Studio - HYPER-DRIVE ENGINE</title>
+      <script src="https://cdn.tailwindcss.com"><\/script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;400;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+      <style>
+        :root {
+            --accent: #00f2ff;
+            --panel-bg: rgba(5, 6, 8, 0.95);
+            --hyper: #ff0055;
+        }
+
+        body {
+            margin: 0;
+            background-color: #000;
+            color: white;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; }
+
+        .glass-ui {
+            background: var(--panel-bg);
+            backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: #050608;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s ease;
+        }
+
+        .ai-input-container {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .ai-input-container:focus-within {
+            background: rgba(255,255,255,0.08);
+            border-color: var(--accent);
+            width: 500px;
+        }
+
+        #ai-log {
+            scrollbar-width: none;
+            mask-image: linear-gradient(to bottom, transparent, black 15%);
+        }
+        #ai-log::-webkit-scrollbar { display: none; }
+
+        .glow-text {
+            text-shadow: 0 0 15px rgba(0, 242, 255, 0.6);
+        }
+
+        .hyper-btn {
+            background: linear-gradient(45deg, var(--hyper), var(--accent));
+            background-size: 200% 200%;
+            animation: gradientMove 3s ease infinite;
+            border: none;
+            color: black;
+            font-weight: 900;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .hyper-btn:active { transform: scale(0.95); }
+
+        @keyframes gradientMove {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .mode-toggle {
+            cursor: pointer;
+            transition: all 0.3s;
+            opacity: 0.5;
+        }
+
+        .mode-toggle.active { 
+            color: var(--accent); 
+            border-bottom: 2px solid var(--accent); 
+            opacity: 1;
+        }
+        
+        #save-status {
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(255,255,255,0.3);
+        }
+      </style>
+  </head>
+  <body>
+
+      <!-- SAFETY LOADER -->
+      <div id="loading-screen">
+          <div class="text-[10px] tracking-[1em] uppercase text-cyan-500/50 mb-4">Aven Sovereign Engine</div>
+          <div class="text-4xl font-extrabold italic tracking-tighter text-white">HYPER-DRIVE FORGE</div>
+          <div class="mt-8 text-[10px] mono text-white/30 animate-pulse">OPTIMIZING CROSS-PLATFORM PERSISTENCE...</div>
+      </div>
+
+      <div id="hud" class="fixed inset-0 pointer-events-none flex flex-col justify-between p-8 z-50 opacity-0 transition-opacity duration-700">
+          
+          <!-- TOP HUD -->
+          <div class="flex justify-between items-start pointer-events-auto">
+              <div class="glass-ui px-6 py-4 rounded-[2rem] flex items-center gap-8">
+                  <div class="flex items-center gap-3">
+                      <div id="pebble-container-header" class="w-8 h-8 rounded-lg bg-cyan-500 flex items-center justify-center font-black italic text-black text-sm shadow-[0_0_20px_rgba(0,242,255,0.5)]">A</div>
+                      <div class="text-[10px] font-black uppercase text-white leading-none tracking-widest">Aven Sovereign</div>
+                  </div>
+                  <div class="flex gap-6 border-l border-white/10 pl-6">
+                      <div id="mode-kids" class="mode-toggle active text-[10px] font-black uppercase">Kids</div>
+                      <div id="mode-adult" class="mode-toggle text-[10px] font-black uppercase">Adult</div>
+                  </div>
+              </div>
+
+              <div class="flex gap-4">
+                  <div class="glass-ui px-6 py-4 rounded-[2rem] flex flex-col items-end">
+                      <div id="save-status">Cloud Idle</div>
+                      <div id="status-text" class="text-[10px] font-bold text-cyan-400">OPTIMIZED</div>
+                  </div>
+                  <button id="hyper-trigger" class="hyper-btn px-8 py-4 rounded-[2rem] text-[10px] uppercase tracking-[0.2em]">IGNITE HYPER-DRIVE</button>
+              </div>
+          </div>
+
+          <!-- BOTTOM CONSOLE -->
+          <div class="absolute left-8 bottom-8 pointer-events-auto">
+              <div class="glass-ui p-8 rounded-[3rem] w-[460px] ai-input-container">
+                <div class="flex justify-between items-center mb-6">
+                      <div class="flex items-center gap-3">
+                         <div id="pebble-container" class="w-12 h-12"></div>
+                         <span class="text-[10px] font-black uppercase text-cyan-400 tracking-[0.2em]">
+                              Forge Live (Public)
+                          </span>
+                      </div>
+                      <span id="dna-status" class="text-[8px] px-2 py-0.5 bg-white/5 rounded text-white/40 uppercase mono">Syncing World...</span>
+                  </div>
+                  
+                  <div id="ai-log" class="h-48 overflow-y-auto mb-6 text-[13px] font-medium text-slate-200 space-y-4 pr-4 leading-relaxed">
+                      {/* AI Log will be populated here */}
+                  </div>
+
+                  <div class="flex items-center gap-4 border-t border-white/10 pt-6">
+                      <input 
+                          id="ai-command"
+                          type="text" 
+                          placeholder="Command the Sovereign Engine..."
+                          class="bg-transparent border-none focus:outline-none text-base w-full text-white font-medium placeholder:text-white/20"
+                      />
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      <div id="container"></div>
+
+      <script type="module">
+        // This script is now self-contained and handles its own imports and initialization.
+        
+        // --- ENGINE ARCHITECTURE ---
+        let scene, camera, renderer, clock, db, auth, user;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'aven-sovereign-forge';
+        
+        const state = { 
+            towers: [],
+            particles: null,
+            ghost: null,
+            pebble: null,
+            mode: 'kids',
+            dna: { genre: null, intensity: 0.5 },
+            mouse: new THREE.Vector2(),
+            raycaster: new THREE.Raycaster()
+        };
+
+        const THEMES = {
+            'strategy': { color: 0x00f2ff, height: 5, shape: 'cylinder' },
+            'war': { color: 0xff0055, height: 4, shape: 'pyramid' },
+            'puzzle': { color: 0xfff000, height: 2, shape: 'box' },
+            'kids': { color: 0x00ff88, height: 3, shape: 'sphere' }
+        };
+
+        // --- BOOTSTRAP SEQUENCE ---
+        function bootstrap() {
+            let firebaseApp, firebaseConfig;
+            try {
+                const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+                firebaseConfig = JSON.parse(firebaseConfigStr);
+                if(Object.keys(firebaseConfig).length > 0) {
+                    firebaseApp = initializeApp(firebaseConfig);
+                    auth = getAuth(firebaseApp);
+                    db = getFirestore(firebaseApp);
+                } else {
+                    throw new Error("Firebase config empty.");
+                }
+            } catch (e) {
+                console.warn("Firebase not configured. Running in standalone mode.", e.message);
+                addLog('// STANDALONE_MODE: Firebase not configured.', 'system');
+                init(); // Start the 3D scene even if Firebase fails
+                return;
+            }
+
+            // Authentication is now event-driven
+            onAuthStateChanged(auth, async (u) => {
+                user = u;
+                if (!user) {
+                     try {
+                        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                     } catch(authError) {
+                         console.error("Auth Fail", authError);
+                         addLog('// AUTH FAILED. Standalone mode.', 'system');
+                         init(); // Initialize even if auth fails
+                     }
+                } else {
+                    // User is available, now init the scene and sync data
+                    init();
+                    syncPublicData();
+                }
+            });
+        }
+        
+        // --- CORE LOGIC ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050608, 0.04);
+            clock = new THREE.Clock();
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(30, 30, 30);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setClearColor(0x050608, 1);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+            const pLight = new THREE.PointLight(0x00f2ff, 3, 100);
+            pLight.position.set(20, 30, 20);
+            scene.add(pLight);
+
+            const grid = new THREE.GridHelper(200, 100, 0x00f2ff, 0x111111);
+            grid.material.opacity = 0.1;
+            grid.material.transparent = true;
+            scene.add(grid);
+
+            initParticles();
+            initGhost();
+            initPebble();
+
+            window.addEventListener('mousemove', onMouseMove);
+            document.getElementById('ai-command').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleInput(e.target.value);
+            });
+            document.getElementById('hyper-trigger').onclick = igniteHyperDrive;
+            
+            document.getElementById('mode-kids').onclick = () => setMode('kids');
+            document.getElementById('mode-adult').onclick = () => setMode('adult');
+            
+            addLog(\`Engine Linked: \${user ? user.uid.substring(0,8) : 'ANONYMOUS'}...\`, "system");
+
+            hideLoader();
+            animate();
+        }
+
+        // --- PERSISTENCE ---
+        async function saveWorld() {
+            if (!user || !db) return;
+            document.getElementById('save-status').innerText = "Uploading State...";
+            
+            const towerData = state.towers.map(t => ({
+                x: t.x,
+                z: t.z,
+                genre: t.genre,
+                height: t.height
+            }));
+
+            try {
+                const worldRef = doc(db, 'artifacts', appId, 'public', 'data', 'world_state');
+                await setDoc(worldRef, {
+                    towers: towerData,
+                    dna: state.dna,
+                    lastUpdated: Date.now(),
+                    creator: user.uid
+                });
+                document.getElementById('save-status').innerText = "Sync Complete";
+                setTimeout(() => document.getElementById('save-status').innerText = "Cloud Idle", 2000);
+            } catch (e) {
+                document.getElementById('save-status').innerText = "Sync Failed";
+            }
+        }
+
+        function syncPublicData() {
+            if (!db) return;
+            const worldRef = doc(db, 'artifacts', appId, 'public', 'data', 'world_state');
+            onSnapshot(worldRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.towers && data.towers.length > state.towers.length) {
+                        addLog("Live public updates received. Synchronizing...", "system");
+                        data.towers.slice(state.towers.length).forEach(t => {
+                            createTower(t.x, t.z, THEMES[t.genre || 'strategy'], t.genre);
+                        });
+                    }
+                    if (data.dna) {
+                        state.dna = data.dna;
+                        updateDNAStatus();
+                    }
+                }
+            }, (err) => console.error("Sync error", err));
+        }
+
+        // --- GRAPHICS ---
+        function initParticles() {
+            const geo = new THREE.BufferGeometry();
+            const count = 2000;
+            const pos = new Float32Array(count * 3);
+            for(let i=0; i<count*3; i++) pos[i] = (Math.random() - 0.5) * 100;
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const mat = new THREE.PointsMaterial({ color: 0x00f2ff, size: 0.1, transparent: true, opacity: 0.5 });
+            state.particles = new THREE.Points(geo, mat);
+            scene.add(state.particles);
+        }
+
+        function initGhost() {
+            const group = new THREE.Group();
+            const geo = new THREE.CylinderGeometry(0.1, 0.5, 4, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00f2ff, transparent: true, opacity: 0.2, wireframe: true });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = 2;
+            group.add(mesh);
+            
+            const ringGeo = new THREE.TorusGeometry(1, 0.05, 16, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f2ff, transparent: true, opacity: 0.5 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            group.add(ring);
+            
+            state.ghost = { group, ring };
+            scene.add(group);
+        }
+        
+        function initPebble() {
+            const pebbleContainer = document.getElementById('pebble-container');
+            if (!pebbleContainer) return;
+            const pebbleScene = new THREE.Scene();
+            const pebbleCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+            pebbleCamera.position.z = 5;
+            
+            const pebbleRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            pebbleRenderer.setSize(48, 48);
+            pebbleContainer.appendChild(pebbleRenderer.domElement);
+            
+            const coreGeo = new THREE.IcosahedronGeometry(0.5, 1);
+            const coreMat = new THREE.MeshStandardMaterial({ color: 0x00f2ff, emissive: 0x00f2ff, emissiveIntensity: 0.2, metalness: 0.1, roughness: 0.3 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            pebbleScene.add(core);
+            
+            const shellGeo = new THREE.IcosahedronGeometry(0.8, 1);
+            const shellMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.1 });
+            const shell = new THREE.Mesh(shellGeo, shellMat);
+            pebbleScene.add(shell);
+            
+            pebbleScene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const pLight = new THREE.PointLight(0xffffff, 1, 10);
+            pLight.position.set(2,3,4);
+            pebbleScene.add(pLight);
+            
+            state.pebble = { core, shell, renderer: pebbleRenderer, scene: pebbleScene, camera: pebbleCamera };
+        }
+
+        function onMouseMove(event) {
+            state.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            state.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            state.raycaster.setFromCamera(state.mouse, camera);
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const target = new THREE.Vector3();
+            state.raycaster.ray.intersectPlane(plane, target);
+            if (state.ghost) state.ghost.group.position.set(target.x, 0, target.z);
+        }
+
+        async function handleInput(text) {
+            const input = document.getElementById('ai-command');
+            input.value = '';
+            addLog(text, 'user');
+            
+            await new Promise(r => setTimeout(r, 600));
+            const cmd = text.toLowerCase();
+
+            if (cmd === 'save') {
+                saveWorld();
+                return;
+            }
+
+            if (cmd.includes('tower') || cmd.includes('war') || cmd.includes('strategy')) {
+                state.dna.genre = 'strategy';
+                addLog("Injecting Tactical DNA. Reconfiguring Sovereign Engine...", "builder");
+                spawnCluster('strategy');
+            } else if (cmd.includes('puzzle')) {
+                state.dna.genre = 'puzzle';
+                addLog("Complexity mapped. Spawning node array...", "builder");
+                spawnCluster('puzzle');
+            } else if (cmd.includes('kids') || cmd.includes('play')) {
+                state.dna.genre = 'kids';
+                addLog("Playful structures initiated...", "builder");
+                spawnCluster('kids');
+            } else {
+                addLog("Commands: 'save', 'tower', 'puzzle', 'kids', or describe your intent.", "builder");
+            }
+            updateDNAStatus();
+        }
+
+        function setMode(mode) {
+            state.mode = mode;
+            document.getElementById('mode-kids').classList.toggle('active', mode === 'kids');
+            document.getElementById('mode-adult').classList.toggle('active', mode === 'adult');
+            
+            const color = mode === 'kids' ? 0x00ff88 : 0x00f2ff;
+            if (state.particles) state.particles.material.color.setHex(color);
+            if (state.pebble) state.pebble.core.material.color.setHex(color);
+            addLog(\`Interface mode: \${mode.toUpperCase()}\`, "system");
+        }
+
+        function spawnCluster(genre) {
+            const theme = THEMES[genre];
+            for(let i=0; i<5; i++) {
+                const x = (Math.random() - 0.5) * 40;
+                const z = (Math.random() - 0.5) * 40;
+                createTower(x, z, theme, genre);
+            }
+            saveWorld();
+        }
+
+        function createTower(x, z, config, genre) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: config.color, 
+                emissive: config.color, 
+                emissiveIntensity: 0.5,
+                metalness: 0.8,
+                roughness: 0.2
+            });
+
+            let geo;
+            if (config.shape === 'box') geo = new THREE.BoxGeometry(2, config.height, 2);
+            else if (config.shape === 'pyramid') geo = new THREE.CylinderGeometry(0, 1.5, config.height, 4);
+            else if (config.shape === 'sphere') geo = new THREE.SphereGeometry(1.5, 16, 16);
+            else geo = new THREE.CylinderGeometry(0.5, 1, config.height, 12);
+
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = config.height / 2;
+            group.add(mesh);
+
+            const ringGeo = new THREE.TorusGeometry(2, 0.05, 16, 32);
+            const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: config.color, transparent: true, opacity: 0.4 }));
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = config.height + 0.5;
+            group.add(ring);
+
+            group.position.set(x, 0, z);
+            group.scale.set(0,0,0);
+            scene.add(group);
+            state.towers.push({ group, ring, height: config.height, x, z, genre });
+        }
+
+        function igniteHyperDrive() {
+            addLog("HYPER-DRIVE ENGAGED. Synchronizing global performance array...", "builder");
+            document.getElementById('status-text').innerText = "MAX PERFORMANCE";
+            document.getElementById('status-text').style.color = "#ff0055";
+            
+            for(let i=0; i<50; i++) {
+                const x = (Math.random() - 0.5) * 80;
+                const z = (Math.random() - 0.5) * 80;
+                const genre = Object.keys(THEMES)[Math.floor(Math.random() * 4)];
+                createTower(x, z, THEMES[genre], genre);
+            }
+            saveWorld();
+        }
+
+        function addLog(text, sender) {
+            const log = document.getElementById('ai-log');
+            if(!log) return;
+            const div = document.createElement('div');
+            if (sender === 'user') {
+                div.className = "text-white/40 italic pl-4 border-l border-white/10";
+                div.innerHTML = \`“\${text}”\`;
+            } else if (sender === 'system') {
+                div.className = "text-white/20 mono text-[10px]";
+                div.innerHTML = \`// \${text}\`;
+            } else {
+                div.className = "text-cyan-400 glow-text font-bold";
+                div.innerHTML = text;
+            }
+            log.appendChild(div);
+            log.scrollTo({ top: log.scrollHeight, behavior: 'smooth' });
+        }
+
+        function updateDNAStatus() {
+            const badge = document.getElementById('dna-status');
+            if (state.dna.genre) {
+                badge.innerText = \`\${state.dna.genre.toUpperCase()} ACTIVE\`;
+                badge.style.color = "#00f2ff";
+            }
+        }
+
+        function hideLoader() {
+            const loader = document.getElementById('loading-screen');
+            if(!loader) return;
+            loader.style.opacity = '0';
+            setTimeout(() => {
+                loader.style.display = 'none';
+                document.getElementById('hud').style.opacity = '1';
+            }, 800);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(!renderer || !scene || !camera) return;
+            const time = clock.getElapsedTime();
+
+            state.towers.forEach(t => {
+                if (t.group.scale.x < 1) t.group.scale.x = t.group.scale.y = t.group.scale.z += 0.05;
+                t.ring.rotation.z += 0.02;
+                t.ring.position.y = t.height + 0.5 + Math.sin(time * 2 + t.x) * 0.2;
+            });
+
+            if (state.particles) {
+                state.particles.rotation.y += 0.001;
+                state.particles.position.y = Math.sin(time * 0.5) * 2;
+            }
+            
+            if (state.ghost) {
+                state.ghost.ring.rotation.y += 0.03;
+                state.ghost.ring.rotation.x += 0.01;
+            }
+
+            if (state.pebble) {
+                state.pebble.core.rotation.x += 0.01;
+                state.pebble.core.rotation.y += 0.015;
+                state.pebble.shell.rotation.x -= 0.005;
+                state.pebble.shell.rotation.y -= 0.008;
+                state.pebble.renderer.render(state.pebble.scene, state.pebble.camera);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onresize = () => {
+            if(!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+        
+        // Start the bootstrap process on window load
+        window.onload = bootstrap;
+    </script>
+  </body>
+  </html>
+  `;
+
+  return (
+    <div
+      style={{ width: '100%', height: '100vh', border: 'none' }}
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
+    />
+  );
+}
