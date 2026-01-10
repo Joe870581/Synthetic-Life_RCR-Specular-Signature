@@ -1,0 +1,119 @@
+
+'use server';
+
+import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import crypto from 'crypto';
+import { db } from '@/lib/firebaseAdmin'; // Use the central admin instance
+
+// Utility hash function
+const hash = (data: string) => crypto.createHash('sha256').update(data).digest('hex');
+
+/**
+ * Appends a new handshake entry to the immutable ledger in Firestore.
+ */
+async function appendToLedger(entry: any): Promise<{ ledger_hash: string; prev_hash: string | null }> {
+    const ledgerCollection = db.collection('ledger');
+    
+    const lastEntryQuery = await ledgerCollection.orderBy('timestamp', 'desc').limit(1).get();
+    const prevHash = !lastEntryQuery.empty ? lastEntryQuery.docs[0].data().ledger_hash : 'GENESIS_BLOCK';
+
+    const entryToHash = { ...entry, prevHash };
+    const ledgerHash = hash(JSON.stringify(entryToHash));
+
+    const finalEntry = { ...entryToHash, ledger_hash: ledgerHash };
+
+    await db.collection('ledger').doc(entry.handshake_id).set(finalEntry);
+    
+    console.log(`[FIRESTORE LEDGER] Appended entry ${entry.handshake_id}.`);
+    
+    return { ledger_hash: ledgerHash, prev_hash: prevHash };
+}
+
+/**
+ * Mock external verification. Now always returns a valid object structure.
+ */
+async function verifyExternalPlatform(platform: string): Promise<{ verified: boolean; signature: string | null }> {
+    console.log(`[EXTERNAL SIM] Verifying with ${platform}...`);
+    await new Promise(r => setTimeout(r, 800)); 
+    
+    if (['xbox', 'psn', 'steam'].includes(platform)) {
+        const signature = `ext-sig-${hash(platform + Date.now())}`;
+        console.log(`[EXTERNAL SIM] ${platform} verification SUCCESSFUL.`);
+        return { verified: true, signature };
+    }
+    
+    console.log(`[EXTERNAL SIM] ${platform} verification FAILED (unsupported).`);
+    return { verified: false, signature: null };
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { user_id, platform, intent, external_site } = await req.json();
+
+    if (!user_id || !intent) {
+      return NextResponse.json({ error: 'Missing required parameters: user_id and intent' }, { status: 400 });
+    }
+
+    const handshake_id = `tsh-${randomUUID()}`;
+    const timestamp = new Date().toISOString();
+    
+    const targetPlatform = platform || external_site;
+
+    // 1. External Verification (Now resilient)
+    const external = await verifyExternalPlatform(targetPlatform);
+
+    // 2. Aurame Cryptographic Seal & TruePath Signature
+    const dataToSeal = JSON.stringify({ handshake_id, user_id, intent, timestamp, external_verified: external.verified });
+    const aurame_signature = hash(dataToSeal);
+    const true_path_signature = hash(aurame_signature + (external.signature || ''));
+
+
+    // 3. Create and Append Ledger Entry to FIRESTORE
+    const { ledger_hash, prev_hash } = await appendToLedger({
+      handshake_id,
+      user_id,
+      intent,
+      platform: targetPlatform,
+      timestamp,
+      aurame_signature,
+      external_signature: external.signature,
+      true_path_signature, // Add the TruePath signature to the ledger
+      event: 'TruePath_ESTABLISHED', // Log the event type
+      verified: external.verified,
+    });
+    
+    // 4. Prepare Certificate for UI
+    const certificate = {
+        handshake_id,
+        user_id,
+        intent,
+        timestamp,
+        aurame_signature,
+        true_path_signature, // Include in the response
+        ledger_hash,
+        prev_hash,
+        external_signature: external.signature,
+        external_verified: external.verified,
+        status: external.verified ? 'TRUSTED' : 'UNTRUSTED (Unsupported Platform)',
+    };
+
+    return NextResponse.json({ success: true, certificate });
+
+  } catch (error: any) {
+    console.error('FATAL: Handshake API Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+  }
+}
+
+// GET handler to retrieve the ledger for the dashboard
+export async function GET(req: NextRequest) {
+    try {
+        const ledgerQuery = await db.collection('ledger').orderBy('timestamp', 'desc').limit(50).get();
+        const ledger = ledgerQuery.docs.map(doc => doc.data());
+        return NextResponse.json(ledger);
+    } catch (error: any) {
+        console.error('Failed to fetch ledger:', error);
+        return NextResponse.json({ error: 'Failed to fetch ledger', details: error.message }, { status: 500 });
+    }
+}
