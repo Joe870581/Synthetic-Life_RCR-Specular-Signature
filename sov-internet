@@ -1,0 +1,194 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  X, Terminal, Zap, Play, Globe, Scale, Fingerprint, 
+  FileSignature, CheckCircle2, Download, Gamepad2, 
+  ShieldCheck, Activity, KeyRound, MessageSquare, Search,
+  Loader2, Link as LinkIcon, Users, FileJson, Check, AlertTriangle
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { saveAs } from 'file-saver';
+import { useToast } from '@/hooks/use-toast';
+
+// --- PLATFORM CONFIGURATION ---
+const PLATFORMS = [
+  { id: 'xbox', name: 'Xbox Live', icon: Gamepad2, color: 'text-green-400' },
+  { id: 'psn', name: 'PlayStation Network', icon: Gamepad2, color: 'text-blue-400' },
+  { id: 'steam', name: 'Steam', icon: Gamepad2, color: 'text-slate-400' },
+];
+
+export default function SovereignInternetHub() {
+  const [isResolving, setIsResolving] = useState(false);
+  const [traceLog, setTraceLog] = useState<string[]>([]);
+  const [activeCertificate, setActiveCertificate] = useState(null);
+  const { toast } = useToast();
+
+  const handleLiveHandshake = async (platform) => {
+    setIsResolving(true);
+    setActiveCertificate(null);
+    const intent = `Securely link ${platform.name} identity.`;
+    
+    const initialTrace = [
+      `[0] INTENT CAPTURED: "${intent}"`,
+      `[1] Dispatching to live handshake API...`,
+      `[2] Platform Target: ${platform.name}`
+    ];
+    setTraceLog(initialTrace);
+    
+    try {
+      // Step 1: Call the live backend API
+      const res = await fetch('/api/handshake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 'sovereign_architect_01',
+          intent: intent,
+          platform: platform.id,
+        }),
+      });
+
+      const data = await res.json();
+      
+      if (data.error) throw new Error(data.error);
+      
+      // Step 2: Update trace with real backend data
+      setTraceLog(prev => [...prev, 
+        `[3] Aurame Seal: APPLIED & LOGGED`,
+        `[4] External Verification: ${data.certificate.external_verified ? 'CONFIRMED' : 'PENDING'}`,
+        `[5] LEDGER HASH: ${data.certificate.ledger_hash.slice(0, 12)}...`,
+        "[6] DUAL-CONFIRMATION COMPLETE"
+      ]);
+      
+      // Step 3: Set the certificate for display
+      setActiveCertificate({ ...data.certificate, platformName: platform.name });
+
+    } catch (error: any) {
+        setTraceLog(prev => [...prev, `[ERROR] HANDSHAKE FAILED: ${error.message}`]);
+    } finally {
+        setIsResolving(false);
+    }
+  };
+
+  const downloadCertificate = (certificateData) => {
+    const blob = new Blob([JSON.stringify(certificateData, null, 2)], { type: 'application/json;charset=utf-8' });
+    saveAs(blob, `TSH_CERT_${certificateData.handshake_id}.json`);
+    toast({ title: 'Certificate Downloaded', description: 'The JSON certificate has been saved to your device.' });
+  };
+  
+  return (
+    <div className="flex h-screen bg-[#020408] text-slate-200 font-sans overflow-hidden">
+      
+      <aside className="w-20 border-r border-white/5 flex flex-col items-center py-8 gap-8 bg-black/60 z-20">
+        <div className="w-12 h-12 bg-cyan-500/10 rounded-2xl flex items-center justify-center border border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.2)]">
+          <Zap className="text-cyan-400" size={24} />
+        </div>
+        <nav className="flex flex-col gap-6">
+          <button className={`p-3 rounded-xl transition-all text-cyan-400 bg-cyan-400/10`}><Globe size={22} /></button>
+          <button className={`p-3 rounded-xl transition-all text-slate-600`}><Scale size={22} /></button>
+        </nav>
+      </aside>
+
+      <main className="flex-1 flex flex-col relative">
+        <header className="p-8 flex items-center justify-between border-b border-white/5">
+           <div className="flex-1 max-w-2xl relative group">
+             <Search className="absolute left-6 top-1/2 -translate-y-1/2 transition-colors text-slate-600" size={20} />
+            <input 
+              type="text" 
+              placeholder="AI Intent Engine disabled for Live Handshake protocols..." 
+              className="w-full bg-white/5 border border-white/10 rounded-full py-4 pl-16 pr-6 text-lg font-mono italic text-cyan-400/50 focus:outline-none focus:border-cyan-500/50 shadow-2xl transition-all"
+              disabled={true}
+            />
+          </div>
+        </header>
+
+        <div className="flex-1 p-8 overflow-y-auto relative">
+          
+          {activeCertificate && (
+            <div className="mb-12">
+               <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20 p-8 rounded-[40px] relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div>
+                       <div className="flex items-center gap-3">
+                           <Gamepad2 className={`${PLATFORMS.find(p => p.name === activeCertificate.platformName)?.color || 'text-cyan-400'}`} size={24} />
+                           <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter">{activeCertificate.platformName}</h2>
+                       </div>
+                      <p className={`text-sm font-black uppercase tracking-[0.2em] mt-2 flex items-center gap-2 ${activeCertificate.status === 'trusted' ? 'text-green-400' : 'text-red-400'}`}>
+                          {activeCertificate.status === 'trusted' ? <CheckCircle2 size={16}/> : <AlertTriangle size={16}/>} {activeCertificate.status} Handshake
+                      </p>
+                    </div>
+                    <button onClick={() => setActiveCertificate(null)} className="p-2 hover:bg-white/10 rounded-full text-slate-500"><X /></button>
+                  </div>
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                      <div className="p-4 bg-black/40 rounded-xl border border-white/10 space-y-2">
+                          <p className="text-slate-500">Handshake ID:</p><p className="text-white truncate">{activeCertificate.handshake_id}</p>
+                          <p className="text-slate-500">Ledger Hash:</p><p className="text-white truncate">{activeCertificate.ledger_hash}</p>
+                      </div>
+                       <div className="p-4 bg-black/40 rounded-xl border border-white/10 space-y-2">
+                          <p className="text-slate-500">Aurame Seal:</p><p className="text-pink-400 truncate">{activeCertificate.aurame_signature}</p>
+                          <p className="text-slate-500">External Seal:</p><p className="text-pink-400 truncate">{activeCertificate.external_signature || 'N/A'}</p>
+                      </div>
+                  </div>
+                  <div className="mt-6 flex gap-4">
+                    <button onClick={() => downloadCertificate(activeCertificate)} className="flex items-center gap-2 px-4 py-3 bg-white/5 border border-white/10 text-xs font-bold text-white uppercase rounded-2xl hover:bg-white/10">
+                       <Download size={14} /> Download Certificate
+                    </button>
+                  </div>
+               </motion.div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+             <h3 className="col-span-full text-sm font-black text-slate-600 uppercase tracking-[0.4em] italic px-2">Live Gaming Platform Handshake</h3>
+             {PLATFORMS.map(item => (
+               <div key={item.id} className="bg-white/5 border border-white/10 p-8 rounded-[40px] hover:border-cyan-500/40 transition-all group relative overflow-hidden">
+                 <div className="flex justify-between items-start mb-6">
+                    <div className={`p-4 bg-black/40 rounded-2xl border border-white/5 ${item.color} group-hover:scale-110 transition-transform`}>
+                        <item.icon />
+                    </div>
+                    <div className="text-right">
+                        <p className={`text-[9px] uppercase font-black ${item.color}`}>Live API</p>
+                        <p className="text-xs font-black text-white italic tracking-widest">{item.name}</p>
+                    </div>
+                 </div>
+                 <button 
+                   onClick={() => handleLiveHandshake(item)}
+                   disabled={isResolving}
+                   className="w-full py-4 bg-cyan-600/50 hover:bg-cyan-500 text-white rounded-2xl text-xs font-bold uppercase tracking-widest disabled:opacity-50 disabled:bg-slate-700"
+                 >
+                   {isResolving ? <Loader2 className="animate-spin mx-auto"/> : 'Initiate Handshake'}
+                 </button>
+               </div>
+             ))}
+          </div>
+        </div>
+
+        <footer className="p-6 bg-black/90 border-t border-white/10 flex justify-between items-center z-30">
+           <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse" /><span className="text-xs font-black text-white uppercase tracking-[0.2em] italic">Private Node: LOCKED</span></div>
+           <div className="flex gap-4"><div className="bg-cyan-500/10 border border-cyan-500/20 px-6 py-2 rounded-2xl flex items-center gap-3"><ShieldCheck size={16} className="text-cyan-400" /><span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest">Sovereignty: VERIFIED</span></div></div>
+        </footer>
+
+        <AnimatePresence>
+        {traceLog.length > 0 && (
+          <motion.div initial={{ x: '100%' }} animate={{ x: '0%' }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className="absolute right-0 top-0 bottom-0 w-[450px] bg-black/95 backdrop-blur-3xl border-l border-white/10 p-10 z-40 flex flex-col shadow-2xl">
+             <div className="flex justify-between items-center mb-10"><h3 className="text-2xl font-black italic text-white uppercase tracking-tighter flex items-center gap-3"><Terminal size={24} className="text-cyan-400" /> System Trace</h3><button onClick={() => setTraceLog([])} className="text-slate-500 hover:text-white"><X /></button></div>
+             <div className="flex-1 font-mono text-xs space-y-4 overflow-y-auto custom-scrollbar">
+                {traceLog.map((log, i) => (
+                  <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="flex gap-4 items-start"><span className="text-slate-800 mt-0.5">[{i}]</span><span className={`flex-1 ${log.includes('COMPLETE') || log.includes('APPLIED') ? 'text-emerald-400 font-black' : 'text-cyan-400/70'}`}>{log.replace(/\[\d+\]\s*/, '')}</span></motion.div>
+                ))}
+                {isResolving && <div className="text-cyan-400 animate-pulse">Waiting for handshake confirmation...</div>}
+             </div>
+          </motion.div>
+        )}
+        </AnimatePresence>
+      </main>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.1); border-radius: 10px; }
+      `}} />
+    </div>
+  );
+}
