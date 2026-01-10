@@ -1,0 +1,837 @@
+
+'use client';
+import { useUser as useAuthUser } from '@/firebase/provider';
+export { useAuthUser as useUser };
+
+
+'use client';
+
+import { useState, useEffect } from 'react';
+import {
+  Query,
+  onSnapshot,
+  DocumentData,
+  FirestoreError,
+  QuerySnapshot,
+  CollectionReference,
+} from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
+/** Utility type to add an 'id' field to a given type T. */
+export type WithId<T> = T & { id: string };
+
+/**
+ * Interface for the return value of the useCollection hook.
+ * @template T Type of the document data.
+ */
+export interface UseCollectionResult<T> {
+  data: WithId<T>[] | null; // Document data with ID, or null.
+  isLoading: boolean;       // True if loading.
+  error: FirestoreError | Error | null; // Error object, or null.
+}
+
+/* Internal implementation of Query:
+  https://github.com/firebase/firebase-js-sdk/blob/c5f08a9bc5da0d2b0207802c972d53724ccef055/packages/firestore/src/lite-api/reference.ts#L143
+*/
+export interface InternalQuery extends Query<DocumentData> {
+  _query: {
+    path: {
+      canonicalString(): string;
+      toString(): string;
+    }
+  }
+}
+
+/**
+ * React hook to subscribe to a Firestore collection or query in real-time.
+ * Handles nullable references/queries.
+ * 
+ *
+ * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery or BAD THINGS WILL HAPPEN
+ * use useMemo to memoize it per React guidence.  Also make sure that it's dependencies are stable
+ * references
+ *  
+ * @template T Optional type for document data. Defaults to any.
+ * @param {CollectionReference<DocumentData> | Query<DocumentData> | null | undefined} targetRefOrQuery -
+ * The Firestore CollectionReference or Query. Waits if null/undefined.
+ * @returns {UseCollectionResult<T>} Object with data, isLoading, error.
+ */
+export function useCollection<T = any>(
+    memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
+): UseCollectionResult<T> {
+  type ResultItemType = WithId<T>;
+  type StateDataType = ResultItemType[] | null;
+
+  const [data, setData] = useState<StateDataType>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Start loading true
+  const [error, setError] = useState<FirestoreError | Error | null>(null);
+
+  useEffect(() => {
+    if (!memoizedTargetRefOrQuery) {
+      setData(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    // Directly use memoizedTargetRefOrQuery as it's assumed to be the final query
+    const unsubscribe = onSnapshot(
+      memoizedTargetRefOrQuery,
+      (snapshot: QuerySnapshot<DocumentData>) => {
+        const results: ResultItemType[] = [];
+        for (const doc of snapshot.docs) {
+          results.push({ ...(doc.data() as T), id: doc.id });
+        }
+        setData(results);
+        setError(null);
+        setIsLoading(false);
+      },
+      (error: FirestoreError) => {
+        // This logic extracts the path from either a ref or a query
+        const path: string =
+          memoizedTargetRefOrQuery.type === 'collection'
+            ? (memoizedTargetRefOrQuery as CollectionReference).path
+            : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+
+        const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path,
+        })
+
+        setError(contextualError)
+        setData(null)
+        setIsLoading(false)
+
+        // trigger global error propagation
+        errorEmitter.emit('permission-error', contextualError);
+      }
+    );
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
+  
+  if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
+    // This check is disabled in production to avoid performance overhead.
+    if (process.env.NODE_ENV === 'development') {
+        throw new Error('useCollection query must be memoized with useMemoFirebase.');
+    }
+  }
+  return { data, isLoading, error };
+}
+
+
+'use client';
+    
+import { useState, useEffect } from 'react';
+import {
+  DocumentReference,
+  onSnapshot,
+  DocumentData,
+  FirestoreError,
+  DocumentSnapshot,
+} from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
+/** Utility type to add an 'id' field to a given type T. */
+type WithId<T> = T & { id: string };
+
+/**
+ * Interface for the return value of the useDoc hook.
+ * @template T Type of the document data.
+ */
+export interface UseDocResult<T> {
+  data: WithId<T> | null; // Document data with ID, or null.
+  isLoading: boolean;       // True if loading.
+  error: FirestoreError | Error | null; // Error object, or null.
+}
+
+/**
+ * React hook to subscribe to a single Firestore document in real-time.
+ * Handles nullable references.
+ * 
+ * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery or BAD THINGS WILL HAPPEN
+ * use useMemo to memoize it per React guidence.  Also make sure that it's dependencies are stable
+ * references
+ *
+ *
+ * @template T Optional type for document data. Defaults to any.
+ * @param {DocumentReference<DocumentData> | null | undefined} docRef -
+ * The Firestore DocumentReference. Waits if null/undefined.
+ * @returns {UseDocResult<T>} Object with data, isLoading, error.
+ */
+export function useDoc<T = any>(
+  memoizedDocRef: DocumentReference<DocumentData> | null | undefined,
+): UseDocResult<T> {
+  type StateDataType = WithId<T> | null;
+
+  const [data, setData] = useState<StateDataType>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Start loading true
+  const [error, setError] = useState<FirestoreError | Error | null>(null);
+
+  useEffect(() => {
+    if (!memoizedDocRef) {
+      setData(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const unsubscribe = onSnapshot(
+      memoizedDocRef,
+      (snapshot: DocumentSnapshot<DocumentData>) => {
+        if (snapshot.exists()) {
+          setData({ ...(snapshot.data() as T), id: snapshot.id });
+        } else {
+          // Document does not exist
+          setData(null);
+        }
+        setError(null); // Clear any previous error on successful snapshot (even if doc doesn't exist)
+        setIsLoading(false);
+      },
+      (error: FirestoreError) => {
+        const contextualError = new FirestorePermissionError({
+          operation: 'get',
+          path: memoizedDocRef.path,
+        })
+
+        setError(contextualError)
+        setData(null)
+        setIsLoading(false)
+
+        // trigger global error propagation
+        errorEmitter.emit('permission-error', contextualError);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [memoizedDocRef]); // Re-run if the memoizedDocRef changes.
+
+  return { data, isLoading, error };
+}
+
+
+'use client';
+
+import React, { useMemo, type ReactNode, useEffect, useState } from 'react';
+import { FirebaseProvider } from '@/firebase/provider';
+import { initializeFirebase } from '@/firebase';
+import type { FirebaseApp } from 'firebase/app';
+import type { Auth } from 'firebase/auth';
+import type { Firestore } from 'firebase/firestore';
+import { Loader2 } from 'lucide-react';
+
+interface FirebaseClientProviderProps {
+  children: ReactNode;
+}
+
+export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
+  const [services, setServices] = useState<{
+    firebaseApp: FirebaseApp | null;
+    auth: Auth | null;
+    firestore: Firestore | null;
+  }>({ firebaseApp: null, auth: null, firestore: null });
+  
+  // This effect runs ONLY on the client, after the initial render.
+  useEffect(() => {
+    // It's safe to call initializeFirebase here.
+    // It will initialize on first client-side render and be memoized after.
+    const firebaseServices = initializeFirebase();
+    setServices(firebaseServices);
+
+    // Register Service Worker for PWA functionality
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+          console.log('SW registered: ', registration);
+        }).catch(registrationError => {
+          console.log('SW registration failed: ', registrationError);
+        });
+      });
+    }
+  }, []);
+  
+  // By removing the loading check and Suspense boundary, this provider
+  // now renders its children immediately. The Firebase services will be null
+  // initially, but will be provided once initialized. Hooks using these
+  // services must handle this null state gracefully.
+  return (
+    <FirebaseProvider
+      firebaseApp={services.firebaseApp}
+      auth={services.auth}
+      firestore={services.firestore}
+    >
+      {children}
+    </FirebaseProvider>
+  );
+}
+
+export const firebaseConfig = {
+  "projectId": "studio-5868637372-a64ea",
+  "appId": "1:627897210714:web:3e007b95edc1dd18a68563",
+  "apiKey": "AIzaSyCI2ipcfPoY3cFad83RB7T1DiU8WhdP6Ds",
+  "authDomain": "studio-5868637372-a64ea.firebaseapp.com",
+  "measurementId": "",
+  "messagingSenderId": "627897210714"
+};
+
+
+'use client';
+import { FirestorePermissionError } from '@/firebase/errors';
+
+/**
+ * Defines the shape of all possible events and their corresponding payload types.
+ * This centralizes event definitions for type safety across the application.
+ */
+export interface AppEvents {
+  'permission-error': FirestorePermissionError;
+}
+
+// A generic type for a callback function.
+type Callback<T> = (data: T) => void;
+
+/**
+ * A strongly-typed pub/sub event emitter.
+ * It uses a generic type T that extends a record of event names to payload types.
+ */
+function createEventEmitter<T extends Record<string, any>>() {
+  // The events object stores arrays of callbacks, keyed by event name.
+  // The types ensure that a callback for a specific event matches its payload type.
+  const events: { [K in keyof T]?: Array<Callback<T[K]>> } = {};
+
+  return {
+    /**
+     * Subscribe to an event.
+     * @param eventName The name of the event to subscribe to.
+     * @param callback The function to call when the event is emitted.
+     */
+    on<K extends keyof T>(eventName: K, callback: Callback<T[K]>) {
+      if (!events[eventName]) {
+        events[eventName] = [];
+      }
+      events[eventName]?.push(callback);
+    },
+
+    /**
+     * Unsubscribe from an event.
+     * @param eventName The name of the event to unsubscribe from.
+     * @param callback The specific callback to remove.
+     */
+    off<K extends keyof T>(eventName: K, callback: Callback<T[K]>) {
+      if (!events[eventName]) {
+        return;
+      }
+      events[eventName] = events[eventName]?.filter(cb => cb !== callback);
+    },
+
+    /**
+     * Publish an event to all subscribers.
+     * @param eventName The name of the event to emit.
+     * @param data The data payload that corresponds to the event's type.
+     */
+    emit<K extends keyof T>(eventName: K, data: T[K]) {
+      if (!events[eventName]) {
+        return;
+      }
+      events[eventName]?.forEach(callback => callback(data));
+    },
+  };
+}
+
+// Create and export a singleton instance of the emitter, typed with our AppEvents interface.
+export const errorEmitter = createEventEmitter<AppEvents>();
+
+
+
+'use client';
+import { getAuth, type User } from 'firebase/auth';
+
+export type SecurityRuleContext = {
+  path: string;
+  operation: 'get' | 'list' | 'create' | 'update' | 'delete' | 'write';
+  requestResourceData?: any;
+};
+
+interface FirebaseAuthToken {
+  name: string | null;
+  email: string | null;
+  email_verified: boolean;
+  phone_number: string | null;
+  sub: string;
+  firebase: {
+    identities: Record<string, any[]>;
+    sign_in_provider: string;
+    tenant: string | null;
+  };
+}
+
+interface FirebaseAuthObject {
+  uid: string;
+  token: FirebaseAuthToken;
+}
+
+interface SecurityRuleRequest {
+  auth: FirebaseAuthObject | null;
+  method: string;
+  path: string;
+  resource?: {
+    data: any;
+  };
+}
+
+/**
+ * Builds a security-rule-compliant auth object from the Firebase User.
+ * @param currentUser The currently authenticated Firebase user.
+ * @returns An object that mirrors request.auth in security rules, or null.
+ */
+function buildAuthObject(currentUser: User | null): FirebaseAuthObject | null {
+  if (!currentUser) {
+    return null;
+  }
+
+  // A simplified token structure. In a real scenario, you'd decode the ID token.
+  const token: FirebaseAuthToken = {
+    name: currentUser.displayName,
+    email: currentUser.email,
+    email_verified: currentUser.emailVerified,
+    phone_number: currentUser.phoneNumber,
+    sub: currentUser.uid,
+    firebase: {
+      identities: currentUser.providerData.reduce((acc, p) => {
+        if (p.providerId) {
+          acc[p.providerId] = [p.uid];
+        }
+        return acc;
+      }, {} as Record<string, any[]>),
+      sign_in_provider: currentUser.providerData[0]?.providerId || 'custom',
+      tenant: currentUser.tenantId,
+    },
+  };
+
+  return {
+    uid: currentUser.uid,
+    token: token,
+  };
+}
+
+
+/**
+ * Builds the complete, simulated request object for the error message.
+ * It safely tries to get the current authenticated user.
+ * @param context The context of the failed Firestore operation.
+ * @returns A structured request object.
+ */
+function buildRequestObject(context: SecurityRuleContext): SecurityRuleRequest {
+  let authObject: FirebaseAuthObject | null = null;
+  try {
+    // Safely attempt to get the current user.
+    const firebaseAuth = getAuth();
+    const currentUser = firebaseAuth.currentUser;
+    if (currentUser) {
+      authObject = buildAuthObject(currentUser);
+    }
+  } catch {
+    // This will catch errors if the Firebase app is not yet initialized.
+    // In this case, we'll proceed without auth information.
+  }
+
+  return {
+    auth: authObject,
+    method: context.operation,
+    path: `/databases/(default)/documents/${context.path}`,
+    resource: context.requestResourceData ? { data: context.requestResourceData } : undefined,
+  };
+}
+
+/**
+ * Builds the final, formatted error message for the LLM.
+ * @param requestObject The simulated request object.
+ * @returns A string containing the error message and the JSON payload.
+ */
+function buildErrorMessage(requestObject: SecurityRuleRequest): string {
+  return `FirestoreError: Missing or insufficient permissions: The following request was denied by Firestore Security Rules:
+${JSON.stringify(requestObject, null, 2)}`;
+}
+
+/**
+ * A custom error class designed to be consumed by an LLM for debugging.
+ * It structures the error information to mimic the request object
+ * available in Firestore Security Rules.
+ */
+export class FirestorePermissionError extends Error {
+  public readonly request: SecurityRuleRequest;
+
+  constructor(context: SecurityRuleContext) {
+    const requestObject = buildRequestObject(context);
+    super(buildErrorMessage(requestObject));
+    this.name = 'FirestorePermissionError';
+    this.request = requestObject;
+  }
+}
+
+
+'use client';
+
+import { firebaseConfig } from '@/firebase/config';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore'
+
+// IMPORTANT: DO NOT MODIFY THIS FUNCTION
+export function initializeFirebase() {
+  if (typeof window === 'undefined') {
+    // On the server, Firebase is handled by the Admin SDK. Return a mock or minimal object.
+    return { firebaseApp: null, auth: null, firestore: null };
+  }
+
+  if (!getApps().length) {
+    const firebaseApp = initializeApp(firebaseConfig);
+    return getSdks(firebaseApp);
+  }
+
+  // If already initialized, return the SDKs with the already initialized App
+  return getSdks(getApp());
+}
+
+export function getSdks(firebaseApp: FirebaseApp) {
+  return {
+    firebaseApp,
+    auth: getAuth(firebaseApp),
+    firestore: getFirestore(firebaseApp)
+  };
+}
+
+export * from './provider';
+export * from './client-provider';
+export * from './firestore/use-collection';
+export * from './firestore/use-doc';
+export * from './non-blocking-updates';
+export * from './non-blocking-login';
+export * from './errors';
+export * from './error-emitter';
+'use client';
+import {
+  Auth, // Import Auth type for type hinting
+  signInAnonymously,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  // Assume getAuth and app are initialized elsewhere
+} from 'firebase/auth';
+
+/** Initiate anonymous sign-in (non-blocking). */
+export function initiateAnonymousSignIn(authInstance: Auth): void {
+  // CRITICAL: Call signInAnonymously directly. Do NOT use 'await signInAnonymously(...)'.
+  signInAnonymously(authInstance);
+  // Code continues immediately. Auth state change is handled by onAuthStateChanged listener.
+}
+
+/** Initiate email/password sign-up (non-blocking). */
+export function initiateEmailSignUp(authInstance: Auth, email: string, password: string): void {
+  // CRITICAL: Call createUserWithEmailAndPassword directly. Do NOT use 'await createUserWithEmailAndPassword(...)'.
+  createUserWithEmailAndPassword(authInstance, email, password);
+  // Code continues immediately. Auth state change is handled by onAuthStateChanged listener.
+}
+
+/** Initiate email/password sign-in (non-blocking). */
+export function initiateEmailSignIn(authInstance: Auth, email: string, password: string): void {
+  // CRITICAL: Call signInWithEmailAndPassword directly. Do NOT use 'await signInWithEmailAndPassword(...)'.
+  signInWithEmailAndPassword(authInstance, email, password);
+  // Code continues immediately. Auth state change is handled by onAuthStateChanged listener.
+}
+
+
+'use client';
+    
+import {
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  CollectionReference,
+  DocumentReference,
+  SetOptions,
+} from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import {FirestorePermissionError} from '@/firebase/errors';
+
+/**
+ * Initiates a setDoc operation for a document reference.
+ * Does NOT await the write operation internally.
+ */
+export function setDocumentNonBlocking(docRef: DocumentReference, data: any, options: SetOptions) {
+  setDoc(docRef, data, options).catch(error => {
+    errorEmitter.emit(
+      'permission-error',
+      new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'write', // or 'create'/'update' based on options
+        requestResourceData: data,
+      })
+    )
+  })
+  // Execution continues immediately
+}
+
+
+/**
+ * Initiates an addDoc operation for a collection reference.
+ * Does NOT await the write operation internally.
+ * Returns the Promise for the new doc ref, but typically not awaited by caller.
+ */
+export function addDocumentNonBlocking(colRef: CollectionReference, data: any) {
+  const promise = addDoc(colRef, data)
+    .catch(error => {
+      errorEmitter.emit(
+        'permission-error',
+        new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'create',
+          requestResourceData: data,
+        })
+      )
+    });
+  return promise;
+}
+
+
+/**
+ * Initiates an updateDoc operation for a document reference.
+ * Does NOT await the write operation internally.
+ */
+export function updateDocumentNonBlocking(docRef: DocumentReference, data: any) {
+  updateDoc(docRef, data)
+    .catch(error => {
+      errorEmitter.emit(
+        'permission-error',
+        new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: data,
+        })
+      )
+    });
+}
+
+
+/**
+ * Initiates a deleteDoc operation for a document reference.
+ * Does NOT await the write operation internally.
+ */
+export function deleteDocumentNonBlocking(docRef: DocumentReference) {
+  deleteDoc(docRef)
+    .catch(error => {
+      errorEmitter.emit(
+        'permission-error',
+        new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'delete',
+        })
+      )
+    });
+}
+
+'use client';
+
+import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import { FirebaseApp } from 'firebase/app';
+import { Firestore } from 'firebase/firestore';
+import { Auth, User, onAuthStateChanged } from 'firebase/auth';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+
+interface FirebaseProviderProps {
+  children: ReactNode;
+  firebaseApp: FirebaseApp | null;
+  firestore: Firestore | null;
+  auth: Auth | null;
+}
+
+// Internal state for user authentication
+interface UserAuthState {
+  user: User | null;
+  isUserLoading: boolean;
+  userError: Error | null;
+}
+
+// Combined state for the Firebase context
+export interface FirebaseContextState {
+  areServicesAvailable: boolean; // True if core services (app, firestore, auth instance) are provided
+  firebaseApp: FirebaseApp | null;
+  firestore: Firestore | null;
+  auth: Auth | null; // The Auth service instance
+  // User authentication state
+  user: User | null;
+  isUserLoading: boolean; // True during initial auth check
+  userError: Error | null; // Error from auth listener
+}
+
+// Return type for useFirebase()
+export interface FirebaseServicesAndUser {
+  firebaseApp: FirebaseApp;
+  firestore: Firestore;
+  auth: Auth;
+  user: User | null;
+  isUserLoading: boolean;
+  userError: Error | null;
+}
+
+// Return type for useUser() - specific to user auth state
+export interface UserHookResult { // Renamed from UserAuthHookResult for consistency if desired, or keep as UserAuthHookResult
+  user: User | null;
+  isUserLoading: boolean;
+  userError: Error | null;
+}
+
+// React Context
+export const FirebaseContext = createContext<FirebaseContextState | undefined>(undefined);
+
+/**
+ * FirebaseProvider manages and provides Firebase services and user authentication state.
+ */
+export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
+  children,
+  firebaseApp,
+  firestore,
+  auth,
+}) => {
+  const [userAuthState, setUserAuthState] = useState<UserAuthState>({
+    user: null,
+    isUserLoading: true, // Start loading until first auth event
+    userError: null,
+  });
+
+  // Effect to subscribe to Firebase auth state changes
+  useEffect(() => {
+    if (!auth) { // If no Auth service instance, cannot determine user state
+      setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided.") });
+      return;
+    }
+
+    setUserAuthState({ user: auth.currentUser, isUserLoading: true, userError: null });
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => { // Auth state determined
+        setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
+      },
+      (error) => { // Auth listener error
+        console.error("FirebaseProvider: onAuthStateChanged error:", error);
+        setUserAuthState({ user: null, isUserLoading: false, userError: error });
+      }
+    );
+    return () => unsubscribe(); // Cleanup
+  }, [auth]); // Depends on the auth instance
+
+  // Memoize the context value
+  const contextValue = useMemo((): FirebaseContextState => {
+    const servicesAvailable = !!(firebaseApp && firestore && auth);
+    return {
+      areServicesAvailable: servicesAvailable,
+      firebaseApp: servicesAvailable ? firebaseApp : null,
+      firestore: servicesAvailable ? firestore : null,
+      auth: servicesAvailable ? auth : null,
+      user: userAuthState.user,
+      isUserLoading: userAuthState.isUserLoading,
+      userError: userAuthState.userError,
+    };
+  }, [firebaseApp, firestore, auth, userAuthState]);
+
+  return (
+    <FirebaseContext.Provider value={contextValue}>
+      <FirebaseErrorListener />
+      {children}
+    </FirebaseContext.Provider>
+  );
+};
+
+/**
+ * Hook to access core Firebase services and user authentication state.
+ * Throws error if core services are not available or used outside provider.
+ */
+export const useFirebase = (): FirebaseServicesAndUser => {
+  const context = useContext(FirebaseContext);
+
+  if (context === undefined) {
+    throw new Error('useFirebase must be used within a FirebaseProvider.');
+  }
+
+  if (!context.areServicesAvailable || !context.firebaseApp || !context.firestore || !context.auth) {
+    throw new Error('Firebase core services not available. Check FirebaseProvider props.');
+  }
+
+  return {
+    firebaseApp: context.firebaseApp,
+    firestore: context.firestore,
+    auth: context.auth,
+    user: context.user,
+    isUserLoading: context.isUserLoading,
+    userError: context.userError,
+  };
+};
+
+/** Hook to access Firebase Auth instance. */
+export const useAuth = (): Auth | null => {
+  const context = useContext(FirebaseContext);
+  return context?.auth ?? null;
+};
+
+/** Hook to access Firestore instance. */
+export const useFirestore = (): Firestore | null => {
+  const context = useContext(FirebaseContext);
+  return context?.firestore ?? null;
+};
+
+/** Hook to access Firebase App instance. */
+export const useFirebaseApp = (): FirebaseApp | null => {
+  const context = useContext(FirebaseContext);
+  return context?.firebaseApp ?? null;
+};
+
+type MemoFirebase <T> = T & {__memo?: boolean};
+
+export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | (MemoFirebase<T>) {
+  const memoized = useMemo(factory, deps);
+  
+  if (typeof window === 'undefined') {
+    // On the server, we don't need to add the memo flag.
+    return memoized;
+  }
+  
+  if(typeof memoized !== 'object' || memoized === null) return memoized;
+  (memoized as MemoFirebase<T>).__memo = true;
+  
+  return memoized;
+}
+
+/**
+ * Hook specifically for accessing the authenticated user's state.
+ * This provides the User object, loading status, and any auth errors.
+ * @returns {UserHookResult} Object with user, isUserLoading, userError.
+ */
+export const useUser = (): UserHookResult => { // Renamed from useAuthUser
+  const context = useContext(FirebaseContext);
+  if (context === undefined) {
+    throw new Error('useUser must be used within a FirebaseProvider.');
+  }
+  return { 
+      user: context.user, 
+      isUserLoading: context.isUserLoading, 
+      userError: context.userError 
+  };
+};
+
+
+
+
+
+
