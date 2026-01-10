@@ -1,0 +1,245 @@
+
+'use client';
+
+import React, { useEffect, useRef, useState, useMemo, useCallback, Suspense } from 'react';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import Link from 'next/link';
+import { ArrowLeft, Users, Zap, GitBranch, Radio, Satellite as SatelliteIcon, Activity, Database, ShieldCheck, Maximize2, Minimize2, Navigation, Crosshair } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import maplibregl, { Map as MapLibreMap, Marker, Popup } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import * as turf from '@turf/turf';
+
+const MAP_STYLE_URL = `https://api.maptiler.com/maps/satellite/style.json?key=H3NHWZtIAaZh5lIf4Tu2`;
+
+const customStyles = `
+    .maplibregl-canvas { display: block !important; }
+    .maplibregl-popup-content { 
+        font-family: sans-serif;
+        font-size: 14px;
+        color: white; 
+        background: rgba(15, 23, 42, 0.9); 
+        padding: 12px 16px; 
+        border-radius: 12px;
+        border: 1px solid rgba(79, 70, 229, 0.5);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+        border-top-color: rgba(79, 70, 229, 0.5);
+    }
+    .marker-pulse { 
+        animation: pulse 2s infinite;
+        cursor: pointer;
+    }
+    @keyframes pulse { 
+        0% { box-shadow:0 0 0 0 rgba(99, 102, 241,0.7); } 
+        70% { box-shadow:0 0 0 20px rgba(99, 102, 241,0); } 
+        100% { box-shadow:0 0 0 0 rgba(99, 102, 241,0); } 
+    }
+`;
+
+function FamilyAnchorMapContent() {
+    const { firestore } = useFirebase();
+    const mapContainerRef = useRef<HTMLDivElement | null>(null);
+    const mapRef = useRef<MapLibreMap | null>(null);
+    const markersRef = useRef<Record<string, Marker>>({});
+
+    const universesQuery = useMemoFirebase(() => (!firestore ? null : query(collection(firestore, 'familyCores'))), [firestore]);
+    const { data: familyCoresData, isLoading: isLoadingCores } = useCollection(universesQuery);
+
+    const HOME_ANCHOR_COORDS = useMemo(() => [ -80.9930, 46.4917 ], []); // Lng, Lat for Sudbury
+
+    const familyNodes = useMemo(() => {
+        if (!familyCoresData) return [];
+        return familyCoresData.map(core => ({
+            id: core.id,
+            name: core.familyName || 'Unnamed Family',
+            location: core.jurisdiction ? `${core.jurisdiction.province}, ${core.jurisdiction.country}` : 'Unknown Location',
+            lat: core.lat || 46.4917, // Default to Sudbury
+            lng: core.lng || -80.9930,
+            color: `#${core.id.substring(0, 6)}`,
+            memberCount: Object.keys(core.members || {}).filter(k => core.members[k].name !== 'Awaiting User...').length,
+        }));
+    }, [familyCoresData]);
+    
+    // Initialize Map
+    useEffect(() => {
+        if (!mapContainerRef.current || mapRef.current) return;
+
+        const map = new maplibregl.Map({
+            container: mapContainerRef.current,
+            style: MAP_STYLE_URL,
+            center: HOME_ANCHOR_COORDS as [number, number],
+            zoom: 10,
+            pitch: 45,
+            bearing: -17.6,
+        });
+        mapRef.current = map;
+
+        map.on('load', () => {
+            const homePoint = turf.point(HOME_ANCHOR_COORDS);
+            const geofence = turf.circle(homePoint, 500, { units: 'meters' });
+
+            map.addSource('geofence', { type: 'geojson', data: geofence });
+            map.addLayer({
+                id: 'geofence-fill',
+                type: 'fill',
+                source: 'geofence',
+                paint: { 'fill-color': '#4f46e5', 'fill-opacity': 0.15 }
+            });
+            map.addLayer({
+                id: 'geofence-border',
+                type: 'line',
+                source: 'geofence',
+                paint: { 'line-color': '#a5b4fc', 'line-width': 2, 'line-dasharray': [2, 3] }
+            });
+
+            const homeEl = document.createElement('div');
+            homeEl.className = "w-4 h-4 bg-indigo-400 rounded-full border-2 border-white marker-pulse";
+            new Marker({element: homeEl}).setLngLat(HOME_ANCHOR_COORDS as [number, number]).addTo(map);
+        });
+
+        return () => { map.remove(); mapRef.current = null; };
+    }, [HOME_ANCHOR_COORDS]);
+    
+    // Update Markers
+    useEffect(() => {
+        if (!mapRef.current || isLoadingCores) return;
+        
+        const map = mapRef.current;
+        const homePoint = turf.point(HOME_ANCHOR_COORDS);
+        const currentMarkerIds = Object.keys(markersRef.current);
+        const nodeIds = familyNodes.map(n => n.id);
+
+        // Remove old markers
+        currentMarkerIds.forEach(markerId => {
+            if (!nodeIds.includes(markerId)) {
+                markersRef.current[markerId].remove();
+                delete markersRef.current[markerId];
+            }
+        });
+        
+        familyNodes.forEach(node => {
+            const nodePoint = turf.point([node.lng, node.lat]);
+            const distance = turf.distance(homePoint, nodePoint, { units: 'meters' });
+
+            if (distance > 200) { // The 200m rule
+                const popup = new Popup({ closeButton: false, closeOnClick: false })
+                    .setHTML(`<div style="font-weight: bold; color: ${node.color};">${node.name}</div><div>${node.memberCount} members</div><div style="font-size: 11px; opacity: 0.7;">${node.location}</div>`);
+
+                if (markersRef.current[node.id]) {
+                    markersRef.current[node.id].setLngLat([node.lng, node.lat]);
+                } else {
+                    const el = document.createElement('div');
+                    el.className = 'w-4 h-4 rounded-full border-2 border-black marker-pulse';
+                    el.style.backgroundColor = node.color;
+                    
+                    const marker = new Marker({ element: el })
+                        .setLngLat([node.lng, node.lat])
+                        .setPopup(popup)
+                        .addTo(map);
+                    
+                    el.addEventListener('mouseenter', () => marker.togglePopup());
+                    el.addEventListener('mouseleave', () => marker.togglePopup());
+
+                    markersRef.current[node.id] = marker;
+                }
+            } else {
+                // If node is within 200m, remove its marker if it exists
+                if (markersRef.current[node.id]) {
+                    markersRef.current[node.id].remove();
+                    delete markersRef.current[node.id];
+                }
+            }
+        });
+
+    }, [familyNodes, isLoadingCores, HOME_ANCHOR_COORDS]);
+
+    return (
+        <div className="w-full h-screen bg-[#01030a] text-white font-sans overflow-hidden">
+            <style>{customStyles}</style>
+            <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+
+            <div className="absolute top-0 left-0 w-full p-6 sm:p-10 flex justify-between items-start pointer-events-none z-30">
+                <div className="space-y-1 pointer-events-auto">
+                     <Link href="/admin/dashboard">
+                         <Button variant="outline" className="backdrop-blur-md bg-black/30">
+                            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+            
+            <div className="absolute bottom-6 right-6 pointer-events-auto">
+                 <div className="bg-black/40 backdrop-blur-xl border border-white/10 p-5 rounded-2xl text-center">
+                    <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Active Family Nodes</p>
+                    <p className="text-2xl font-black mono text-emerald-400">{Object.keys(markersRef.current).length}</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function RealDevMapPage() {
+    return (
+        <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading Map Data...</div>}>
+            <FamilyAnchorMapContent />
+        </Suspense>
+    );
+}
+
+    
+'use client';
+
+import { doc, setDoc, getDoc, Firestore } from 'firebase/firestore';
+
+/**
+ * Ensures that the essential data for a user and their family exists.
+ * This is a "seed" function to prevent UI errors from missing data.
+ * @param db Firestore instance
+ * @param userId The current user's ID
+ * @param familyId The ID of the family to associate with
+ */
+export const seedInitialData = async (db: Firestore, userId: string, familyId: string) => {
+    if (!db || !userId || !familyId) {
+        console.error("Seed data: Firestore, userId, or familyId is missing.");
+        return;
+    }
+    
+    // 1. Define references to the user and family documents
+    const userDocRef = doc(db, 'users', userId);
+    const familyDocRef = doc(db, 'families', familyId);
+
+    try {
+        // 2. Check if the user document already exists
+        const userDoc = await getDoc(userDocRef);
+        if (!userDoc.exists()) {
+            console.log(`Seeding user document for ${userId}...`);
+            await setDoc(userDocRef, {
+                id: userId,
+                familyId: familyId,
+                firstName: 'Demo',
+                lastName: 'User',
+                email: 'user@example.com',
+                role: 'admin' // Default role for this context
+            });
+        }
+        
+        // 3. Check if the family document already exists
+        const familyDoc = await getDoc(familyDocRef);
+        if (!familyDoc.exists()) {
+            console.log(`Seeding family document for ${familyId}...`);
+            await setDoc(familyDocRef, {
+                id: familyId,
+                name: 'Sovereign Household',
+                address: 'Sudbury, ON' // The default home anchor address
+            });
+        }
+    } catch (error) {
+        console.error("Error seeding initial Firestore data:", error);
+    }
+};
+
+    
