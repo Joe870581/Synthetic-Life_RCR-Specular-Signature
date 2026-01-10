@@ -1,0 +1,249 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, Suspense, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { 
+  Cpu, 
+  User, 
+  ShieldCheck,
+  Zap,
+  Radio,
+  Gamepad2,
+  Film,
+  MessageSquare,
+  Activity,
+  Briefcase,
+  Wallet,
+  Star
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const AppContent = () => {
+  const searchParams = useSearchParams();
+  const userId = searchParams.get('userId');
+  
+  const MODULE_DATA = React.useMemo(() => [
+    {
+      cat: "Social",
+      icon: <MessageSquare size={18} />,
+      nodes: [
+        { id: 'adult-music-video', title: 'Music & Video', url: `/adult-app/adult-music-video/${userId}` },
+        { id: 'adult-socialpost-view', title: 'Social Feed', url: `/adult-app/adult-socialpost-view?userId=${userId}` },
+        { id: 'my-clips', title: 'MyClips', url: `/shared-app/myclips?userId=${userId}` }
+      ]
+    },
+    {
+      cat: "Finance & Work",
+      icon: <Activity size={18} />,
+      nodes: [
+        { id: 'my-spikes-point-store', title: 'Spike Store', url: `/adult-app/my-spikes-point-store?userId=${userId}` },
+        { id: 'my-personal-bank', title: 'Personal Bank', url: `/adult-app/my-personal-bank?userId=${userId}` },
+        { id: 'my-work', title: 'My Work', url: `/adult-app/my-work?userId=${userId}` }
+      ]
+    },
+    {
+      cat: "Entertainment",
+      icon: <Gamepad2 size={18} />,
+      nodes: [
+        { id: 'email', title: 'Email', url: `/shared-app/email?userId=${userId}` },
+        { id: 'gamerzoner', title: 'GamerZoner', url: `/shared-app/gamerzoner?userId=${userId}` },
+        { id: 'adults-hub', title: 'Adults Hub', url: `/adult-app/adults-hub?userId=${userId}` }
+      ]
+    }
+  ], [userId]);
+
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [isNavOverlayVisible, setIsNavOverlayVisible] = useState(false);
+  const longPressTimer = useRef(null);
+
+  useEffect(() => {
+    try {
+        const savedPos = localStorage.getItem('multiGradeAppDefaultPos');
+        if (savedPos) {
+            setPos(JSON.parse(savedPos));
+        }
+    } catch (e) {
+        console.error("Failed to load saved position from localStorage", e);
+    }
+  }, []);
+
+  const handleSetDefault = (x, y) => {
+    const newPos = { x, y };
+    setPos(newPos);
+    try {
+        localStorage.setItem('multiGradeAppDefaultPos', JSON.stringify(newPos));
+    } catch(e) {
+        console.error("Failed to save position to localStorage", e);
+    }
+    setIsNavOverlayVisible(false);
+  };
+  
+  const handlePanEnd = (event, info) => {
+    const { offset, velocity } = info;
+    const swipeThreshold = 50;
+    const velocityThreshold = 100;
+
+    if (Math.abs(offset.x) > swipeThreshold || Math.abs(velocity.x) > velocityThreshold) {
+      if (offset.x < 0) {
+        setPos(p => ({ ...p, x: Math.min(MODULE_DATA.length - 1, p.x + 1) }));
+      } else {
+        setPos(p => ({ ...p, x: Math.max(0, p.x - 1) }));
+      }
+    } else if (Math.abs(offset.y) > swipeThreshold || Math.abs(velocity.y) > velocityThreshold) {
+      if (offset.y < 0) {
+        setPos(p => ({ ...p, y: Math.min(MODULE_DATA[0].nodes.length - 1, p.y + 1) }));
+      } else {
+        setPos(p => ({ ...p, y: Math.max(0, p.y - 1) }));
+      }
+    }
+  };
+  
+  const handlePanStart = () => {
+    longPressTimer.current = setTimeout(() => {
+        setIsNavOverlayVisible(true);
+    }, 500);
+  };
+
+  const clearLongPress = () => {
+      clearTimeout(longPressTimer.current);
+  };
+
+
+  return (
+    <motion.div 
+      className="h-screen w-screen bg-[#020202] text-white font-sans overflow-hidden relative select-none"
+      onPanStart={handlePanStart}
+      onPanEnd={(event, info) => {
+          clearLongPress();
+          if (!isNavOverlayVisible) {
+              handlePanEnd(event, info);
+          }
+      }}
+      onPanCancel={clearLongPress}
+    >
+      {/* Dynamic Background */}
+      <div className="absolute inset-0 pointer-events-none transition-all duration-1000 overflow-hidden">
+        <div 
+          className="absolute inset-0 opacity-40 transition-colors duration-1000 ease-in-out"
+          style={{ 
+            background: `radial-gradient(circle at ${50 + (pos.x * 20)}% ${50 + (pos.y * 20)}%, ${pos.x === 0 ? '#4c1d95' : pos.x === 1 ? '#1e3a8a' : '#047857'} 0%, transparent 70%)`
+          }}
+        />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.2] mix-blend-overlay" />
+      </div>
+
+      {/* FULL SCREEN MATRIX CORE */}
+      <div 
+        className="flex h-full w-full transition-transform duration-[850ms] ease-[cubic-bezier(0.19,1,0.22,1)]"
+        style={{ transform: `translateX(-${pos.x * 100}%)` }}
+      >
+        {MODULE_DATA.map((category, xIdx) => (
+          <div key={xIdx} className="min-w-full h-full relative">
+            <div 
+              className="h-full w-full transition-transform duration-[850ms] ease-[cubic-bezier(0.19,1,0.22,1)]"
+              style={{ transform: `translateY(-${pos.y * 100}%)` }}
+            >
+              {category.nodes.map((node, yIdx) => {
+                const isActive = pos.x === xIdx && pos.y === yIdx;
+                return (
+                  <div key={yIdx} className="h-full w-full flex flex-col relative">
+                    <div className={`flex-1 h-full w-full flex flex-col transition-opacity duration-1000 ${isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                      {isActive ? (
+                        node.url === '/coming-soon' ? (
+                            <div className="h-full flex flex-col items-center justify-center py-40 opacity-20 text-center animate-pulse-slow">
+                                <Zap size={64} className="mb-8 text-indigo-500" />
+                                <span className="text-sm font-mono tracking-[0.5em] uppercase">App Not Built</span>
+                                <span className="text-[10px] font-mono mt-6 text-white/40 uppercase tracking-[0.2em]">This node is ready for a new iframe application.</span>
+                            </div>
+                        ) : (
+                            <iframe
+                                src={node.url}
+                                title={node.title}
+                                className="w-full h-full border-none"
+                                key={node.id}
+                            />
+                        )
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* PERSISTENT BOTTOM OS NAV */}
+      <div className="absolute bottom-0 left-0 w-full p-8 flex flex-col items-center gap-8 z-[200] pointer-events-none">
+        <div className="flex items-center gap-12 sm:gap-20 px-12 py-5 bg-black/40 backdrop-blur-3xl rounded-[2.5rem] border border-white/[0.05] pointer-events-auto shadow-2xl">
+          {MODULE_DATA.map((cat, idx) => (
+            <button 
+              key={idx}
+              onClick={() => setPos({ x: idx, y: pos.y })}
+              className={`flex flex-col items-center gap-3 transition-all duration-700 ${pos.x === idx ? 'opacity-100 scale-110' : 'opacity-20 hover:opacity-50'}`}
+            >
+              <div className={`p-3 rounded-2xl transition-all ${pos.x === idx ? 'bg-blue-600 text-white' : 'bg-transparent text-white'}`}>
+                {cat.icon}
+              </div>
+              <div className="text-[9px] font-black tracking-[0.4em] uppercase">{cat.cat}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* SIDEBAR NAVIGATION DOTS */}
+      <div className="absolute left-10 top-1/2 -translate-y-1/2 flex flex-col gap-5 z-[200] pointer-events-auto">
+        {[0, 1, 2].map(i => (
+          <button key={i} onClick={() => setPos({ ...pos, y: i })} className={`w-1.5 rounded-full transition-all duration-700 ${pos.y === i ? 'h-16 bg-blue-500' : 'h-2 bg-white/20'}`} />
+        ))}
+      </div>
+
+      {/* NAVIGATION OVERLAY */}
+      <AnimatePresence>
+        {isNavOverlayVisible && (
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsNavOverlayVisible(false)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-md z-[300] flex items-center justify-center p-8"
+            >
+                <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="grid grid-cols-3 gap-4 w-full max-w-lg bg-black/30 p-4 rounded-3xl border border-white/10"
+                >
+                    {MODULE_DATA.flatMap((category, x) => 
+                        category.nodes.map((node, y) => (
+                            <button
+                                key={`${x}-${y}`}
+                                onClick={() => handleSetDefault(x, y)}
+                                className="aspect-square bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 text-white/50 hover:bg-white/10 hover:text-white transition-all"
+                            >
+                               {React.cloneElement(category.icon, { size: 24 })}
+                               <span className="text-xs font-bold text-center">{node.title}</span>
+                            </button>
+                        ))
+                    )}
+                </motion.div>
+            </motion.div>
+        )}
+      </AnimatePresence>
+
+      <style jsx global>{`
+        .touch-none { touch-action: pan-x pan-y; }
+      `}</style>
+    </motion.div>
+  );
+};
+
+const AppWrapper = () => (
+    <Suspense fallback={<div className="h-screen w-screen bg-[#020202] text-white flex items-center justify-center">Loading Multi-Grade...</div>}>
+        <AppContent />
+    </Suspense>
+);
+
+export default AppWrapper;
