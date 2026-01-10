@@ -1,0 +1,270 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { 
+  Heart, MessageSquare, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Link from 'next/link';
+
+// --- UTILITY & HELPER FUNCTIONS ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- INITIAL DATA & CONFIG ---
+const mainVideo = {
+    id: 'vid1',
+    title: 'Sovereign OS: The Genesis Protocol',
+    creator: 'Sovereign Archives',
+    creatorAvatar: 'https://i.pravatar.cc/150?u=sov_archives',
+    views: '1.2M',
+    likes: '98K',
+    timestamp: '2 weeks ago',
+    description: 'A deep dive into the foundational principles of the Sovereign Operating System. This video covers the economic model, the TrueOath handshake, and the vision for a decentralized digital future governed by users.',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-lighting-in-the-city-at-night-21895-large.mp4',
+};
+
+const upNextVideos = [
+    { id: 'vid2', title: 'DockRTC: Building a Private Signaling Layer', creator: 'DevCore', duration: '15:32', thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=800&auto=format&fit=crop' },
+    { id: 'vid3', title: 'The Spike Points Economy Explained', creator: 'Finance Hub', duration: '8:45', thumbnail: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=800&auto=format=fit=crop' },
+    { id: 'vid4', title: 'A Day in the Life of a Sovereign Family', creator: 'The Andersons', duration: '22:10', thumbnail: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&fit=crop' },
+];
+
+const comments = [
+    { id: 'com1', user: 'Architect_01', text: 'Excellent breakdown of the core concepts.', avatar: 'https://i.pravatar.cc/150?u=arch_01' },
+    { id: 'com2', user: 'Nexus_User', text: 'This is the future! Wen mainnet?', avatar: 'https://i.pravatar.cc/150?u=nexus_user' },
+];
+
+
+// --- UNIVERSAL NAVIGATION HEADER ---
+const HeaderNav = () => {
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    const navLinks = [
+        { href: '/shared-app/myclips?sessionId=null&userId=p1', icon: HomeIcon, label: 'Home Feed' },
+        { href: '/adult-app/adult-socialpost-view?sessionId=null&userId=p1', icon: ImageIcon, label: 'Editorial' },
+        { href: '/shared-app/video-posting?sessionId=null&userId=p1', icon: Video, label: 'Video Hub' },
+        { href: '/shared-app/email?sessionId=null&userId=p1', icon: Music, label: 'Comms & Music' },
+    ];
+    
+    return (
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+        <motion.div 
+            layout
+            className="flex items-center gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/[0.05] rounded-3xl"
+        >
+            <motion.button
+                layout
+                onClick={() => setIsSearchOpen(p => !p)}
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isSearchOpen ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+            >
+                <Search />
+            </motion.button>
+            <AnimatePresence>
+                {isSearchOpen && (
+                    <motion.div
+                        layout
+                        initial={{opacity: 0, width: 0}}
+                        animate={{opacity: 1, width: 'auto'}}
+                        exit={{opacity: 0, width: 0}}
+                        className="flex items-center gap-2 overflow-hidden"
+                    >
+                        <div className="w-px h-8 bg-white/10" />
+                        {navLinks.map((link) => (
+                            <Link key={link.href} href={link.href} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center" title={link.label}>
+                                <link.icon className="text-white/70"/>
+                            </Link>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+         {isSearchOpen && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
+                <Link href="/adult-app/adult-socialpost-view?sessionId=null&userId=p1">
+                    <input type="text" placeholder="Search the universe..." className="w-full bg-black/40 backdrop-blur-3xl border border-white/10 rounded-2xl p-4 text-sm font-bold placeholder:text-white/30 outline-none focus:ring-2 focus:ring-cyan-500 text-center cursor-pointer" readOnly/>
+                </Link>
+            </motion.div>
+         )}
+      </div>
+    );
+};
+
+// --- VIDEO PLAYER & CONTROLS ---
+const VideoPlayer = ({ video }) => {
+    const videoRef = useRef(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    const togglePlay = () => {
+        if (videoRef.current) {
+            if (isPlaying) videoRef.current.pause();
+            else videoRef.current.play();
+            setIsPlaying(!isPlaying);
+        }
+    };
+
+    return (
+        <div className="relative aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl shadow-black/40 border border-white/10">
+            <video ref={videoRef} src={video.videoUrl} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/20" />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity" onClick={togglePlay}>
+                <button className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                    {isPlaying ? <Pause size={40} /> : <Play size={40} className="ml-2" />}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+// --- DISCOVERY HUB COMPONENTS ---
+const HubCard = ({ title, description, icon: Icon, onClick }) => (
+  <motion.div 
+    whileHover={{ y: -5 }}
+    onClick={onClick}
+    className="bg-zinc-900/50 border border-white/10 p-6 rounded-3xl cursor-pointer group"
+  >
+    <div className="flex items-start justify-between">
+      <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20 mb-4 transition-all duration-300 group-hover:bg-indigo-500/20 group-hover:border-indigo-500/40">
+        <Icon size={24} />
+      </div>
+      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Explore</span>
+    </div>
+    <h3 className="text-xl font-bold mb-1">{title}</h3>
+    <p className="text-sm text-zinc-400">{description}</p>
+  </motion.div>
+);
+
+const DiscoveryHub = ({ onSelectCategory }) => {
+    const categories = [
+        { id: 'gaming', title: 'Gaming', description: 'Live streams and VODs from your favorite creators.', icon: Gamepad2 },
+        { id: 'shows', title: 'Shows & Series', description: 'Original series and syndicated TV shows.', icon: Clapperboard },
+        { id: 'trueoath', title: 'TrueOath Cinema', description: 'Premium, ad-free movies for the family.', icon: Film },
+        { id: 'news', title: 'News & Articles', description: 'In-depth reports and current events.', icon: Newspaper },
+    ];
+    return (
+        <div className="max-w-4xl mx-auto py-24 text-center">
+            <h1 className="text-5xl font-black italic tracking-tighter mb-4">The Video Hub</h1>
+            <p className="text-zinc-400 text-lg mb-12">Long-form content, live broadcasts, and cinematic experiences.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {categories.map(cat => (
+                    <HubCard key={cat.id} {...cat} onClick={() => onSelectCategory(cat.id)} />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
+// --- MAIN PAGE COMPONENT ---
+const AppContent = () => {
+    const [view, setView] = useState('hub'); // 'hub' or 'player'
+
+    const handleSelectCategory = (categoryId) => {
+        // Here you would typically filter content based on the category
+        // For this demo, we'll just switch to the player view.
+        setView('player');
+    };
+    
+    if (view === 'hub') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white p-6 relative">
+                 <HeaderNav />
+                <DiscoveryHub onSelectCategory={handleSelectCategory} />
+            </div>
+        )
+    }
+
+    return (
+        <div className="min-h-screen bg-[#050505] text-white p-6">
+            <HeaderNav />
+
+            <div className="max-w-7xl mx-auto pt-24 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Main Content */}
+                <main className="lg:col-span-2 space-y-6">
+                    <VideoPlayer video={mainVideo} />
+                    
+                    {/* Video Info */}
+                    <div className="space-y-4">
+                        <h1 className="text-3xl font-bold">{mainVideo.title}</h1>
+                        <div className="flex items-center justify-between text-zinc-400">
+                            <div className="flex items-center gap-4">
+                                <img src={mainVideo.creatorAvatar} className="w-10 h-10 rounded-full" alt="creator" />
+                                <div>
+                                    <p className="font-semibold text-white">{mainVideo.creator}</p>
+                                    <p className="text-xs">{mainVideo.views} views • {mainVideo.timestamp}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full hover:bg-white/20"><ThumbsUp size={16} /> {mainVideo.likes}</button>
+                                <button className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full hover:bg-white/20"><Share2 size={16} /> Share</button>
+                            </div>
+                        </div>
+                        <p className="text-sm text-zinc-300 leading-relaxed bg-white/5 p-4 rounded-xl">{mainVideo.description}</p>
+                    </div>
+
+                    {/* Comments */}
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-bold">Comments ({comments.length})</h2>
+                        <div className="flex gap-4">
+                            <input type="text" placeholder="Add a comment..." className="flex-1 bg-zinc-800 border border-zinc-700 rounded-full px-4 text-sm" />
+                        </div>
+                        <div className="space-y-4 pt-4">
+                            {comments.map(comment => (
+                                <div key={comment.id} className="flex items-start gap-4">
+                                    <img src={comment.avatar} className="w-10 h-10 rounded-full" alt={comment.user} />
+                                    <div>
+                                        <p className="font-semibold text-sm">{comment.user}</p>
+                                        <p className="text-zinc-300 text-sm">{comment.text}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </main>
+
+                {/* Up Next Sidebar */}
+                <aside className="lg:col-span-1 space-y-4">
+                    <h2 className="text-xl font-bold">Up Next</h2>
+                    {upNextVideos.map(video => (
+                        <div key={video.id} className="flex gap-4 group cursor-pointer" onClick={() => setView('player')}>
+                            <div className="w-40 h-24 bg-zinc-800 rounded-lg overflow-hidden relative">
+                                <img src={video.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt={video.title}/>
+                                <p className="absolute bottom-1 right-1 bg-black/50 text-xs px-1.5 py-0.5 rounded">{video.duration}</p>
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-sm leading-tight line-clamp-2 group-hover:text-cyan-400 transition-colors">{video.title}</h3>
+                                <p className="text-xs text-zinc-400 mt-1">{video.creator}</p>
+                            </div>
+                        </div>
+                    ))}
+                </aside>
+            </div>
+        </div>
+    );
+};
+
+const AppWithProvider = (props) => (
+    <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading User Data...</div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default function App() {
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap'); body { font-family: 'Inter', sans-serif; background: #050505; color: white; margin: 0; }`;
+        document.head.appendChild(style);
+        return () => { document.head.removeChild(style); };
+    }, []);
+
+    return <AppWithProvider />;
+}
