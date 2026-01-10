@@ -1,0 +1,488 @@
+
+'use client'
+
+import { useState } from 'react'
+import { Monitor, Camera, X, Minimize, Maximize, Video, Mic, Radio } from 'lucide-react'
+import type { SessionMode } from '../page'
+
+export function GamingView({ mode, onExit }: { mode: 'RECORD' | 'PRIVATE', onExit: () => void }) {
+  const [isCaptureActive, setIsCaptureActive] = useState(mode === 'RECORD');
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  const toggleCapture = () => {
+    setIsCaptureActive(prev => !prev);
+  };
+  
+  const toggleFullScreen = () => {
+    const elem = document.documentElement;
+    if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => {
+            alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+        });
+        setIsFullScreen(true);
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+        setIsFullScreen(false);
+    }
+  };
+
+  return (
+    <div className="w-full h-full bg-black relative flex items-center justify-center text-white/10 font-black text-6xl">
+      GAMEPLAY SURFACE
+      
+      {/* Top Right Controls */}
+      <div className="absolute top-4 right-4 z-20 flex gap-2">
+        <button onClick={toggleFullScreen} className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
+          {isFullScreen ? <Minimize size={20} /> : <Maximize size={20} />}
+        </button>
+        <button onClick={onExit} className="w-10 h-10 bg-red-500/80 rounded-full flex items-center justify-center hover:bg-red-500">
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Camera Bubble */}
+      <div className="absolute bottom-4 right-4 w-48 h-32 bg-slate-800 rounded-lg border-2 border-white/20 overflow-hidden z-20">
+         <div className="w-full h-full bg-slate-900 flex items-center justify-center text-slate-600">
+            <Camera size={32} />
+         </div>
+         <div className="absolute bottom-2 left-2 p-1.5 bg-green-500/80 rounded-full">
+            <Mic size={12} className="text-white" />
+         </div>
+      </div>
+      
+      {/* Recording Indicator */}
+      {(mode === 'RECORD') && (
+        <div className="absolute top-4 left-4 z-20">
+          <button onClick={toggleCapture} className="px-4 py-2 bg-white/10 rounded-full text-xs font-bold flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isCaptureActive ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`} />
+            {isCaptureActive ? 'RECORDING' : 'REC PAUSED'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+'use client'
+
+import { useState } from 'react';
+import { Gamepad, Music, Radio, CheckCircle2, ShieldAlert, Loader2, Link as LinkIcon, XCircle, AlertTriangle, Settings, ArrowRight } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+
+const PLATFORMS = [
+  { id: 'spotify', name: 'Spotify', icon: Music, color: 'text-green-400', initialStatus: 'TRUSTED' },
+  { id: 'xbox', name: 'Xbox Live', icon: Gamepad, color: 'text-green-400', initialStatus: 'TRUSTED' },
+  { id: 'psn', name: 'PlayStation', icon: Gamepad, color: 'text-blue-400', initialStatus: 'NO_TUREOATH' },
+  { id: 'steam', name: 'Steam', icon: Gamepad, color: 'text-slate-400', initialStatus: 'INVALID_CREDENTIALS' },
+];
+
+const FeedbackModal = ({ feedback, onClose }) => {
+    if (!feedback) return null;
+
+    const { type, message, title, link } = feedback;
+
+    const config = {
+        redirect: { icon: ShieldAlert, color: 'border-red-500/50', textColor: 'text-red-400', buttonText: 'Go to Settings' },
+        error: { icon: AlertTriangle, color: 'border-yellow-500/50', textColor: 'text-yellow-400', buttonText: 'Try Again' }
+    };
+    
+    const currentConfig = config[type] || config.error;
+
+    return (
+        <AnimatePresence>
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+                onClick={onClose}
+            >
+                <motion.div 
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: -20 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`relative w-full max-w-sm bg-gray-900 border-2 ${currentConfig.color} rounded-2xl p-8 text-center shadow-2xl`}
+                >
+                    <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full bg-black/30 border-4 ${currentConfig.color} mb-4`}>
+                        <currentConfig.icon size={32} className={currentConfig.textColor} />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+                    <p className="text-sm text-gray-400 mb-6">{message}</p>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <button onClick={onClose} className="w-full px-4 py-3 bg-gray-700/50 text-gray-300 rounded-lg text-sm font-bold hover:bg-gray-700">
+                           Cancel
+                        </button>
+                        {link ? (
+                            <a href={link} target="_blank" rel="noopener noreferrer" className="w-full">
+                                <button className="w-full px-4 py-3 bg-white text-black font-bold rounded-lg text-sm flex items-center justify-center gap-2">
+                                    {currentConfig.buttonText} <ArrowRight size={16}/>
+                                </button>
+                            </a>
+                        ) : (
+                            <button onClick={onClose} className="w-full px-4 py-3 bg-white text-black font-bold rounded-lg text-sm">{currentConfig.buttonText}</button>
+                        )}
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
+
+export function HandshakeView({ onSuccess }: { onSuccess: () => void }) {
+  const [processingId, setProcessingId] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+
+  const getStatusIcon = (platformId, status) => {
+    if(processingId === platformId) return <Loader2 className="animate-spin text-cyan-400" size={20}/>;
+    if(status === 'TRUSTED') return <CheckCircle2 className="text-green-400" size={20}/>;
+    if(status === 'NO_TUREOATH') return <ShieldAlert className="text-red-400" size={20}/>;
+    if(status === 'INVALID_CREDENTIALS') return <XCircle className="text-yellow-400" size={20}/>;
+    return null;
+  };
+
+  const handleHandshake = async (platform) => {
+    setProcessingId(platform.id);
+    setFeedback(null);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    if (platform.id === 'spotify') {
+         setFeedback({
+            type: 'redirect',
+            title: 'Spotify Link Required',
+            message: 'To import music, you must authorize Sovereign OS to connect to your Spotify account.',
+            link: 'https://accounts.spotify.com/authorize'
+        });
+        setProcessingId(null);
+        return;
+    }
+
+    switch(platform.initialStatus) {
+        case 'TRUSTED':
+            onSuccess();
+            break;
+        case 'NO_TUREOATH':
+            setFeedback({
+                type: 'redirect',
+                title: 'TrueOath Required',
+                message: 'To link this gaming identity, you must first complete the TrueOath setup in your personal settings to establish a secure anchor.',
+                link: '/shared-app/family-pebbles/setting'
+            });
+            break;
+        case 'INVALID_CREDENTIALS':
+            setFeedback({
+                type: 'error',
+                title: 'Connection Failed',
+                message: 'The credentials provided were invalid or the connection was rejected by the server. Please check your password and try again.',
+                link: null
+            });
+            break;
+        default:
+             setFeedback({
+                type: 'error',
+                title: 'Connection Error',
+                message: 'An unknown error occurred while trying to connect to the service.',
+                link: null
+            });
+    }
+
+    setProcessingId(null);
+  };
+
+  return (
+    <>
+    <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center h-full">
+      <div className="text-center mb-12">
+        <h1 className="text-5xl font-black italic tracking-tighter">TrueOath Handshake</h1>
+        <p className="text-cyan-400/50 text-sm font-bold uppercase tracking-[0.2em] mt-2">Link Your External Services</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 w-full">
+        {PLATFORMS.map(p => (
+          <button
+            key={p.id}
+            onClick={() => handleHandshake(p)}
+            disabled={!!processingId}
+            className="group p-8 bg-black/20 backdrop-blur-sm border border-white/5 rounded-3xl text-left flex flex-col justify-between h-56 hover:bg-white/5 hover:border-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div>
+              <div className="flex justify-between items-start">
+                <p className={`text-[10px] uppercase font-black ${p.color}`}>{p.name}</p>
+                {getStatusIcon(p.id, p.initialStatus)}
+              </div>
+              <h3 className="text-2xl font-bold mt-2 text-white/90">{p.name}</h3>
+            </div>
+            <div className="flex justify-end">
+              <p.icon size={48} className={`text-white/10 group-hover:text-white/20 transition-colors ${p.color}`} />
+            </div>
+          </button>
+        ))}
+      </div>
+       <div className="mt-8 text-xs text-white/20 font-mono text-center">
+        This is a simulated handshake. In production, this would use OAuth2 to securely link accounts. <br/>
+        <a href="/admin/dashboard/system-settings/sovereign-internet" className="text-cyan-400 hover:underline">View Handshake API Logs</a>
+      </div>
+    </div>
+    <FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+    </>
+  );
+}
+
+
+'use client'
+
+import { Radio, Monitor, X, MessageSquare, Activity, Gift, Users, BarChart3, Settings, Save, Play, Film, Clapperboard, Video } from 'lucide-react'
+import { useEffect, useState } from 'react'
+
+// --- Modular Panels ---
+
+const ChatPanel = () => {
+    const [messages, setMessages] =useState([
+        { user: 'Viewer92', text: 'This game looks amazing!' },
+        { user: 'SovereignFan', text: 'Best stream on the network! 🔥' },
+    ]);
+    const [input, setInput] = useState('');
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const users = ['Player_One', 'SynthRider', 'GlitchCat', 'Echo_7'];
+            const comments = ['What game is this?', 'Loving the vibe!', 'How do I get SOV$?', 'This is running so smoothly.'];
+            const newUser = users[Math.floor(Math.random() * users.length)];
+            const newText = comments[Math.floor(Math.random() * comments.length)];
+            setMessages(prev => [{ user: newUser, text: newText }, ...prev.slice(0, 10)]);
+        }, 3000 + Math.random() * 2000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleSend = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!input.trim()) return;
+        setMessages(prev => [{ user: 'You', text: input }, ...prev]);
+        setInput('');
+    };
+
+    return (
+        <div className="bg-black/30 border border-white/10 rounded-2xl p-4 flex flex-col h-full">
+            <h3 className="text-sm font-bold mb-2 flex items-center gap-2"><MessageSquare /> Live Chat</h3>
+            <div className="flex-1 bg-black/20 rounded-lg p-2 space-y-2 overflow-y-auto">
+                {messages.map((msg, i) => (
+                    <p key={i} className="text-xs">
+                        <span className="text-cyan-400 font-bold">{msg.user}:</span>
+                        <span className="text-white/80 ml-2">{msg.text}</span>
+                    </p>
+                ))}
+            </div>
+            <form onSubmit={handleSend}>
+                <input 
+                    type="text" 
+                    placeholder="Send a message..." 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-lg p-2 mt-2 text-xs" 
+                />
+            </form>
+        </div>
+    );
+};
+
+const StreamHealthPanel = () => {
+    const [health, setHealth] = useState({ bitrate: 6500, latency: 2.1, dropped: 0.0 });
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setHealth({
+                bitrate: 6400 + Math.floor(Math.random() * 200),
+                latency: 2.0 + Math.random() * 0.5,
+                dropped: Math.random() > 0.98 ? 0.1 : 0.0,
+            });
+        }, 2000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="bg-black/30 border border-white/10 rounded-2xl p-4">
+            <h3 className="text-sm font-bold mb-2 flex items-center gap-2"><Activity /> Stream Health</h3>
+            <div className="space-y-2 text-xs">
+                <p>Bitrate: <span className="text-green-400 font-mono">{health.bitrate.toFixed(0)} Kbps</span></p>
+                <p>Latency: <span className="text-cyan-400 font-mono">{health.latency.toFixed(1)}s</span></p>
+                <p>Dropped Frames: <span className={health.dropped > 0 ? "text-red-400 font-mono" : "text-green-400 font-mono"}>{health.dropped.toFixed(1)}%</span></p>
+            </div>
+        </div>
+    );
+};
+
+const MonetizationPanel = () => {
+    const [events, setEvents] = useState([
+        { user: 'SovereignFan', item: 'Spark Sticker', amount: 0.50 },
+    ]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const users = ['EcoWarrior', 'SynthFan', 'DevSupporter'];
+            const items = ['Glow Sticker', 'Hyper Core', 'King Sticker'];
+            const amounts = [0.01, 15.00, 100.00];
+            const idx = Math.floor(Math.random() * users.length);
+            setEvents(prev => [{ user: users[idx], item: items[idx], amount: amounts[idx] }, ...prev.slice(0, 5)]);
+        }, 5000 + Math.random() * 3000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="bg-black/30 border border-white/10 rounded-2xl p-4">
+            <h3 className="text-sm font-bold mb-2 flex items-center gap-2"><Gift /> Monetization</h3>
+            <div className="space-y-2 text-xs overflow-y-auto h-24">
+                {events.map((event, i) => (
+                    <p key={i}>
+                        <span className="text-yellow-400">{event.user}</span> sent a <span className="font-bold">{event.item}</span>! (<span className="font-mono">{event.amount.toFixed(2)} SOV$</span>)
+                    </p>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const CreatorControlsPanel = () => {
+    return (
+        <div className="bg-black/30 border border-white/10 rounded-2xl p-4">
+            <h3 className="text-sm font-bold mb-2 flex items-center gap-2"><Settings /> Creator Controls</h3>
+            <div className="grid grid-cols-2 gap-2">
+                <button className="p-3 bg-white/5 rounded-lg text-xs font-bold text-center">Switch Scene</button>
+                <button className="p-3 bg-white/5 rounded-lg text-xs font-bold text-center">Run Poll</button>
+                <button className="p-3 bg-white/5 rounded-lg text-xs font-bold text-center">Start Giveaway</button>
+                <button className="p-3 bg-white/5 rounded-lg text-xs font-bold text-center">Manage Mods</button>
+            </div>
+        </div>
+    );
+};
+
+export function LiveControlView({ onExit }: { onExit: () => void }) {
+  const [activeView, setActiveView] = useState('live');
+
+  return (
+    <div className="w-full h-full flex flex-col p-8 gap-6 animate-in fade-in">
+      <header className="flex justify-between items-center">
+        <h2 className="text-2xl font-black italic flex items-center gap-3">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_red]" />
+          Live Control View
+        </h2>
+        <button onClick={onExit} className="px-4 py-2 bg-red-500/20 text-red-300 text-xs font-bold rounded-lg hover:bg-red-500/30">End Session</button>
+      </header>
+      
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+        <div className="lg:col-span-2">
+            <ChatPanel />
+        </div>
+        <div className="lg:col-span-1 space-y-6">
+          <StreamHealthPanel />
+          <MonetizationPanel />
+          <CreatorControlsPanel />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+'use client'
+
+import { Radio, Clapperboard, Gamepad2, ShieldCheck, Video } from 'lucide-react';
+import type { SessionMode } from '../page'
+
+export function ModeSelector({ onSelect }: { onSelect: (mode: SessionMode) => void }) {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center text-center">
+      <ShieldCheck size={64} className="text-green-400 mx-auto mb-6" />
+      <h1 className="text-4xl font-black italic tracking-tighter mb-2">Handshake Complete</h1>
+      <p className="text-green-400/70 text-sm font-bold uppercase tracking-wider mb-8">Choose Your Intent</p>
+      <div className="flex flex-col sm:flex-row justify-center gap-6">
+        <button onClick={() => onSelect('LIVE')} className="px-8 py-5 bg-cyan-600 hover:bg-cyan-500 rounded-2xl text-lg font-black tracking-widest flex items-center justify-center gap-3 shadow-lg shadow-cyan-900/40">
+          <Radio size={20}/> Go Live
+        </button>
+        <button onClick={() => onSelect('RECORD')} className="px-8 py-5 bg-purple-600 hover:bg-purple-500 rounded-2xl text-lg font-black tracking-widest flex items-center justify-center gap-3 shadow-lg shadow-purple-900/40">
+          <Video size={20}/> Record Only
+        </button>
+        <button onClick={() => onSelect('PRIVATE')} className="px-8 py-5 bg-white/5 hover:bg-white/10 rounded-2xl text-lg font-black tracking-widest flex items-center justify-center gap-3">
+          <Gamepad2 size={20}/> Private Play
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+'use client';
+
+import { useState } from 'react';
+import { LiveControlView } from './views/LiveControlView';
+import { GamingView } from './views/GamingView';
+import { HandshakeView } from './views/HandshakeView';
+import { ModeSelector } from './views/ModeSelector';
+
+export type SessionMode = 'LIVE' | 'RECORD' | 'PRIVATE';
+
+export type SessionState = {
+  handshakeComplete: boolean;
+  mode?: SessionMode | null; // Allow mode to be null initially
+  deviceProfile?: 'DESKTOP' | 'MOBILE' | 'TV'; // future-proof
+};
+
+export default function GamerZonerPage() {
+  const [session, setSession] = useState<SessionState>({
+    handshakeComplete: false,
+    mode: null,
+  });
+
+  const handleHandshakeSuccess = () => {
+    setSession(prev => ({
+      ...prev,
+      handshakeComplete: true,
+    }));
+  };
+
+  const handleSelectMode = (mode: SessionMode) => {
+    // 🔒 LOCK MODE — cannot be changed once set
+    setSession(prev => {
+      if (prev.mode) return prev;
+      return { ...prev, mode };
+    });
+  };
+
+  const handleExit = () => {
+    setSession({
+      handshakeComplete: false,
+      mode: null,
+    });
+  };
+
+  const renderContent = () => {
+    if (!session.handshakeComplete) {
+      return <HandshakeView onSuccess={handleHandshakeSuccess} />;
+    }
+
+    if (!session.mode) {
+      return <ModeSelector onSelect={handleSelectMode} />;
+    }
+
+    switch (session.mode) {
+      case 'LIVE':
+        return <LiveControlView onExit={handleExit} />;
+      case 'RECORD':
+        return <GamingView mode={session.mode} onExit={handleExit} />;
+      case 'PRIVATE':
+        return <GamingView mode={session.mode} onExit={handleExit} />;
+      default:
+        return <ModeSelector onSelect={handleSelectMode} />;
+    }
+  };
+  
+  return (
+    <div className="w-screen h-screen bg-black text-white font-sans flex items-center justify-center">
+        <div className="w-full h-full">
+            {renderContent()}
+        </div>
+    </div>
+  )
+}
