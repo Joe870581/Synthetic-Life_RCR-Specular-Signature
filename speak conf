@@ -1,0 +1,10 @@
+
+import { z } from 'zod';
+
+// Define the schema for the configuration object.
+export const SpeakConfigSchema = z.object({
+    voice: z.string().optional().default('Puck'),
+});
+
+// Export the inferred TypeScript type.
+export type SpeakConfig = z.infer<typeof SpeakConfigSchema>;
