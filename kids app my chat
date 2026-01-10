@@ -1,0 +1,188 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, useContext } from 'react';
+import { 
+  Users,
+  Zap,
+  GraduationCap, 
+  Star, 
+  Dumbbell,
+  Medal,
+  Crown,
+  ShoppingBag,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import { FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+// --- UI Components ---
+const HudCard = ({ children, className = '' }) => (
+  <div className={cn("bg-slate-800/40 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6 shadow-xl", className)}>
+    {children}
+  </div>
+);
+
+const SectionTitle = ({ icon: Icon, title }) => (
+  <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+    <Icon size={16} />
+    {title}
+  </h3>
+);
+
+const ProgressBar = ({ value, max, colorClass = "bg-green-500" }) => (
+  <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
+    <motion.div 
+      className={`h-full rounded-full ${colorClass}`} 
+      initial={{ width: 0 }}
+      animate={{ width: `${(value / max) * 100}%` }}
+      transition={{ duration: 0.8, ease: 'easeOut' }}
+    />
+  </div>
+);
+
+// --- MAIN APP LOGIC ---
+const RewardsHub = () => {
+  const { familyState, updateFamilyMember } = useFamilyData();
+
+  const [bounties, setBounties] = useState([
+    { id: 1, text: 'Tidy up the entire living room', points: 75, completed: false },
+    { id: 2, text: 'Help cook dinner tonight', points: 50, completed: true },
+    { id: 3, text: 'Read a book for 30 minutes', points: 25, completed: false },
+  ]);
+
+  const [personalPoints, setPersonalPoints] = useState(35);
+  const [achievements, setAchievements] = useState([]);
+
+  const DAILY_GOAL = 50;
+  const MONTHLY_PLAN = 400;
+
+  const toggleBounty = (id) => {
+    setBounties(prev => 
+      prev.map(b => b.id === id ? { ...b, completed: !b.completed } : b)
+    );
+  };
+  
+  const addPoints = (amount, label) => {
+    setPersonalPoints(prev => prev + amount); // For UI demo
+    setAchievements(prev => [{ label, amount, id: Date.now() }, ...prev].slice(0, 5));
+  };
+  
+  const schoolRewards = [
+    { id: 'ace_test', label: 'Aced a Test', pts: 100, icon: GraduationCap, color: 'bg-yellow-500' },
+    { id: 'pass_exam', label: 'Passed Exam', pts: 300, icon: Star, color: 'bg-blue-500' },
+    { id: 'sports_win', label: 'Sports Victory', pts: 450, icon: Dumbbell, color: 'bg-orange-500' },
+    { id: 'perfect_attendance', label: 'Perfect Week', pts: 200, icon: Medal, color: 'bg-emerald-500' },
+    { id: 'project_lead', label: 'Project Leader', pts: 350, icon: Crown, color: 'bg-purple-500' },
+  ];
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <HudCard className="md:col-span-2 bg-gradient-to-br from-indigo-500/20 to-slate-800/40 border-indigo-500/50">
+          <SectionTitle icon={Target} title="Daily Personal Goal" />
+          <div className="flex items-end gap-4">
+            <div className="text-6xl font-black text-white leading-none">{personalPoints}</div>
+            <div className="text-xl font-bold text-slate-500 leading-none">/ {DAILY_GOAL} SP</div>
+          </div>
+          <ProgressBar value={personalPoints} max={DAILY_GOAL} colorClass="bg-gradient-to-r from-indigo-500 to-cyan-400" />
+          <p className="text-xs text-slate-400 mt-3">Points earned from your daily activities and positive habits.</p>
+        </HudCard>
+        
+        <HudCard className="flex flex-col justify-center items-center text-center">
+           <SectionTitle icon={Zap} title="Monthly Plan" />
+           <div className="text-4xl font-black text-yellow-400">{MONTHLY_PLAN}</div>
+           <p className="text-xs text-slate-500 mt-1">Spike Points / month</p>
+           <button className="mt-4 px-4 py-2 text-xs font-bold bg-yellow-500/10 text-yellow-300 rounded-full border border-yellow-500/30">
+              View Plan Details
+           </button>
+        </HudCard>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <HudCard>
+          <SectionTitle icon={Users} title="Guardian Bounties" />
+          <div className="space-y-3">
+            {bounties.map(bounty => (
+              <div 
+                key={bounty.id} 
+                onClick={() => toggleBounty(bounty.id)}
+                className={cn(
+                  "p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border",
+                  bounty.completed ? "bg-green-500/10 border-green-500/20" : "bg-slate-700/50 border-slate-700 hover:bg-slate-700"
+                )}
+              >
+                <span className={cn("text-sm", bounty.completed && "line-through text-slate-500")}>{bounty.text}</span>
+                <div className="flex items-center gap-3">
+                  <span className={cn("font-bold text-sm", bounty.completed ? "text-green-400" : "text-yellow-400")}>
+                    +{bounty.points} SP
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </HudCard>
+
+        <HudCard>
+          <SectionTitle icon={GraduationCap} title="School Zone" />
+           <div className="space-y-3">
+              {schoolRewards.map(ach => {
+                  const IconComponent = ach.icon;
+                  return (
+                      <button key={ach.id} onClick={() => addPoints(ach.pts, ach.label)} className="w-full p-4 rounded-xl flex justify-between items-center bg-slate-700/50 border border-slate-700 hover:bg-slate-700 transition-all">
+                          <span className="text-sm font-semibold flex items-center gap-2">
+                             <IconComponent className="text-indigo-400"/> {ach.label}
+                          </span>
+                          <span className="font-bold text-sm text-yellow-400">+{ach.pts} SP</span>
+                      </button>
+                  )
+              })}
+           </div>
+        </HudCard>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+          <Link href="/kids-app/my-spikes-point-store" passHref>
+            <HudCard className="!p-4 text-center cursor-pointer hover:border-pink-500/50 h-full">
+                <div className="flex flex-col items-center justify-center h-full">
+                    <div className="w-16 h-16 bg-pink-500/10 border-2 border-pink-500/20 rounded-full flex items-center justify-center mb-3">
+                        <ShoppingBag className="text-pink-400" size={32}/>
+                    </div>
+                    <p className="font-bold text-pink-400">Spike Store</p>
+                </div>
+            </HudCard>
+          </Link>
+          <HudCard className="!p-4 text-center cursor-pointer hover:border-cyan-500/50 h-full">
+               <div className="flex flex-col items-center justify-center h-full">
+                  <div className="w-16 h-16 bg-cyan-500/10 border-2 border-cyan-500/20 rounded-full flex items-center justify-center mb-3">
+                      <BrainCircuit className="text-cyan-400" size={32}/>
+                  </div>
+                  <p className="font-bold text-cyan-400">Ask Pebble for a Task</p>
+              </div>
+          </HudCard>
+      </div>
+    </div>
+  );
+};
+
+
+export default function GamifiedSchoolOS() {
+  return (
+    <FamilyDataProvider>
+      <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 md:p-8">
+        <header className="text-center space-y-2 mb-8">
+          <h1 className="text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-yellow-400">
+            Spike Rewards Hub
+          </h1>
+          <p className="text-sm text-slate-500 font-medium">Your mission control for earning points and unlocking awesome stuff.</p>
+        </header>
+
+        <main className="max-w-4xl mx-auto">
+          <RewardsHub />
+        </main>
+      </div>
+    </FamilyDataProvider>
+  );
+}
