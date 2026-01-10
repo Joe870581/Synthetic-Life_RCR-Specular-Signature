@@ -1,0 +1,315 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  Globe, ShieldCheck, Gamepad2, Search, 
+  ExternalLink, Users, Lock, Zap, 
+  ChevronRight, RefreshCw, ArrowLeft, 
+  LayoutGrid, Bookmark, CreditCard, History,
+  Tv, Mail, Smartphone, Landmark, Cpu, X,
+  TrendingUp, BarChart3, Wallet, MapPin, Scale, Play,
+  MessageSquare, Cloud, ShieldAlert, Fingerprint, Key,
+  Baby, Monitor, Gamepad, Wifi, Settings, Shield,
+  Globe2, ArrowRight, RotateCcw, Home
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// --- DSN CONFIGURATION ---
+const CATEGORIES = [
+  { id: 'all', name: 'Universal Nexus', icon: Globe },
+  { id: 'vault', name: '6G Identity & Legal', icon: ShieldCheck },
+  { id: 'gaming', name: 'Gaming Identity', icon: Gamepad },
+  { id: 'arcade', name: 'Arcade Center', icon: Gamepad2 },
+  { id: 'kids', name: 'Kids & Learning', icon: Baby },
+  { id: 'comms', name: 'Identity & Comms', icon: MessageSquare },
+  { id: 'banking', name: 'Banking & Institutions', icon: Landmark },
+  { id: 'streaming', name: 'Media & Broadcasters', icon: Play },
+];
+
+const MOCK_APPS = {
+  vault: [
+    { name: 'Google Account', url: 'https://myaccount.google.com', desc: 'Core Identity • 6G Handshake Required', risk: 'HIGH', icon: ShieldAlert },
+    { name: 'Apple ID', url: 'https://appleid.apple.com', desc: 'iCloud + Device Anchor', risk: 'HIGH', icon: ShieldAlert },
+    { name: 'Microsoft Account', url: 'https://account.microsoft.com', desc: 'OS + Enterprise Identity', risk: 'HIGH', icon: ShieldAlert },
+  ],
+  gaming: [
+    { name: 'PlayStation Network', url: 'https://my.account.sony.com/sonyacct/signin/', desc: 'Sony DSN Node • Remote Play', risk: 'HIGH', type: 'cloud' },
+    { name: 'Xbox Cloud Gaming', url: 'https://www.xbox.com/play', desc: 'Microsoft MSAL • Cloud Gaming', risk: 'HIGH', type: 'cloud' },
+    { name: 'Streamlabs', url: 'https://streamlabs.com/slid/login', desc: 'Creator Identity Bridge', type: 'tool' },
+  ],
+  arcade: [
+    { name: 'Tunnel Rush', url: 'https://poki.com/en/g/tunnel-rush', desc: 'High-speed reflex sim' },
+    { name: 'Slice Master', url: 'https://poki.com/en/g/slice-master', desc: 'Precision physics play' },
+    { name: 'Moto X3M', url: 'https://poki.com/en/g/moto-x3m', desc: 'Stunt bike environment' },
+  ],
+  kids: [
+    { name: 'PBS Kids Games', url: 'https://pbskids.org/games', desc: 'Safe-Zone Educational Hub' },
+    { name: 'Daniel Tiger', url: 'https://pbskids.org/daniel', desc: 'Social-Emotional Learning Node' },
+  ],
+  comms: [
+    { name: 'Gmail', url: 'https://mail.google.com', desc: 'Primary Digital Post', icon: Mail },
+    { name: 'WhatsApp', url: 'https://web.whatsapp.com', desc: 'Secure Messaging Handshake' },
+  ],
+  banking: [
+    { name: 'RBC Royal Bank', url: 'https://rbcroyalbank.com', desc: 'CA Big Six • Primary Node', region: 'CA' },
+    { name: 'TD Canada Trust', url: 'https://td.com', desc: 'CA Big Six • Wealth Handshake', region: 'CA' },
+  ],
+};
+
+// --- INTERNAL DSN BROWSER COMPONENT ---
+const DSNBrowse = ({ app, onClose }) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [internalUrl, setInternalUrl] = useState(app.url);
+  const [history, setHistory] = useState([app.url]);
+  const [isOfflineReady, setIsOfflineReady] = useState(false);
+
+  useEffect(() => {
+    // Simulate DSN "Grabber" Logic - Checking for local cached assets
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+      setIsOfflineReady(true);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [internalUrl]);
+
+  return (
+    <div className="flex flex-col h-full bg-[#050505] overflow-hidden">
+      {/* Browser Chrome */}
+      <div className="bg-[#111] border-b border-white/5 p-3 flex items-center gap-4">
+        <div className="flex items-center gap-1">
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg text-white/40"><Home size={16}/></button>
+          <button className="p-2 hover:bg-white/5 rounded-lg text-white/40 opacity-50"><ArrowLeft size={16}/></button>
+          <button onClick={() => setIsLoading(true)} className="p-2 hover:bg-white/5 rounded-lg text-white/40"><RotateCcw size={16}/></button>
+        </div>
+        
+        <div className="flex-1 flex items-center gap-2 bg-black border border-white/5 rounded-xl px-4 py-2">
+          <Shield size={12} className="text-emerald-500" />
+          <span className="text-[10px] font-mono text-white/40 truncate">dsn://{internalUrl.replace('https://', '')}</span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {isOfflineReady && (
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[8px] font-black text-emerald-500 uppercase tracking-tighter">Local Cache Active</span>
+            </div>
+          )}
+          <GamepadStatus compact />
+        </div>
+      </div>
+
+      {/* Viewport */}
+      <div className="flex-1 relative bg-white">
+        {isLoading && (
+          <div className="absolute inset-0 z-50 bg-[#0c0c0c] flex flex-col items-center justify-center">
+            <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-6" />
+            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">Establishing Sovereign Handshake...</p>
+            <p className="text-[8px] text-blue-500 font-bold mt-2 uppercase">Tunneling through internal DSN Layer</p>
+          </div>
+        )}
+        <iframe 
+          src={internalUrl} 
+          className="w-full h-full border-none"
+          title="DSN Viewport"
+          sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-downloads"
+        />
+      </div>
+
+      {/* DSN Status Bar */}
+      <div className="bg-black border-t border-white/5 p-2 px-6 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+           <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Node ID: {Math.random().toString(36).substring(7).toUpperCase()}</span>
+           <span className="text-[8px] font-black text-blue-500/40 uppercase tracking-widest">Protocol: 6G-DSN-ENC</span>
+        </div>
+        <div className="text-[8px] font-black text-white/10 uppercase">Security: Isolated Kernel</div>
+      </div>
+    </div>
+  );
+};
+
+const GamepadStatus = ({ compact = false }) => {
+  const [gamepad, setGamepad] = useState(null);
+  const [activeButtons, setActiveButtons] = useState([]);
+
+  useEffect(() => {
+    const handleConnect = (e) => setGamepad(e.gamepad);
+    const handleDisconnect = () => setGamepad(null);
+    window.addEventListener("gamepadconnected", handleConnect);
+    window.addEventListener("gamepaddisconnected", handleDisconnect);
+
+    const interval = setInterval(() => {
+      const gp = navigator.getGamepads()[0];
+      if (gp) {
+        setGamepad(gp);
+        setActiveButtons(gp.buttons.map(b => b.pressed));
+      }
+    }, 100);
+
+    return () => {
+      window.removeEventListener("gamepadconnected", handleConnect);
+      window.removeEventListener("gamepaddisconnected", handleDisconnect);
+      clearInterval(interval);
+    };
+  }, []);
+
+  if (!gamepad) return !compact ? (
+    <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-2xl border border-white/5 opacity-50">
+      <Gamepad size={14} className="text-white/40" />
+      <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Offline</span>
+    </div>
+  ) : null;
+
+  return (
+    <div className={`flex items-center gap-3 px-4 py-2 bg-blue-500/10 rounded-2xl border border-blue-500/20 ${compact ? 'py-1 px-2' : ''}`}>
+      <Gamepad size={14} className="text-blue-500" />
+      {!compact && <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest truncate max-w-[100px]">{gamepad.id.split('(')[0]}</span>}
+      <div className="flex gap-1">
+        {activeButtons.slice(0, 4).map((p, i) => <div key={i} className={`w-1 h-1 rounded-full ${p ? 'bg-blue-400' : 'bg-white/10'}`} />)}
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeApp, setActiveApp] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const allApps = useMemo(() => {
+    const apps = [];
+    Object.entries(MOCK_APPS).forEach(([catId, appList]) => {
+      appList.forEach(app => apps.push({ ...app, catId }));
+    });
+    return apps;
+  }, []);
+
+  const filteredApps = useMemo(() => {
+    const base = activeCategory === 'all' ? allApps : MOCK_APPS[activeCategory] || [];
+    return base.filter(app => 
+      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.desc.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [activeCategory, searchQuery, allApps]);
+
+  return (
+    <div className="flex h-screen w-screen bg-[#050505] text-slate-300 font-sans overflow-hidden">
+      
+      {/* SIDEBAR */}
+      <aside className="w-20 md:w-64 border-r border-white/5 flex flex-col bg-[#080808] z-20">
+        <div className="p-8 mb-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-2xl shadow-blue-500/20">
+            <Zap size={20} className="text-white fill-white" />
+          </div>
+          <div className="hidden md:block">
+            <h1 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Sovereign</h1>
+            <p className="text-[8px] font-bold text-blue-500/60 uppercase">DSN Protocol Layer</p>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const isActive = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => { setActiveCategory(cat.id); setActiveApp(null); }}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all ${
+                  isActive ? 'bg-white/5 text-white shadow-inner shadow-white/5' : 'text-white/20 hover:text-white/60'
+                }`}
+              >
+                <Icon size={18} />
+                <span className="hidden md:block text-[10px] font-black uppercase tracking-widest text-left">{cat.name}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="p-6 border-t border-white/5">
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
+                <ShieldCheck size={14} />
+            </div>
+            <div className="hidden md:block">
+              <p className="text-[9px] font-black text-white uppercase tracking-tighter">6G Identity</p>
+              <p className="text-[8px] text-emerald-500 font-bold uppercase">Locked 🇨🇦</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* MAIN VIEW */}
+      <main className="flex-1 flex flex-col relative">
+        <header className="h-20 border-b border-white/5 flex items-center px-8 gap-6 bg-[#050505]/80 backdrop-blur-xl z-10">
+          <div className="flex-1 max-w-2xl relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search internal DSN index..." 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-[10px] font-bold outline-none focus:border-blue-500/50 transition-all text-white placeholder:text-white/10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <GamepadStatus />
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+          <div className="mb-12">
+            <h2 className="text-4xl font-black uppercase tracking-tighter text-white mb-2 italic">
+              {CATEGORIES.find(c => c.id === activeCategory).name}
+            </h2>
+            <div className="flex items-center gap-4">
+              <div className="h-1 w-12 bg-blue-600 rounded-full" />
+              <p className="text-[10px] text-white/30 font-black uppercase tracking-[0.4em]">Integrated Sovereign Environment</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20">
+            {filteredApps.map((app, idx) => (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.02 }}
+                key={app.name}
+                onClick={() => setActiveApp(app)}
+                className="group p-8 bg-[#0c0c0c] border border-white/5 rounded-[2.5rem] hover:border-blue-500/30 transition-all cursor-pointer relative overflow-hidden active:scale-95"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  {app.icon ? <app.icon size={20} className={app.risk === 'HIGH' ? "text-red-500" : "text-blue-500"} /> : <LayoutGrid size={20} className="text-white/20" />}
+                </div>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.15em] text-white mb-2">{app.name}</h3>
+                <p className="text-[9px] text-white/20 font-bold leading-relaxed mb-6 h-8 line-clamp-2 uppercase">{app.desc}</p>
+                <div className="flex items-center text-[8px] font-black uppercase tracking-widest gap-2 text-blue-500/60 group-hover:text-blue-500">
+                   Open Internal Link <ArrowRight size={10} />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* BROWSER LAYER */}
+        <AnimatePresence>
+          {activeApp && (
+            <motion.div 
+              initial={{ opacity: 0, y: 100 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              exit={{ opacity: 0, y: 50 }} 
+              className="fixed inset-0 z-[100]"
+            >
+              <DSNBrowse app={activeApp} onClose={() => setActiveApp(null)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+      `}} />
+    </div>
+  );
+}
+
