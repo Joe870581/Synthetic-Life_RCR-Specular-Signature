@@ -1,0 +1,108 @@
+
+'use client';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Wifi, Battery, Signal } from 'lucide-react';
+
+// --- MAIN OS SHELL COMPONENT ---
+export default function SovereignOSShell() {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000 * 60); // Update every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  const formattedTime = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formattedDate = time.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Orb component for the AI assistant
+  const AIOrb = () => (
+    <div className="relative w-24 h-24">
+      <motion.div
+        animate={{
+          scale: [1, 1.1, 1],
+          opacity: [0.3, 0.7, 0.3],
+        }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-0 bg-cyan-400 rounded-full blur-2xl"
+      />
+      <motion.div
+        className="absolute inset-2 bg-gradient-to-tr from-purple-500 to-cyan-400 rounded-full"
+      />
+      <div className="absolute inset-4 bg-black/30 rounded-full" />
+    </div>
+  );
+  
+  // Icon buttons around the orb
+  const OrbButton = ({ icon, position }) => {
+    const Icon = icon;
+    return (
+        <button className={`absolute ${position} w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20`}>
+            <Icon className="text-white/70" size={20} />
+        </button>
+    );
+  };
+
+
+  return (
+    <div className="w-screen h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
+      
+      {/* Background FX */}
+      <div className="absolute inset-0 z-0 opacity-40">
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-indigo-900 via-black to-purple-900 animate-pulse-slow" />
+        <div 
+          className="absolute inset-0 opacity-[0.04]" 
+          style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+        />
+      </div>
+
+      {/* Main UI */}
+      <div className="relative z-10 flex flex-col flex-1 h-full p-6">
+
+        {/* Status Bar */}
+        <header className="flex justify-between items-center px-4">
+          <span className="font-semibold text-sm">{formattedTime.split(' ')[0]}</span>
+          <div className="w-24 h-6 bg-black rounded-full" />
+          <div className="flex items-center gap-2 text-sm">
+            <Signal size={16} />
+            <Wifi size={16} />
+            <Battery size={16} />
+          </div>
+        </header>
+
+        {/* Lock Screen Content */}
+        <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <p className="text-sm font-semibold text-white/50">{formattedDate.toUpperCase()}</p>
+            <h1 className="text-8xl font-thin tracking-tighter my-1">{formattedTime.split(' ')[0]}</h1>
+            <div className="mt-8 space-y-4">
+              <p className="text-4xl font-black tracking-widest text-white/80">SOV</p>
+              <div className="h-px w-24 bg-white/20 mx-auto" />
+              <p className="text-xs text-white/40 tracking-widest">Connection identity established.</p>
+            </div>
+        </div>
+
+        {/* AI Orb Area */}
+        <footer className="flex-shrink-0 flex justify-center items-center h-56 relative">
+          <AIOrb />
+          <div className="absolute w-[200px] h-[200px]">
+             <OrbButton icon={() => <p className="font-bold text-lg">i</p>} position="left-0 top-1/2 -translate-y-1/2" />
+             <OrbButton icon={() => <p className="font-bold text-lg">“</p>} position="bottom-0 left-1/2 -translate-x-1/2" />
+             <OrbButton icon={() => <p className="font-bold text-lg">●</p>} position="right-0 top-1/2 -translate-y-1/2" />
+          </div>
+        </footer>
+      </div>
+
+      <style jsx global>{`
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.7; }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+      `}</style>
+    </div>
+  );
+}
