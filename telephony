@@ -1,0 +1,30 @@
+
+'use server';
+/**
+ * @fileoverview This file defines the Genkit tool for making phone calls.
+ */
+
+import { ai } from '@/ai/genkit-client';
+import { z } from 'zod';
+
+export const makeCallTool = ai.defineTool(
+  {
+    name: 'makeCallTool',
+    description: 'Makes a phone call to a specified person or number. Use this when the user asks to "call someone" or "dial a number".',
+    inputSchema: z.object({
+      recipient: z.string().describe('The name or phone number of the person to call.'),
+    }),
+    outputSchema: z.object({
+      status: z.string(),
+      duration: z.number().optional(),
+    }),
+  },
+  async ({ recipient }) => {
+    console.log(`[makeCallTool] Initiating call to: ${recipient}`);
+    // This is a mock implementation. A real system would integrate with a
+    // WebRTC or VoIP service (like the DockRTC protocol).
+    return {
+      status: `Successfully initiated a call to ${recipient}.`,
+    };
+  }
+);
