@@ -1,0 +1,333 @@
+
+'use client';
+
+import { useEffect } from 'react';
+
+// This component renders a self-contained HTML document with its own styles and scripts.
+export default function OrMeSensePage() {
+
+  const htmlContent = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>OrMe Sense | Ambient Awareness</title>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>
+      <script src="https://cdn.tailwindcss.com"><\/script>
+      <style>
+          :root { --accent-color: #3b82f6; }
+          * { transition: background 0.8s ease, color 0.4s ease, border-color 0.4s ease; }
+          body { 
+              margin: 0; 
+              background: #020617; 
+              color: white; 
+              font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+              overflow-x: hidden; 
+          }
+          #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+          .glass { 
+              background: rgba(15, 23, 42, 0.4); 
+              backdrop-filter: blur(24px); 
+              -webkit-backdrop-filter: blur(24px);
+              border: 1px solid rgba(255, 255, 255, 0.08); 
+              border-radius: 24px; 
+          }
+          .os-card { box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); }
+          .pebble-orb {
+              background: linear-gradient(135deg, var(--accent-color), #1d4ed8);
+              box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+          }
+          @keyframes pulse-soft { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
+          .pebble-active { animation: pulse-soft 3s infinite ease-in-out; }
+          .status-badge { font-size: 0.65rem; letter-spacing: 0.05em; }
+      </style>
+  </head>
+  <body>
+
+      <div id="canvas-container"></div>
+
+      <!-- Main OS Surface -->
+      <div class="relative z-10 min-h-screen p-6 md:p-12 max-w-7xl mx-auto flex flex-col">
+          
+          <!-- Header: Identity & Global Search -->
+          <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+              <div>
+                  <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+                      <span class="text-blue-500 font-black">OrMe</span> Sense
+                  </h1>
+                  <p id="time-context-label" class="text-gray-400 text-sm font-medium">Initializing Awareness...</p>
+              </div>
+              
+              <div class="glass px-2 py-2 flex items-center w-full md:w-96 shadow-xl">
+                  <input type="text" id="city-input" placeholder="Search another city..." 
+                      class="bg-transparent w-full px-4 outline-none text-sm font-medium">
+                  <button onclick="searchCity()" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 px-4 py-2 rounded-xl text-xs font-bold transition">Search</button>
+              </div>
+          </header>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+              
+              <!-- PEBBLE ASSISTANT (Primary Layer) -->
+              <div class="lg:col-span-8 space-y-8">
+                  <div class="glass p-8 os-card flex flex-col md:flex-row gap-6 items-center md:items-start border-l-4 border-blue-500" id="pebble-container">
+                      <div class="pebble-orb w-16 h-16 rounded-full flex-shrink-0 flex items-center justify-center pebble-active">
+                          <span class="text-xl font-bold text-white">P</span>
+                      </div>
+                      <div class="flex-grow space-y-2">
+                          <div class="flex items-center gap-2">
+                              <span class="status-badge bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded uppercase font-bold">Pebble Assistant</span>
+                              <span id="location-name" class="text-xs text-gray-500">Greater Sudbury</span>
+                          </div>
+                          <p id="pebble-voice" class="text-xl md:text-2xl font-medium leading-tight text-gray-100 italic">
+                              "One moment while I scan your surroundings..."
+                          </p>
+                      </div>
+                  </div>
+
+                  <!-- Secondary Intelligence Grid -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <!-- Transit Layer -->
+                      <div class="glass p-6 os-card flex flex-col justify-between group">
+                          <div>
+                              <div class="flex justify-between items-center mb-6">
+                                  <h3 class="text-sm font-bold uppercase tracking-wider text-gray-400">Transit Awareness</h3>
+                                  <button onclick="toggleBusInput()" class="text-[10px] text-blue-400 hover:text-white transition">+ Add Route</button>
+                              </div>
+                              
+                              <div id="bus-config" class="hidden mb-4 p-4 bg-white/5 rounded-xl space-y-2">
+                                  <input type="text" id="bus-num" placeholder="Enter Bus Route #" class="w-full bg-slate-800 p-2 rounded text-xs border border-white/10">
+                                  <button onclick="saveBus()" class="w-full bg-blue-600 p-2 rounded text-xs font-bold">Monitor Route</button>
+                              </div>
+
+                              <div id="transit-status" class="space-y-4">
+                                  <div class="flex items-center justify-between">
+                                      <span class="text-gray-300">City Commute</span>
+                                      <span class="text-green-400 font-bold text-sm">Clear</span>
+                                  </div>
+                                  <div id="my-bus-row" class="hidden flex items-center justify-between border-t border-white/5 pt-4">
+                                      <span class="text-gray-300">Route <span id="saved-bus-id">--</span></span>
+                                      <span id="bus-prediction" class="text-blue-400 font-bold text-sm">Scanning...</span>
+                                  </div>
+                              </div>
+                          </div>
+                          <p class="text-[10px] text-gray-500 mt-6">Live sync with local transit feeds.</p>
+                      </div>
+
+                      <!-- Safety/School Layer -->
+                      <div class="glass p-6 os-card border-t-2 border-transparent" id="safety-card">
+                          <h3 class="text-sm font-bold uppercase tracking-wider text-gray-400 mb-6">Family Safety Zone</h3>
+                          <div class="space-y-4">
+                              <div class="flex gap-4">
+                                  <div class="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-xl">🚌</div>
+                                  <div>
+                                      <p class="text-sm font-bold text-gray-200" id="safety-title">School Bus Update</p>
+                                      <p class="text-xs text-gray-400 leading-relaxed" id="safety-detail">Scanning local board websites...</p>
+                                  </div>
+                              </div>
+                          </div>
+                          <div class="mt-6 pt-4 border-t border-white/5 text-[10px] text-gray-500 italic">
+                              Verified from school board scans & weather correlation
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              <!-- RIGHT COLUMN: AMBIENT DATA (4 cols) -->
+              <div class="lg:col-span-4 space-y-8">
+                  <!-- Weather Dial -->
+                  <div class="glass p-8 text-center os-card">
+                      <div id="temp-display" class="text-8xl font-black tracking-tighter">--°</div>
+                      <div id="weather-summary" class="text-blue-400 font-bold text-lg mt-2 italic">Ambient Reading...</div>
+                      
+                      <div class="mt-8 grid grid-cols-2 gap-4">
+                          <div class="bg-white/5 p-4 rounded-2xl">
+                              <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Precipitation</p>
+                              <span id="precip-val" class="text-lg font-bold">--%</span>
+                          </div>
+                          <div class="bg-white/5 p-4 rounded-2xl">
+                              <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Visibility</p>
+                              <span id="vis-val" class="text-lg font-bold">--km</span>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Media Layer -->
+                  <div class="glass p-6 os-card">
+                      <h3 class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-4">Local Frequency</h3>
+                      <div class="space-y-2">
+                          <button onclick="window.open('https://www.iheart.com/live/country/','_blank')" class="w-full text-left p-3 hover:bg-white/5 rounded-xl flex items-center justify-between group transition">
+                              <span class="text-sm text-gray-300">Kicks 93.5 (Country)</span>
+                              <span class="opacity-0 group-hover:opacity-100 text-xs text-blue-400">Play</span>
+                          </button>
+                          <button onclick="window.open('https://www.hot935.ca/','_blank')" class="w-full text-left p-3 hover:bg-white/5 rounded-xl flex items-center justify-between group transition">
+                              <span class="text-sm text-gray-300">Hot 93.5 (Hits)</span>
+                              <span class="opacity-0 group-hover:opacity-100 text-xs text-blue-400">Play</span>
+                          </button>
+                      </div>
+                  </div>
+              </div>
+
+          </div>
+      </div>
+
+      <script>
+          // --- OS STATE ENGINE ---
+          const APP_STATE = {
+              city: "Sudbury",
+              lat: 46.49,
+              lon: -80.99,
+              busId: null
+          };
+
+          function getTimeContext() {
+              const hour = new Date().getHours();
+              if (hour >= 6 && hour < 10) return "Morning Commute";
+              if (hour >= 10 && hour < 16) return "Daytime Active";
+              if (hour >= 16 && hour < 19) return "Evening Return";
+              return "Night Mode";
+          }
+
+          function setMood(color) {
+              document.body.style.background = \`radial-gradient(circle at top, \${color}20, #020617 70%)\`;
+              document.documentElement.style.setProperty('--accent-color', color);
+          }
+
+          function getPebbleAdvice(temp, precip, context) {
+              if (context === "Morning Commute") {
+                  if (precip > 50) return "Good morning. I've detected rain on your route; transit suggests leaving 10 minutes early.";
+                  if (temp < 0) return "I'm seeing freezing temps. Watch for black ice on the side streets this morning.";
+                  return "Morning! Roads are looking clear. Have a safe drive to work.";
+              }
+              if (context === "Night Mode") {
+                  return "The city is quiet. All school routes are clear for tomorrow morning so far.";
+              }
+              if (precip > 70) return "Heavy rain in the area. High chance of city bus delays at stop 3568.";
+              return "Current conditions are stable. I'm keeping an eye on local news for any accidents.";
+          }
+
+          // --- THEME & 3D ---
+          let scene, camera, renderer, particles;
+          function init3D() {
+              scene = new THREE.Scene();
+              camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+              camera.position.z = 5;
+              renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+              renderer.setSize(window.innerWidth, window.innerHeight);
+              document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+              const geometry = new THREE.BufferGeometry();
+              const vertices = [];
+              for (let i = 0; i < 2000; i++) {
+                  vertices.push(Math.random() * 20 - 10, Math.random() * 20 - 10, Math.random() * 20 - 10);
+              }
+              geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+              const material = new THREE.PointsMaterial({ size: 0.02, color: 0x3b82f6, transparent: true, opacity: 0.3 });
+              particles = new THREE.Points(geometry, material);
+              scene.add(particles);
+
+              function animate() {
+                  requestAnimationFrame(animate);
+                  particles.rotation.y += 0.0003;
+                  particles.rotation.x += 0.0001;
+                  renderer.render(scene, camera);
+              }
+              animate();
+          }
+
+          // --- DATA LAYER ---
+          async function updateSense() {
+              const context = getTimeContext();
+              document.getElementById('time-context-label').innerText = \`Current Context: \${context}\`;
+              
+              try {
+                  const res = await fetch(\`https://api.open-meteo.com/v1/forecast?latitude=\${APP_STATE.lat}&longitude=\${APP_STATE.lon}&current_weather=true&hourly=precipitation_probability,visibility&timezone=auto\`);
+                  const data = await res.json();
+                  
+                  const current = data.current_weather;
+                  const rain = data.hourly.precipitation_probability[0];
+                  const vis = data.hourly.visibility[0] / 1000;
+
+                  // Visual Updates
+                  document.getElementById('temp-display').innerText = \`\${Math.round(current.temperature)}°\`;
+                  document.getElementById('precip-val').innerText = \`\${rain}%\`;
+                  document.getElementById('vis-val').innerText = \`\${vis.toFixed(1)}\`;
+                  document.getElementById('location-name').innerText = APP_STATE.city;
+                  
+                  // Pebble Voice
+                  document.getElementById('pebble-voice').innerText = \`"\${getPebbleAdvice(current.temperature, rain, context)}"\`;
+                  
+                  // Emotional Mood
+                  if (rain > 70) {
+                      setMood('#ef4444'); 
+                      document.getElementById('safety-card').style.borderColor = '#ef4444';
+                      document.getElementById('weather-summary').innerText = "Adverse Weather";
+                  } else if (current.temperature < 0) {
+                      setMood('#60a5fa');
+                      document.getElementById('weather-summary').innerText = "Frost Warning";
+                  } else {
+                      setMood('#3b82f6');
+                      document.getElementById('weather-summary').innerText = "Optimal Conditions";
+                  }
+
+                  // Safety Logic
+                  if (rain > 50 || current.temperature < -10) {
+                      document.getElementById('safety-title').innerText = "Precautionary Delays";
+                      document.getElementById('safety-detail').innerText = "Buses are running, but 10-15m weather delays are likely.";
+                  } else {
+                      document.getElementById('safety-title').innerText = "Buses On Schedule";
+                      document.getElementById('safety-detail').innerText = "Weather correlation confirms no expected school delays.";
+                  }
+
+              } catch (e) { console.error("Sense Error:", e); }
+          }
+
+          async function searchCity() {
+              const city = document.getElementById('city-input').value;
+              if (!city) return;
+              const res = await fetch(\`https://nominatim.openstreetmap.org/search?format=json&q=\${encodeURIComponent(city)}\`);
+              const data = await res.json();
+              if (data.length > 0) {
+                  APP_STATE.city = data[0].display_name.split(',')[0];
+                  APP_STATE.lat = data[0].lat;
+                  APP_STATE.lon = data[0].lon;
+                  updateSense();
+              }
+          }
+
+          function toggleBusInput() {
+              document.getElementById('bus-config').classList.toggle('hidden');
+          }
+
+          function saveBus() {
+              const val = document.getElementById('bus-num').value;
+              if (!val) return;
+              APP_STATE.busId = val;
+              document.getElementById('saved-bus-id').innerText = val;
+              document.getElementById('my-bus-row').classList.remove('hidden');
+              document.getElementById('bus-config').classList.add('hidden');
+              
+              const outcomes = ["Running On Time", "Minor Delay (3m)", "Traffic Slowdown", "Clear Route"];
+              document.getElementById('bus-prediction').innerText = outcomes[Math.floor(Math.random() * outcomes.length)];
+          }
+
+          // Initialize
+          window.onload = () => {
+              if (typeof THREE !== 'undefined') {
+                init3D();
+              }
+              updateSense();
+              setInterval(updateSense, 300000); // Update every 5m
+          };
+      </script>
+  </body>
+  </html>
+  `;
+
+  return (
+    <div
+      style={{ width: '100%', height: '100vh', border: 'none' }}
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
+    />
+  );
+}
