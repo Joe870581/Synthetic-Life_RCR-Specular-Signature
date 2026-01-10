@@ -404,3 +404,522 @@ const SandboxPageWrapper = (props) => {
 };
 
 export default SandboxPageWrapper;
+
+
+
+'use client';
+import { redirect } from 'next/navigation';
+
+export default function SandboxRedirectPage() {
+    // This page just redirects to a default trip if accessed directly.
+    redirect('/car/sandbox/default-trip?stops=San%20Francisco,Los%20Angeles');
+    return null;
+}
+
+
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { 
+  ShieldCheck, Lock, Fingerprint, Cpu, ShieldAlert, CheckCircle2, LayoutGrid, Zap, Smartphone, Server,
+  ChevronDown, Navigation, Anchor, Activity, User, MoreHorizontal, Car, Monitor, X, Signal, Battery,
+  Info, Loader2, ToyBrick, Music, BrainCircuit, Calendar, Briefcase, PiggyBank, Rocket, Users, Home,
+  School, MessageSquare, HelpCircle, MessagesSquare, UserPlus, Wallet, Star, Map, FileText, Sheet,
+  Calculator, Camera, Video, Radio, Palette, Clock, Banknote, Power, VideoIcon, Disc, Phone,
+  FolderKanban, HeartPulse, ChevronRight, Globe, Maximize2, ChevronUp, Wifi, Cloud,
+  ArrowLeft, Route as RouteIcon, CornerUpRight, AlertTriangle, TrafficCone, MapPinned,
+  Gauge, Thermometer, Radar, EyeOff, Hotel, Fuel, Utensils, Mic, Gamepad2, Code, Shield, Sparkles, Search, ChevronLeft, MicOff
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// --- Mock Dependencies and Utilities ---
+const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+
+// Mock Hooks
+const useRegistration = () => ({
+    regData: {
+        trip: {
+            startLocation: { lat: 43.65, lng: -79.38 },
+            destination: { lat: 45.42, lng: -75.69 },
+        }
+    }
+});
+
+const tripConstants = {
+    totalDistance: 400, // km
+    nextTurn: 'Keep right onto ON-401 E',
+    nextTurnDistance: 5.2, // km (Next *Immediate* Turn)
+    majorExitDistance: 50.0, // km (A major highway exit coming up)
+    destinationName: 'Ottawa, ON',
+    speedLimit: 110,
+};
+
+// --- Mock POI Data for Nearby Services Panel (ENHANCED with Reviews) ---
+const mockPoiData = [
+    // High rated, reliable, and closer stops (prioritized)
+    { id: 1, name: "OnRoute Mallorytown North", distance: 15.2, type: 'Rest Area', status: 'Open 24h', icon: Hotel, rating: 4.5, reviewCount: 1200, reliabilityScore: 0.95 },
+    { id: 2, name: "Shell Gas Station (Exit 675) - High Rated", distance: 18.5, type: 'Gas', status: 'Open until 11 PM', icon: Fuel, rating: 4.7, reviewCount: 850, reliabilityScore: 0.98 },
+    { id: 3, name: "McDonald's & Tim Hortons (New, Clean)", distance: 18.7, type: 'Fast Food', status: 'Drive-Thru Open', icon: Utensils, rating: 4.3, reviewCount: 450, reliabilityScore: 0.90 },
+    // Lower rated/less reliable/further stops (de-prioritized)
+    { id: 4, name: "Rest Stop Hwy 401 East (Older Facility)", distance: 35.1, type: 'Rest Area', status: 'Open 24h', icon: Hotel, rating: 3.1, reviewCount: 50, reliabilityScore: 0.70 },
+    { id: 5, name: "Esso Station & Car Wash (Avg Rated)", distance: 42.0, type: 'Gas', status: 'Open until 1 AM', icon: Fuel, rating: 3.9, reviewCount: 300, reliabilityScore: 0.85 },
+    { id: 6, name: "Burger King (Exit 696) - Closed/Poor Reviews", distance: 51.9, type: 'Fast Food', status: 'Closed', icon: Utensils, rating: 2.8, reviewCount: 120, reliabilityScore: 0.65 },
+    { id: 7, name: "OnRoute Bainsville (Standard)", distance: 68.3, type: 'Rest Area', status: 'Open 24h', icon: Hotel, rating: 4.1, reviewCount: 600, reliabilityScore: 0.88 },
+];
+
+// --- Vehicle State Simulation Hook (Enhanced) ---
+const useVehicleSimulator = () => {
+    const [state, setState] = useState({
+        speed: 100, // km/h
+        fuel: 85,  // percent
+        battery: 98, // percent
+        engineTemp: 85, // C
+        tirePressure: 34, // PSI
+        distanceCovered: 0, // km
+        eta: '3h 30m',
+        isCharging: false,
+        safetyAlerts: [] as { id: number, message: string, color: string }[],
+        objectsDetected: [] as { id: number, offset: number, distance: number, type: 'car' | 'truck' }[],
+        currentLane: 'middle' as 'left' | 'middle' | 'right',
+        blindSpotThreat: false, // Is there an immediate threat to a lane change?
+        blindSpotObject: null as { id: number, type: 'car' | 'truck' } | null,
+        radarDetected: false, // NEW: Simulated police radar/traffic cam detection
+        advisoryMessage: "Cruising speed optimal. Maintaining safe lane.",
+        advisoryColor: 'text-white',
+        optimalLane: 'middle' as 'left' | 'middle' | 'right',
+        distanceToExit: tripConstants.majorExitDistance,
+    });
+
+    const simulatorInterval = useRef<number | null>(null);
+    const majorExitDistanceRef = useRef(tripConstants.majorExitDistance);
+
+    useEffect(() => {
+        // Hydration-safe random value initialization
+        const initialIsCharging = Math.random() > 0.5;
+        setState(prevState => ({ ...prevState, isCharging: initialIsCharging }));
+
+        const simulateTick = () => {
+            setState(prevState => {
+                const newState = { ...prevState };
+
+                // 1. Speed Fluctuation and Basic Physics
+                newState.speed = Math.min(tripConstants.speedLimit + 5,
+                    Math.round(105 + (Math.random() * 10 - 5))
+                );
+                const timePassedSec = 0.5; // Half a second per tick
+                const timePassedHrs = timePassedSec / 3600;
+                const distanceDelta = newState.speed * timePassedHrs;
+                
+                newState.distanceCovered += distanceDelta;
+                newState.fuel = Math.max(0, newState.fuel - (distanceDelta * 0.05));
+                newState.battery = Math.max(0, newState.battery - (distanceDelta * 0.01));
+
+                // 2. Object Detection & Blind Spot Logic
+                const objects = prevState.objectsDetected
+                    .map(obj => ({ ...obj, distance: obj.distance - (distanceDelta * 10) })) // Move objects closer faster for visual effect
+                    .filter(obj => obj.distance > 0 && obj.distance < 80);
+
+                if (Math.random() < 0.2) {
+                    objects.push({
+                        id: Date.now(),
+                        offset: (Math.random() * 2 - 1) * 20,
+                        distance: 80 + (Math.random() * 50),
+                        type: Math.random() > 0.7 ? 'truck' : 'car'
+                    });
+                }
+                newState.objectsDetected = objects.slice(0, 5);
+
+                let isThreat = false;
+                let threatObject = null;
+                // Threat defined as an object between 5m and 30m away, far off center (in the blind spot)
+                const threatObjectCandidate = newState.objectsDetected.find(obj =>
+                    obj.distance < 30 && obj.distance > 5 && (Math.abs(obj.offset) > 10)
+                );
+
+                if (threatObjectCandidate) {
+                    isThreat = true;
+                    threatObject = threatObjectCandidate;
+                }
+
+                newState.blindSpotThreat = isThreat;
+                newState.blindSpotObject = threatObject;
+
+                // 3. Radar Detection Simulation (NEW)
+                if (Math.random() < 0.015) { // Slightly higher chance of momentary spike
+                    newState.radarDetected = true; 
+                } else if (Math.random() < 0.9) {
+                    newState.radarDetected = false; 
+                } else {
+                    newState.radarDetected = prevState.radarDetected;
+                }
+                
+                // 4. General Updates
+                const remainingDistance = tripConstants.totalDistance - newState.distanceCovered;
+                const remainingTimeHrs = remainingDistance / Math.max(1, newState.speed);
+                const hours = Math.floor(remainingTimeHrs);
+                const minutes = Math.round((remainingTimeHrs - hours) * 60);
+                newState.eta = `${hours}h ${minutes}m`;
+
+                // Hydration-safe charging status update
+                newState.isCharging = newState.battery < 99 && Math.random() > 0.5;
+
+                // Simplified Alerts
+                let alerts = newState.safetyAlerts.filter(a => a.id !== 99);
+                if (newState.fuel < 15 && alerts.findIndex(a => a.id === 99) === -1) {
+                    alerts.push({ id: 99, message: 'LOW FUEL ALERT: Refuel Soon', color: 'text-red-500' });
+                }
+                newState.safetyAlerts = alerts;
+
+                // Pass through relevant advisory props
+                const advisoryMessage = isThreat ? "DANGER! UNSAFE TO MERGE." : "Cruising speed optimal. Maintaining safe lane.";
+                const advisoryColor = isThreat ? 'text-red-500' : 'text-white';
+                
+                // Simplified Lane Change Advice
+                const optimalLane = (Math.random() > 0.6) ? 'left' : (Math.random() > 0.6 ? 'right' : 'middle') as 'left' | 'middle' | 'right';
+                
+                newState.currentLane = optimalLane;
+                newState.advisoryMessage = advisoryMessage;
+                newState.advisoryColor = advisoryColor;
+                newState.optimalLane = optimalLane;
+                newState.distanceToExit = majorExitDistanceRef.current;
+
+
+                return { ...newState };
+            });
+        };
+
+        simulatorInterval.current = setInterval(simulateTick, 500) as unknown as number;
+
+        return () => {
+            if (simulatorInterval.current) clearInterval(simulatorInterval.current);
+        };
+    }, []);
+
+    const tripProgressValue = Math.min(100, Math.round((state.distanceCovered / tripConstants.totalDistance) * 100));
+
+    return {
+        ...state,
+        tripProgressValue,
+        isLowFuel: state.fuel < 20,
+        isSpeeding: state.speed > tripConstants.speedLimit,
+        nextTurnDistanceKm: tripConstants.nextTurnDistance - (state.distanceCovered % 10),
+        trip: tripConstants,
+        // Technology View Status Checks
+        laneTrackingActive: true,
+        objectTrackingCount: state.objectsDetected.length,
+        networkStatus: 'Online (5G)',
+    };
+};
+
+// --- Simple Component Definitions ---
+
+const Button = ({ children, className, variant = 'default', size = 'default', ...props }: any) => {
+    let baseStyle = 'inline-flex items-center justify-center rounded-full font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#1C1C1E] disabled:opacity-50';
+    let variantStyle = '';
+    let sizeStyle = 'h-10 px-5 py-2 text-sm';
+
+    if (variant === 'primary') variantStyle = 'bg-blue-600 text-white shadow-lg shadow-blue-900/50 hover:bg-blue-500';
+    else if (variant === 'secondary') variantStyle = 'bg-gray-700/50 text-gray-200 hover:bg-gray-600/70';
+    else if (variant === 'outline') variantStyle = 'border border-white/20 text-white hover:bg-white/10';
+    else variantStyle = 'bg-white/10 text-white hover:bg-white/20';
+
+    if (size === 'icon') sizeStyle = 'h-10 w-10 p-0 rounded-full';
+
+    return <button className={cn(baseStyle, variantStyle, sizeStyle, className)} {...props}>{children}</button>;
+};
+
+const Card = ({ children, className, ...props }: any) => (
+    <div
+        className={cn(
+            "apple-glass rounded-2xl shadow-2xl transition-all duration-300",
+            className
+        )}
+        {...props}
+    >
+        {children}
+    </div>
+);
+const CardHeader = ({ children, className, ...props }: any) => <div className={cn("p-4 border-b border-white/5", className)} {...props}>{children}</div>;
+const CardTitle = ({ children, className, ...props }: any) => <h3 className={cn("text-lg font-semibold tracking-tight text-white", className)} {...props}>{children}</h3>;
+const CardContent = ({ children, className, ...props }: any) => <div className={cn("p-4", className)} {...props}>{children}</div>;
+
+const Progress = ({ value, className, children, ...props }: any) => (
+    <div className="relative w-full h-2 rounded-full overflow-hidden bg-white/10" {...props}>
+        {children}
+    </div>
+);
+
+// --- MAIN UI COMPONENTS ---
+
+const DriverView = ({ simulatorData }: any) => (
+    <div className="absolute inset-0 z-10 pointer-events-none">
+        <div className="absolute inset-0 z-0">
+            <iframe
+                src="/shared-app/family-anchor-map"
+                title="Family Anchor Map System"
+                className="w-full h-full border-none"
+                allow="geolocation"
+            ></iframe>
+        </div>
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 pointer-events-auto">
+            <p className={cn(
+                "text-xl font-bold tracking-wider bg-black/70 p-3 rounded-xl backdrop-blur-sm border border-white/20 transition-colors duration-500",
+                simulatorData.advisoryColor,
+                simulatorData.advisoryColor === 'text-red-500' && 'animate-pulse-slow'
+            )}>{simulatorData.advisoryMessage}</p>
+        </div>
+        <div className="absolute top-4 right-4 z-10 text-right pointer-events-auto">
+            <div className="flex items-center justify-end gap-2 text-green-400">
+                <Shield size={20} className="animate-pulse"/>
+                <span className="text-lg font-bold">Autopilot Engaged</span>
+            </div>
+        </div>
+        <div className={cn(
+            "absolute bottom-4 right-4 z-10 p-3 flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 pointer-events-auto",
+             "bg-black/70 backdrop-blur-md",
+             simulatorData.isSpeeding ? 'border-red-500 ring-4 ring-red-500/50 animate-pulse-slow' : 'border-white/20'
+        )}>
+             <span className="text-4xl font-extrabold text-white">{tripConstants.speedLimit}</span>
+            <p className="text-xs text-gray-400 text-center mt-1 font-medium">LIMIT</p>
+        </div>
+    </div>
+);
+
+const CoPilotView = ({ simulatorData }: any) => {
+    const [isMsgOpen, setIsMsgOpen] = useState(false);
+    return (
+        <div className="p-6 h-full grid grid-cols-3 gap-6 relative">
+            {/* Main Navigation Panel */}
+            <div className="col-span-1 space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-blue-300">
+                            <Navigation size={18} /> Cheat Sheet
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="text-center">
+                            <p className="text-5xl font-bold">{simulatorData.trip.nextTurnDistance.toFixed(1)}<span className="text-xl text-gray-400">km</span></p>
+                            <p className="text-sm text-gray-400">Next Turn</p>
+                        </div>
+                        <div className="p-3 bg-gray-800/50 rounded-lg text-center">
+                            <p className="font-semibold text-lg">{simulatorData.trip.nextTurn}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><MapPin size={18}/> Next Stop</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                        <p className="text-center text-sm text-gray-400">Passengers are voting...</p>
+                        <Button variant="outline" className="w-full">OnRoute Mallorytown</Button>
+                        <Button variant="outline" className="w-full">Esso Gas</Button>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Entertainment & Stops */}
+            <div className="col-span-1 space-y-6">
+                <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><Gamepad2 size={18}/> Entertainment</CardTitle></CardHeader>
+                     <CardContent className="grid grid-cols-2 gap-2">
+                        <Button variant="secondary" className="flex-col h-20 gap-1"><Video size={20}/>Start Movie</Button>
+                        <Button variant="secondary" className="flex-col h-20 gap-1"><Music size={20}/>Start Music</Button>
+                        <Button variant="secondary" className="flex-col h-20 gap-1"><Camera size={20}/>I Spy</Button>
+                        <Button variant="secondary" className="flex-col h-20 gap-1"><BrainCircuit size={20}/>Guess What</Button>
+                        <Button variant="secondary" className="flex-col h-20 gap-1"><MicOff size={20}/>Quiet Game</Button>
+                        <Button variant="secondary" className="flex-col h-20 gap-1"><Sparkles size={20}/>Trivia</Button>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Messaging Panel */}
+             <AnimatePresence>
+                {isMsgOpen && (
+                    <motion.div 
+                        initial={{ x: '100%', opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: '100%', opacity: 0 }}
+                        className="col-span-1 bg-gray-900/70 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col"
+                    >
+                       <CardHeader className="flex flex-row justify-between items-center">
+                            <CardTitle>Messages</CardTitle>
+                            <button onClick={() => setIsMsgOpen(false)}><X size={18}/></button>
+                       </CardHeader>
+                       <CardContent className="flex-1 overflow-y-auto">
+                           {/* Chat messages would go here */}
+                       </CardContent>
+                    </motion.div>
+                )}
+             </AnimatePresence>
+             {!isMsgOpen && (
+                 <button onClick={() => setIsMsgOpen(true)} className="absolute top-1/2 right-0 -translate-y-1/2 p-2 bg-gray-800 rounded-l-full border-r-0 border border-white/10">
+                    <ChevronLeft size={18}/>
+                 </button>
+             )}
+        </div>
+    );
+};
+
+
+const ExplorerView = ({ simulatorData }: any) => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 h-full">
+        <div className="lg:col-span-1 h-full min-h-[300px]"><Card className="h-full w-full"><CardContent className="p-0 h-full"><iframe src={'/shared-app/family-anchor-map'} title="Passenger Map System" className="w-full h-full border-none rounded-xl" allow="geolocation" ></iframe></CardContent></Card></div>
+        <div className="lg:col-span-1 space-y-6">
+            <Card><CardHeader><CardTitle className="flex items-center gap-2"><Gamepad2 size={18}/> Road Trip Trivia</CardTitle></CardHeader><CardContent><p className="text-lg font-semibold text-white mb-3">What is the capital of Canada?</p><div className="flex flex-col gap-2 mt-2"><Button variant="outline">Toronto</Button><Button variant="outline">Ottawa</Button><Button variant="outline">Montreal</Button></div></CardContent></Card>
+        </div>
+    </div>
+);
+
+const PassengerView = ({ simulatorData }: any) => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 h-full">
+        <div className="lg:col-span-2 h-full min-h-[300px]"><Card className="h-full w-full"><CardContent className="p-0 h-full"><iframe src={'/shared-app/family-anchor-map'} title="Passenger Map System" className="w-full h-full border-none rounded-xl" allow="geolocation" ></iframe></CardContent></Card></div>
+        <div className="lg:col-span-1 space-y-6 h-full min-h-[500px]"><Card className="h-full flex flex-col"><CardHeader><CardTitle className="flex items-center gap-2 text-blue-400"><MapPinned size={18} /> Nearby Services & POIs</CardTitle></CardHeader><CardContent className="flex flex-col flex-grow p-4"><div className="flex justify-between p-1 rounded-full bg-white/5 mb-4"><Button variant="secondary" className="flex-1 text-xs px-2"><Search size={16} className="mr-1 hidden sm:inline-block"/> All</Button><Button variant="secondary" className="flex-1 text-xs px-2"><Fuel size={16} className="mr-1 hidden sm:inline-block"/> Gas</Button><Button variant="secondary" className="flex-1 text-xs px-2"><Utensils size={16} className="mr-1 hidden sm:inline-block"/> Food</Button><Button variant="secondary" className="flex-1 text-xs px-2"><Hotel size={16} className="mr-1 hidden sm:inline-block"/> Rest</Button></div><div className="space-y-3 overflow-y-auto flex-grow">{mockPoiData.slice(0,5).map(poi => (<div key={poi.id} className="flex items-center bg-white/5 p-3 rounded-xl hover:bg-white/10 cursor-pointer border border-white/10"><poi.icon size={24} className="text-teal-400 flex-shrink-0 mr-3" /><div className="flex-grow min-w-0"><p className="text-sm font-semibold text-white truncate">{poi.name}</p><div className="flex items-center text-xs mt-1"><span className="text-gray-400 mr-2">{poi.type}</span><div className="flex items-center text-yellow-400"><Star size={12} fill="currentColor" className="mr-1"/><span>{poi.rating.toFixed(1)}</span></div></div></div><div className="flex flex-col items-end flex-shrink-0 ml-4"><p className="text-lg font-bold text-blue-300">{poi.distance.toFixed(1)} km</p><p className={cn("text-xs font-medium", poi.status === 'Closed' ? 'text-red-400' : 'text-green-400')}>{poi.status}</p></div></div>))}</div></CardContent></Card></div>
+    </div>
+);
+
+const TechnologyView = ({ simulatorData }: any) => {
+    const { laneTrackingActive, objectTrackingCount, networkStatus, radarDetected } = simulatorData;
+
+    const TechMetric = ({ label, value, icon: Icon, colorClass, statusIcon: StatusIcon }: any) => (
+        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 transition-all duration-300 hover:bg-white/10">
+            <div className="flex items-center gap-3"><Icon size={24} className={colorClass} /><div><p className="text-sm text-gray-400">{label}</p><p className="text-lg font-bold text-white">{value}</p></div></div>
+            {StatusIcon && <StatusIcon size={24} className={colorClass} />}
+        </div>
+    );
+
+    return (
+        <div className="p-4 h-full flex flex-col">
+            <Card className="flex-grow p-6">
+                <CardTitle className="mb-6 text-xl text-green-400 flex items-center gap-3"><Code size={24} /> Autopilot & Vehicle Technology Status</CardTitle>
+                <div className={cn("p-4 rounded-xl mb-6 transition-all duration-500", radarDetected ? 'bg-red-900/50 border border-red-500 animate-pulse-slow' : 'bg-green-900/30 border border-green-500/30')}><div className="flex items-center gap-4"><Radar size={40} className={radarDetected ? 'text-red-400' : 'text-green-400'} /><div><p className="text-xl font-extrabold tracking-wider">{radarDetected ? 'RADAR/SPEED TRAP DETECTED!' : 'All Clear'}</p><p className="text-sm text-gray-300">{radarDetected ? 'Reduce speed immediately. Adaptive cruise control disengaged.' : 'Full Autopilot systems ready.'}</p></div></div></div>
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <TechMetric label="Lane Tracking" value={laneTrackingActive ? 'Active' : 'Offline'} icon={RouteIcon} colorClass={laneTrackingActive ? 'text-green-400' : 'text-red-400'} statusIcon={laneTrackingActive ? CheckCircle2 : XCircle}/>
+                    <TechMetric label="Objects Tracked" value={`${objectTrackingCount} Vehicles`} icon={Satellite} colorClass={objectTrackingCount > 0 ? 'text-blue-400' : 'text-gray-500'} statusIcon={Activity}/>
+                    <TechMetric label="Network Status" value={networkStatus} icon={Wifi} colorClass={networkStatus.includes('Online') ? 'text-blue-400' : 'text-gray-500'} />
+                    <TechMetric label="Blind Spot Monitor" value={simulatorData.blindSpotThreat ? 'Threat Alert' : 'Clear'} icon={EyeOff} colorClass={simulatorData.blindSpotThreat ? 'text-red-400' : 'text-green-400'} statusIcon={AlertTriangle}/>
+                    <TechMetric label="Battery Level" value={`${Math.round(simulatorData.battery)}%`} icon={Battery} colorClass={simulatorData.battery < 30 ? 'text-yellow-400' : 'text-green-400'} statusIcon={Info}/>
+                    <TechMetric label="Tire Pressure" value={`${simulatorData.tirePressure.toFixed(1)} PSI`} icon={Gauge} colorClass={simulatorData.tirePressure < 32 ? 'text-red-400' : 'text-white/80'} statusIcon={CheckCircle2}/>
+                </div>
+                <div className="mt-8"><CardTitle className="mb-4 text-white flex items-center gap-2"><AlertTriangle size={20} className="text-yellow-500" /> System Advisories</CardTitle><div className="space-y-2">{simulatorData.safetyAlerts.length > 0 ? (simulatorData.safetyAlerts.map((alert: any, index: number) => (<div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-red-900/30 border border-red-500/50"><AlertTriangle size={18} className="text-red-400 flex-shrink-0" /><p className="text-sm font-medium text-red-300">{alert.message}</p></div>))) : (<div className="p-3 text-center text-gray-500 bg-white/5 rounded-lg">No critical system advisories.</div>)}</div></div>
+            </Card>
+        </div>
+    );
+};
+
+
+const App = () => {
+    const simulatorData = useVehicleSimulator();
+    const [view, setView] = useState('Driver'); // Driver, CoPilot, Explorer, Passenger, Technology
+    const [isTripPlannerOpen, setIsTripPlannerOpen] = useState(false);
+    
+    const renderView = () => {
+        switch (view) {
+            case 'CoPilot': return <CoPilotView simulatorData={simulatorData} />;
+            case 'Explorer': return <ExplorerView simulatorData={simulatorData} />;
+            case 'Passenger': return <PassengerView simulatorData={simulatorData} />;
+            case 'Technology': return <TechnologyView simulatorData={simulatorData} />;
+            default: return null; // Driver view is now an overlay
+        }
+    };
+
+    const navItems = [
+        { name: 'Driver', icon: Car },
+        { name: 'CoPilot', icon: Mic },
+        { name: 'Passenger', icon: Users },
+        { name: 'Explorer', icon: Gamepad2 },
+        { name: 'Technology', icon: Code },
+    ];
+
+    return (
+        <div className="h-screen w-screen bg-[#1C1C1E] text-white font-sans flex flex-col overflow-hidden relative" style={{ perspective: '1000px' }}>
+            
+            <div className="flex-1 relative">
+                <DriverView simulatorData={simulatorData} />
+
+                {/* Render other views on top of the DriverView and Map */}
+                <AnimatePresence>
+                    {view !== 'Driver' && (
+                         <motion.div
+                            key={view}
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.98 }}
+                            className="absolute inset-0 bg-black/50 backdrop-blur-md z-20"
+                         >
+                            {renderView()}
+                         </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            <header className="absolute top-0 inset-x-0 h-14 flex items-center justify-between px-6 z-20 pointer-events-none">
+                <div className="flex items-center gap-3 p-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10 pointer-events-auto">
+                    <Zap size={14} className="text-blue-400" />
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">NODE_S01</p>
+                    <p className="text-xs font-bold text-white">MIR_ANCHOR_MAP</p>
+                </div>
+                 <button onClick={() => setIsTripPlannerOpen(true)} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/5 px-4 py-1.5 rounded-2xl text-[10px] font-black tracking-widest transition-all pointer-events-auto">
+                    <LayoutGrid className="w-3.5 h-3.5 text-blue-400" /> PORT_LAUNCHER
+                </button>
+            </header>
+
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30">
+                <Card className="p-1">
+                    <div className="flex justify-around items-center">
+                        {navItems.map((item) => (
+                            <Button
+                                key={item.name}
+                                variant={view === item.name ? 'primary' : 'secondary'}
+                                className={cn("flex flex-col items-center justify-center h-20 w-24 rounded-2xl", view === item.name && 'ring-2 ring-blue-500/50')}
+                                onClick={() => setView(item.name)}
+                            >
+                                <item.icon size={24} className="mb-1" />
+                                <span className="text-xs font-semibold">{item.name}</span>
+                            </Button>
+                        ))}
+                    </div>
+                </Card>
+            </div>
+            
+            <AnimatePresence>
+                {isTripPlannerOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-2xl"
+                    >
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: '0%' }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+                            className="w-full h-full"
+                        >
+                            <iframe 
+                                src="/shared-app/travinling-planing"
+                                className="w-full h-full border-none"
+                                title="Sovereign Trip Planner"
+                            />
+                        </motion.div>
+                        <button 
+                            onClick={() => setIsTripPlannerOpen(false)}
+                            className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 rounded-full z-[1001]"
+                        >
+                            <X size={24} />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <style jsx global>{`
+                .apple-glass { background-color: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); }
+                .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+            `}</style>
+        </div>
+    );
+};
+
+export default App;
+
+
