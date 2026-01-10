@@ -1,0 +1,617 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, HardDrive, Loader2, Mic, Play, Plus, Save, Settings, User, BrainCircuit, Users, Bot, Route, Cpu, Code, UserPlus, Wifi, Phone, Cloud, Binary, Satellite, HardHat, Landmark, BookOpen, Baby, Calendar, MessageSquare, ClipboardList, Sparkles, KeyRound, Radio, FolderKanban, Anchor, Activity, LayoutGrid, Award, CheckCircle2, ShieldCheck, X, Share2, QrCode } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { simpleSpeak, type SpeakConfig } from '@/ai/flows/tts-flow';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, addDoc, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+
+
+const VoiceOption = React.memo(({ voiceId, voiceName, currentVoice, setConfig, onTest }: { voiceId: string, voiceName: string, currentVoice?: string, setConfig: (config: SpeakConfig) => void, onTest: (voice: string) => void }) => (
+    <div
+        onClick={() => setConfig({ voice: voiceId })}
+        className={cn(
+            "p-3 rounded-lg flex justify-between items-center cursor-pointer transition-all border-2",
+            currentVoice === voiceId ? "bg-indigo-100 dark:bg-indigo-900/50 border-indigo-500" : "bg-gray-100 dark:bg-gray-800/50 border-gray-300 dark:border-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+        )}
+    >
+        <span className="font-semibold text-gray-800 dark:text-gray-200">{voiceName}</span>
+        <Button size="sm" variant="ghost" className="h-8 text-gray-600 dark:text-gray-400" onClick={(e) => { e.stopPropagation(); onTest(voiceId); }}>
+            <Play className="mr-2 h-4 w-4" /> Test
+        </Button>
+    </div>
+));
+VoiceOption.displayName = 'VoiceOption';
+
+
+const adultVoices = [
+    { id: 'Puck', name: 'Puck (Default Guardian)' },
+    { id: 'Algenib', name: 'Algenib (Calm, Male)' },
+    { id: 'Achernar', name: 'Achernar (Authoritative, Male)' },
+    { id: 'Enif', name: 'Enif (Friendly, Female)' },
+    { id: 'Gacrux', name: 'Gacrux (Warm, Female)' }
+];
+
+const kidVoices = [
+    { id: 'Enif', name: 'Enif (Friendly Voice)' },
+    { id: 'Gacrux', name: 'Gacrux (Warm Voice)' },
+    { id: 'Puck', name: 'Puck (Storyteller Voice)' },
+];
+
+const systemProcesses = [
+    { id: 'true-path', title: 'True Path Engine', href: '/admin/dashboard/true-path', icon: Route, status: 'ok' },
+    { id: 'wireless-architecture', title: 'Wireless Architecture', href: '/admin/dashboard/system-settings/wireless-architecture', icon: Wifi, status: 'ok' },
+    { id: 'dock-rtc-proof', title: 'DockRTC Proof', href: '/admin/dashboard/system-settings/dock-rtc-proof', icon: Phone, status: 'ok' },
+    { id: 'sov-cloud', title: 'SOV Cloud', href: '/admin/dashboard/system-settings/sovcloud', icon: Cloud, status: 'ok' },
+    { id: 'master-console', title: 'Master Console', href: '/admin/dashboard/system-settings/technology', icon: Binary, status: 'ok' },
+    { id: 'connections', title: 'Connections', href: '/admin/dashboard/system-settings/connections', icon: Satellite, status: 'ok' },
+]
+
+const TokenItem = React.memo(({ icon: Icon, label, idFormat }) => (
+    <div className="flex flex-col items-center gap-2 p-5 rounded-xl bg-slate-900 border border-slate-800 text-center group transition-all hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+        <div className="relative w-14 h-14 flex items-center justify-center">
+            <Icon className="size-8 text-cyan-400 z-10" />
+            <div className="absolute inset-0 flex items-center justify-center text-slate-700 text-3xl font-bold select-none">?</div>
+            <div className="absolute inset-0 bg-cyan-400/10 rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+        <span className="text-xs font-bold text-white uppercase tracking-wider">{label}</span>
+        <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-2 py-0.5 rounded">{idFormat}</span>
+    </div>
+));
+TokenItem.displayName = 'TokenItem';
+
+
+const AddMemberForm = ({ role, onCancel, onAdd }) => {
+    const [name, setName] = useState('');
+    return (
+        <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-4 bg-gray-800/50 border border-indigo-500/30 rounded-2xl space-y-3"
+        >
+            <h4 className="text-sm font-bold text-indigo-300">Add New {role}</h4>
+            <input 
+                type="text" 
+                placeholder={`Enter ${role}'s Name`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-gray-900/50 border border-gray-600 rounded-lg p-2 text-white placeholder-gray-500"
+            />
+            <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+                <Button size="sm" onClick={() => onAdd(name, role)} disabled={!name.trim()}>Add</Button>
+            </div>
+        </motion.div>
+    );
+};
+
+
+export default function PedalsPage() {
+    const { toast } = useToast();
+    const { user, isUserLoading } = useUser(); // Using the main useUser hook now
+    const firestore = useFirestore();
+    const appId = 'echo-chamber-app';
+
+    const [view, setView] = useState('engine'); // 'engine' or 'settings'
+    const [inputText, setInputText] = useState("Hello Sovereign Universe. This is PEDLLE, the operational AI Persona for the Anderson family. Tom and Jen's core identity links are secure. All systems are nominal.");
+    const [audioData, setAudioData] = useState<string | null>(null);
+    const [engineStatus, setEngineStatus] = useState<'IDLE' | 'LISTENING' | 'GENERATING' | 'SPEAKING' | 'ERROR'>('IDLE');
+    const [speakConfig, setSpeakConfig] = useState<SpeakConfig>({ voice: 'Puck' });
+    const [isRegistryModalOpen, setIsRegistryModalOpen] = useState(false);
+    const [familyMembers, setFamilyMembers] = useState([
+        { id: 1, name: 'Awaiting User...', role: 'Guardian' },
+        { id: 2, name: 'Awaiting User...', role: 'Guardian' },
+        { id: 3, name: 'Awaiting User...', role: 'Child' },
+        { id: 4, name: 'Awaiting User...', role: 'Child' },
+    ]);
+    const [showAddGuardian, setShowAddGuardian] = useState(false);
+    const [showAddChild, setShowAddChild] = useState(false);
+    const [showQRModal, setShowQRModal] = useState(false);
+
+    const audioPlayerRef = useRef<HTMLAudioElement>(null);
+    
+    // NOTE: useSpeechRecognition hook is not available in this context, simulating with a simple state
+    const [isListening, setIsListening] = useState(false);
+
+    // This simulates a user role for demonstration purposes. In a real app, this would come from a context.
+    const [simulatedRole, setSimulatedRole] = useState('adult'); 
+
+    const notesQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return query(
+            collection(firestore, 'artifacts', appId, 'users', user.uid, 'notes'),
+            orderBy('timestamp', 'desc'),
+            limit(5)
+        );
+    }, [user, firestore]);
+    const { data: savedNotes, isLoading: isLoadingNotes } = useCollection<any>(notesQuery);
+    
+    // Simulated family & pebble logs
+    const familyLog = [
+        { id: 1, text: "New Event: 'Soccer Practice' added to calendar.", timestamp: '1h ago' },
+        { id: 2, text: "Chore 'Clean Room' marked as complete by Dad.", timestamp: '3h ago' },
+    ];
+    const pebbleLog = [
+        { id: 1, text: "System nominal. All core identity links secure.", timestamp: 'Just now' },
+        { id: 2, text: "INFO: Thermal distribution optimized in Home Anchor.", timestamp: '15m ago' },
+    ];
+
+
+    const handleListenToggle = () => {
+       setIsListening(!isListening);
+       setEngineStatus(isListening ? 'IDLE' : 'LISTENING');
+       if(!isListening) {
+           toast({ title: "Listening...", description: "Please speak your command." });
+           // Simulate speech recognition result after a delay
+           setTimeout(() => {
+               const sampleCommand = "What is on the calendar for tomorrow?";
+               setInputText(sampleCommand);
+               setIsListening(false);
+               setEngineStatus('IDLE');
+               toast({ title: "Voice Input Received", description: `"${sampleCommand}"`});
+           }, 4000);
+       }
+    };
+    
+    const availableVoices = simulatedRole === 'kid' ? kidVoices : adultVoices;
+    
+    useEffect(() => {
+        // If the current voice is not in the available list, reset to default
+        if (!availableVoices.some(v => v.id === speakConfig.voice)) {
+            setSpeakConfig({ voice: availableVoices[0].id });
+        }
+    }, [simulatedRole, availableVoices, speakConfig.voice]);
+
+
+    const handleGenerateSpeech = async (textToSpeak?: string, configOverride?: SpeakConfig) => {
+        const finalInput = textToSpeak || inputText;
+        if (!finalInput.trim()) {
+            toast({ variant: 'destructive', title: 'Input Required' });
+            return;
+        }
+
+        setEngineStatus('GENERATING');
+        setAudioData(null);
+        if(!configOverride) toast({ title: 'Generating Voice Print...' });
+
+        try {
+            const config = configOverride || speakConfig;
+            const result = await simpleSpeak(finalInput, config); 
+            if (result?.media) {
+                setAudioData(result.media);
+                setTimeout(() => audioPlayerRef.current?.play(), 100);
+            } else {
+                setEngineStatus('IDLE');
+                if(!configOverride) toast({ variant: 'destructive', title: 'No Audio Generated' });
+            }
+        } catch (error: any) {
+            setEngineStatus('ERROR');
+            toast({ variant: 'destructive', title: 'Generation Failed', description: error.message });
+        }
+    };
+    
+    const saveCurrentNote = async () => {
+        if (!inputText.trim() || !user || !firestore) {
+            toast({ variant: 'destructive', title: 'Nothing to save.' });
+            return;
+        }
+        const collectionPath = `artifacts/${appId}/users/${user.uid}/notes`;
+        try {
+            await addDoc(collection(firestore, collectionPath), {
+                text: inputText.trim(),
+                timestamp: serverTimestamp(),
+            });
+            toast({ title: 'Note Saved!', description: 'Your current text has been saved to your vault.' });
+        } catch (error) {
+            console.error("Error saving note:", error);
+            toast({ variant: 'destructive', title: 'Save Failed', description: 'Could not save note to the vault.' });
+        }
+    };
+
+    const handleTestVoice = (voiceId: string) => {
+        handleGenerateSpeech(`This is a test of the ${voiceId} voice model.`, { voice: voiceId });
+    };
+
+    const isAllSystemsOK = systemProcesses.every(p => p.status === 'ok');
+
+    const handleAddMember = (name, role) => {
+        const newMember = { id: Date.now(), name, role };
+        setFamilyMembers(prev => [...prev, newMember]);
+        if (role === 'Guardian') setShowAddGuardian(false);
+        if (role === 'Child') setShowAddChild(false);
+    };
+
+    const FamilyRegistryModal = () => (
+        <Dialog open={isRegistryModalOpen} onOpenChange={setIsRegistryModalOpen}>
+            <DialogContent className="max-w-3xl bg-gray-900/80 border-pink-500/50 text-white backdrop-blur-xl p-0">
+                 <DialogHeader className="p-8 pb-4 flex flex-row items-center justify-between">
+                    <div>
+                        <DialogTitle className="text-3xl font-black text-pink-400 flex items-center gap-3">
+                            <Landmark /> Family Registry
+                        </DialogTitle>
+                        <DialogDescription className="text-gray-400 !mt-2">
+                            Visualizing the secure, linked identities of the Sovereign Family Node.
+                        </DialogDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Link href="/shared-app/family-pebbles/setting-f" passHref>
+                            <Button variant="ghost" size="icon" className="text-pink-400 hover:bg-pink-500/10 hover:text-pink-300" title="Go to Audit & Settings">
+                                <Settings />
+                            </Button>
+                        </Link>
+                        <button onClick={() => setShowQRModal(true)} className="p-3 bg-slate-700/50 rounded-xl hover:bg-slate-700/80 transition-colors" title="Share Registry Link">
+                            <Share2 className="w-5 h-5 text-cyan-400" />
+                        </button>
+                    </div>
+                </DialogHeader>
+                <div className="p-8 pt-4 max-h-[70vh] overflow-y-auto">
+                    <div className="relative flex flex-col items-center">
+                        <div className="flex gap-16">
+                            {familyMembers.filter(m => m.role === 'Guardian').map(member => (
+                                <Link key={member.id} href="/shared-app/family-pebbles/user-client-app-blueprints/adults" passHref>
+                                    <div className="flex flex-col items-center gap-3 cursor-pointer group">
+                                        <div className="w-24 h-24 rounded-full bg-slate-800 border-4 border-blue-500/50 flex items-center justify-center text-4xl shadow-lg group-hover:border-blue-400 transition-all">
+                                            <User className="w-12 h-12 text-blue-300" />
+                                        </div>
+                                        <span className="font-bold text-white text-sm group-hover:text-blue-300 transition-colors">{member.name}</span>
+                                        <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/30 rounded-full text-xs text-blue-300 font-bold">GUARDIAN</div>
+                                    </div>
+                                </Link>
+                            ))}
+                             {familyMembers.filter(m => m.role === 'Guardian').length < 2 && !showAddGuardian && (
+                                <div onClick={() => setShowAddGuardian(true)} className="flex flex-col items-center gap-3 cursor-pointer group">
+                                    <div className="w-24 h-24 rounded-full bg-slate-800/30 border-4 border-dashed border-gray-600 group-hover:border-blue-500 flex items-center justify-center text-gray-500 group-hover:text-blue-400 transition-all">
+                                        <Plus className="w-10 h-10" />
+                                    </div>
+                                    <span className="font-bold text-gray-500 text-sm group-hover:text-blue-300 transition-colors">Add Guardian</span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {showAddGuardian && (
+                            <div className="w-full max-w-sm mt-4">
+                                <AddMemberForm role="Guardian" onCancel={() => setShowAddGuardian(false)} onAdd={handleAddMember} />
+                            </div>
+                        )}
+
+                        <div className="absolute top-12 h-20 w-px bg-blue-500/40" />
+                        <div className="absolute top-[8.5rem] left-1/2 -translate-x-1/2 w-1/3 h-px bg-blue-500/40" />
+
+                        <div className="flex gap-8 mt-24 items-start">
+                           {familyMembers.filter(m => m.role === 'Child').map(member => (
+                                <Link key={member.id} href="/shared-app/family-pebbles/user-client-app-blueprints/kids" passHref>
+                                    <div className="flex flex-col items-center gap-3 cursor-pointer group">
+                                        <div className="w-20 h-20 rounded-full bg-slate-800 border-4 border-pink-500/50 flex items-center justify-center text-3xl shadow-lg group-hover:border-pink-400 transition-all">
+                                            <Baby className="w-10 h-10 text-pink-300"/>
+                                        </div>
+                                        <span className="font-bold text-white text-sm group-hover:text-pink-300 transition-colors">{member.name}</span>
+                                        <div className="px-3 py-1 bg-pink-500/10 border border-pink-500/30 rounded-full text-xs text-pink-300 font-bold">CHILD</div>
+                                    </div>
+                                </Link>
+                           ))}
+                           {familyMembers.filter(m => m.role === 'Child').length < 4 && !showAddChild && (
+                                <div onClick={() => setShowAddChild(true)} className="flex flex-col items-center gap-3 cursor-pointer group pt-1">
+                                    <div className="w-20 h-20 rounded-full bg-slate-800/30 border-2 border-dashed border-gray-600 flex items-center justify-center text-gray-500 group-hover:text-pink-400 transition-all">
+                                        <Plus className="w-8 h-8"/>
+                                    </div>
+                                     <span className="font-bold text-gray-500 text-sm group-hover:text-pink-300 transition-colors">Add Child</span>
+                                </div>
+                            )}
+                        </div>
+                        {showAddChild && (
+                             <div className="w-full max-w-sm mt-4">
+                                <AddMemberForm role="Child" onCancel={() => setShowAddChild(false)} onAdd={handleAddMember} />
+                            </div>
+                        )}
+                        <div className="absolute left-1/2 top-[8.5rem] w-px h-16 bg-blue-500/40"/>
+                        {familyMembers.filter(m => m.role === 'Child').length >= 1 && <div className="absolute left-[calc(50%-4rem)] top-[13rem] w-px h-8 bg-blue-500/40 rotate-[45deg] origin-bottom"/>}
+                        {familyMembers.filter(m => m.role === 'Child').length >= 2 && <div className="absolute right-[calc(50%-4rem)] top-[13rem] w-px h-8 bg-blue-500/40 -rotate-[45deg] origin-bottom"/>}
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+
+    const QRShareModal = () => (
+         <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+            <DialogContent className="max-w-md bg-gray-900/80 border-cyan-500/50 text-white backdrop-blur-xl p-8 text-center">
+                 <DialogHeader>
+                    <DialogTitle className="text-2xl font-black text-cyan-400 flex items-center justify-center gap-3">
+                        <QrCode /> Invite to Another Universe
+                    </DialogTitle>
+                    <DialogDescription className="text-gray-400 !mt-4">
+                        Scan this code to connect another FamilyOS node. This creates a secure, encrypted bridge between family universes.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="p-8 bg-white my-6 rounded-2xl">
+                    {/* Placeholder for QR Code */}
+                    <div className="w-full aspect-square bg-gray-200 flex items-center justify-center">
+                       <p className="text-gray-500 font-mono">QR CODE</p>
+                    </div>
+                </div>
+                <div className="space-y-3">
+                    <Button className="w-full bg-cyan-600 hover:bg-cyan-700 shadow-lg text-base">
+                        <Users className="w-4 h-4 mr-2" /> Link Full Family
+                    </Button>
+                     <Button variant="outline" className="w-full bg-transparent border-cyan-500/50 hover:bg-cyan-500/10 text-cyan-300">
+                        <User className="w-4 h-4 mr-2" /> Connect as Friends
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+
+
+    const EngineView = () => (
+      <TooltipProvider>
+        <>
+            <div className="text-center flex justify-center items-center gap-4">
+                 <Link href="/shared-app/Shared-Calendar">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer">
+                                <ArrowLeft />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-gray-900 border-gray-700 text-white">
+                            <p>Back to Calendar</p>
+                        </TooltipContent>
+                    </Tooltip>
+                 </Link>
+                 <Link href="/shared-app/family-pebbles">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button className="w-8 h-8 flex items-center justify-center text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer">
+                                <BrainCircuit />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-gray-900 border-indigo-700 text-white">
+                            <p>Family Pebble Manager</p>
+                        </TooltipContent>
+                    </Tooltip>
+                 </Link>
+                
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                         <button onClick={() => setIsRegistryModalOpen(true)} className="w-8 h-8 flex items-center justify-center text-pink-400 hover:text-pink-300 transition-colors cursor-pointer">
+                            <Landmark />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-gray-900 border-pink-700 text-white">
+                        <p>Family Registry (Active)</p>
+                    </TooltipContent>
+                </Tooltip>
+                 
+                 <Link href="/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/client-app-blueprints">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                           <button className="w-8 h-8 flex items-center justify-center text-cyan-400 hover:text-cyan-300 transition-colors">
+                                <LayoutGrid />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-gray-900 border-cyan-700 text-white">
+                            <p>Client App Blueprints</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </Link>
+
+                <div>
+                    <h1 className="text-4xl font-extrabold text-gray-100">
+                        PEDLLE TTS Engine
+                    </h1>
+                    <p className="text-gray-400 text-base">The centralized Text-to-Speech engine, anchored to the Media Vault.</p>
+                </div>
+
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <div className={`p-2 bg-gray-800/50 border rounded-full cursor-pointer transition-all duration-500 ${isAllSystemsOK ? 'border-green-500' : 'border-yellow-500'}`}>
+                            <div className="relative w-40 h-10 bg-gray-900 rounded-full flex items-center justify-center p-2">
+                                <div className="absolute top-1 right-1 flex items-center gap-1">
+                                    <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isAllSystemsOK ? 'bg-green-500' : 'bg-yellow-500'}`} title="Live & Verified"></div>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse [animation-delay:0.5s]" title="Auditing"></div>
+                                </div>
+                                <div className="flex items-center -space-x-3">
+                                    {systemProcesses.map((process) => {
+                                        const isOk = process.status === 'ok';
+                                        return (
+                                            <div key={process.id} className={`p-1.5 bg-gray-700 rounded-full border-2 border-gray-800/80 transition-all duration-300`}>
+                                                <process.icon className={`w-4 h-4 ${isOk ? 'text-green-500' : 'text-yellow-500'}`} />
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-gray-900 border-gray-700 text-white">
+                        <p className="font-bold">System Status: Live & Verified</p>
+                        <p className="text-xs text-gray-400">All systems are communicating and self-healing.</p>
+                    </TooltipContent>
+                </Tooltip>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mt-8">
+                
+                <Card className="shadow-lg h-full lg:col-span-1 bg-gray-800/50 border-gray-700">
+                    <CardHeader>
+                        <CardTitle className="text-gray-100 text-2xl">Core Interaction Panel</CardTitle>
+                        <CardDescription className="text-gray-400">Enter text or use the microphone to create a secure, high-fidelity voice print.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Textarea 
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                            placeholder="Enter text here or use the microphone..."
+                            className="bg-gray-900 min-h-[200px] text-base border-gray-600 focus-visible:ring-indigo-500 text-white"
+                        />
+                        <div className="flex gap-2">
+                             <Button onClick={handleListenToggle} variant="outline" className={cn("h-14 text-lg border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white", isListening ? 'bg-red-900/50 text-red-400 border-red-700' : 'bg-gray-700/50')}>
+                                <Mic className="mr-2 h-5 w-5" />
+                                {isListening ? 'Listening...' : 'Listen'}
+                            </Button>
+                            <Button onClick={() => handleGenerateSpeech()} disabled={engineStatus === 'GENERATING' || isListening} className="w-full h-14 text-lg bg-indigo-600 hover:bg-indigo-700">
+                                {engineStatus === 'GENERATING' ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Generating...</> : 'Generate & Speak'}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <div className="lg:col-span-1 flex flex-col space-y-6">
+                     <Card className="shadow-md bg-gray-800/50 border-gray-700">
+                        <CardHeader>
+                            <CardTitle className="text-gray-100 text-xl flex items-center gap-2"><Settings /> Voice Configuration</CardTitle>
+                             <CardDescription className="text-gray-400">Select an age-appropriate voice for the AI persona.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                             <div className="flex gap-2 p-1 bg-gray-900 rounded-lg">
+                                <button onClick={() => setSimulatedRole('adult')} className={cn('flex-1 py-1 rounded text-sm font-bold', simulatedRole === 'adult' ? 'bg-indigo-600 text-white' : 'text-gray-400')}>Adult Voices</button>
+                                <button onClick={() => setSimulatedRole('kid')} className={cn('flex-1 py-1 rounded text-sm font-bold', simulatedRole === 'kid' ? 'bg-pink-600 text-white' : 'text-gray-400')}>Kid Voices</button>
+                             </div>
+                             {availableVoices.map(voice => (
+                                 <VoiceOption key={voice.id} voiceId={voice.id} voiceName={voice.name} currentVoice={speakConfig.voice} setConfig={setSpeakConfig} onTest={handleTestVoice} />
+                             ))}
+                        </CardContent>
+                    </Card>
+                </div>
+                
+                <div className="lg:col-span-1">
+                    <Card className="shadow-md bg-gray-800/50 border-gray-700 h-full">
+                         <CardHeader>
+                            <CardTitle className="text-gray-100 text-xl flex items-center gap-2"><HardDrive /> AI & Family Journal</CardTitle>
+                            <CardDescription className="text-gray-400">A transparent log of all system and user interactions.</CardDescription>
+                        </CardHeader>
+                         <CardContent>
+                            <Tabs defaultValue="user" className="w-full">
+                                <TabsList className="grid w-full grid-cols-3 bg-gray-900">
+                                    <TabsTrigger value="user"><User className="w-4 h-4 mr-2" /> My Notes</TabsTrigger>
+                                    <TabsTrigger value="family"><Users className="w-4 h-4 mr-2" /> Family Log</TabsTrigger>
+                                    <TabsTrigger value="pebble"><Bot className="w-4 h-4 mr-2" /> Pebble Log</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="user" className="mt-4 bg-gray-900/50 p-4 rounded-b-lg min-h-[250px]">
+                                     {isLoadingNotes ? <div className="text-center text-gray-500 p-4"><Loader2 className="animate-spin w-6 h-6 mx-auto"/></div> : (savedNotes && savedNotes.length > 0) ? (
+                                        savedNotes.map((note: any) => (
+                                            <div key={note.id} className="bg-gray-800 p-2 rounded text-sm text-gray-300 italic mb-2">"{note.text}"</div>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-gray-500 text-center py-4">No personal notes saved yet.</p>
+                                    )}
+                                     <Button variant="secondary" className="w-full mt-4 border-gray-600" onClick={saveCurrentNote}>
+                                        <Save className="mr-2 h-4 w-4" /> Save Current Text
+                                    </Button>
+                                </TabsContent>
+                                <TabsContent value="family" className="mt-4 bg-gray-900/50 p-4 rounded-b-lg min-h-[250px]">
+                                    {familyLog.map(log => (
+                                        <div key={log.id} className="bg-gray-800 p-2 rounded text-sm text-gray-300 mb-2">
+                                            <span className="font-bold text-cyan-400">[{log.timestamp}]</span> {log.text}
+                                        </div>
+                                    ))}
+                                </TabsContent>
+                                <TabsContent value="pebble" className="mt-4 bg-gray-900/50 p-4 rounded-b-lg min-h-[250px]">
+                                    {pebbleLog.map(log => (
+                                        <div key={log.id} className="bg-gray-800 p-2 rounded text-sm text-gray-300 mb-2 font-mono">
+                                            <span className="font-bold text-purple-400">[{log.timestamp}]</span> {log.text}
+                                        </div>
+                                    ))}
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        </>
+      </TooltipProvider>
+    );
+
+    const SettingsView = () => {
+        const familySettingsApps = [
+            { href: '/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/shared-calendar', icon: Calendar, title: 'Shared Calendar', description: 'Family-wide event management.' },
+            { href: '/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/family-crm', icon: ClipboardList, title: 'Family CRM', description: 'Manage chores and responsibilities.' },
+            { href: '/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/ai-recommendations', icon: Sparkles, title: 'AI Recommendations', description: 'Get AI-powered activity suggestions.' },
+            { href: '/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/kids-social-zone', icon: MessageSquare, title: 'Kids Social Zone', description: 'View and moderate the kids social feed.' },
+        ];
+
+        return (
+            <>
+                <div className="text-center">
+                    <h1 className="text-4xl font-extrabold text-gray-100 flex items-center justify-center gap-3"><Settings className="w-8 h-8 text-indigo-400"/>Family Settings</h1>
+                    <p className="text-gray-400 mt-2 text-base">Manage this family's core configuration and permissions.</p>
+                </div>
+                <div className="mt-10 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {familySettingsApps.map(app => (
+                        <Link href={app.href} key={app.title}>
+                            <Card className="bg-gray-800/50 border-gray-700 hover:bg-gray-700/60 hover:border-indigo-500/50 transition-all h-full">
+                                <CardHeader>
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-3 bg-indigo-900/50 rounded-xl text-indigo-400">
+                                            <app.icon className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">{app.title}</CardTitle>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-sm text-gray-400">{app.description}</p>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    ))}
+                </div>
+
+                <div className="mt-16 max-w-4xl mx-auto">
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-3">
+                            <KeyRound className="size-6 text-cyan-500" />
+                            <h3 className="font-black uppercase text-sm tracking-widest text-cyan-300">Core Service Tokens</h3>
+                        </div>
+                        <p className="text-sm text-slate-400 -mt-4">
+                           These tokens represent the family's unified access keys to the Sovereign OS services, provisioned upon successful registration.
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <TokenItem icon={Radio} label="Live Studio" idFormat="[FAM]-[USR]" />
+                            <TokenItem icon={FolderKanban} label="Media Vault" idFormat="[FAM]-ID" />
+                            <TokenItem icon={Anchor} label="Home Anchor" idFormat="[FAM]-[DEV]" />
+                            <TokenItem icon={Phone} label="Sovereign Comms" idFormat="[FAM]-ID" />
+                        </div>
+                    </div>
+                </div>
+
+            </>
+        );
+    };
+
+    return (
+        <div className="min-h-screen w-full bg-gray-900 text-gray-100 p-4 sm:p-6 font-sans">
+            <audio ref={audioPlayerRef} src={audioData || undefined} onPlay={() => setEngineStatus('SPEAKING')} onEnded={() => setEngineStatus('IDLE')} onError={() => setEngineStatus('ERROR')} />
+            
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={view}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-8"
+                >
+                    {view === 'engine' ? <EngineView /> : <SettingsView />}
+                </motion.div>
+            </AnimatePresence>
+            <FamilyRegistryModal />
+            <QRShareModal />
+
+        </div>
+    );
+}
