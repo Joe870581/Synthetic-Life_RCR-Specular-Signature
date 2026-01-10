@@ -1,0 +1,146 @@
+
+'use client';
+
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { usePowerEnforcementEngine, EnforcementState } from '@/lib/power-engine';
+import { useFirebase } from '@/firebase';
+import { Power, Thermometer, BatteryCharging, Shield, Activity, Zap, Loader2 } from 'lucide-react';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+const StatusCard = ({ title, value, icon: Icon, colorClass, pulse = false }) => (
+    <div className={`p-6 rounded-2xl border ${colorClass} bg-gradient-to-br from-white/10 to-transparent`}>
+        <div className="flex items-center gap-3 mb-2">
+            <Icon className="w-5 h-5" />
+            <h3 className="font-bold text-sm uppercase tracking-wider">{title}</h3>
+        </div>
+        <p className={cn("text-4xl font-black", pulse && 'animate-pulse')}>{value}</p>
+    </div>
+);
+
+// This is our new ESP32 hardware simulator hook
+const useHardwareSimulator = (pairCode: string) => {
+    const { firestore } = useFirebase();
+    const [isSimulating, setIsSimulating] = useState(false);
+
+    const writeToFirebase = useCallback(async (data) => {
+        if (!firestore || !pairCode) return;
+        const docRef = doc(firestore, 'pairCodes', pairCode);
+        try {
+            await setDoc(docRef, { ...data, lastUpdate: serverTimestamp() }, { merge: true });
+        } catch (e) {
+            console.error("Simulator Firebase write error:", e);
+        }
+    }, [firestore, pairCode]);
+    
+    useEffect(() => {
+        if (!isSimulating) return;
+
+        let freq = 100;
+        const PEAK_FREQ_SIM = 12500;
+        const PEAK_AMPLITUDE = 95;
+
+        const simInterval = setInterval(() => {
+            freq += 250;
+            const distanceToPeak = Math.abs(freq - PEAK_FREQ_SIM);
+            const amplitude = Math.max(10, PEAK_AMPLITUDE - (distanceToPeak / 100));
+
+            let safetyStatus = 'NORMAL';
+            const random = Math.random();
+            if (random > 0.98) safetyStatus = 'OVERHEAT_CRITICAL';
+            else if (random > 0.95) safetyStatus = 'FIELD_INTENSITY_HIGH';
+            
+            const status = freq >= PEAK_FREQ_SIM ? 'locked' : 'scanning';
+
+            writeToFirebase({
+                currentFreq: freq,
+                amplitude: amplitude,
+                peakFreq: PEAK_FREQ_SIM,
+                safetyStatus: safetyStatus,
+                status: status,
+                claimedBy: 'SIMULATED_USER'
+            });
+
+            if (freq >= 25000) freq = 100;
+
+        }, 100);
+
+        return () => clearInterval(simInterval);
+    }, [isSimulating, writeToFirebase]);
+
+    return { isSimulating, setIsSimulating };
+};
+
+
+export default function PowerDashboardPage() {
+    const { state, battery, thermal, chargeLimit, throttleTemp } = usePowerEnforcementEngine();
+    const { isSimulating, setIsSimulating } = useHardwareSimulator('PEBBLE1'); // Using a fixed code for demo
+
+    const stateConfig: Record<EnforcementState, { color: string; label: string; }> = {
+        'Charging': { color: 'border-green-500', label: 'CHARGING' },
+        'Idle': { color: 'border-slate-500', label: 'IDLE' },
+        'Veto (Limit)': { color: 'border-yellow-500', label: 'VETO: CHARGE LIMIT' },
+        'Veto (Thermal)': { color: 'border-red-500', label: 'VETO: THERMAL THROTTLE' },
+    };
+
+    const currentConfig = stateConfig[state];
+
+    return (
+        <div className="min-h-screen bg-slate-950 text-white p-8 font-sans">
+            <header className="text-center mb-12">
+                <h1 className="text-4xl font-black tracking-tighter flex items-center justify-center gap-3">
+                    <Shield className="text-indigo-400" />
+                    Power Enforcement Dashboard
+                </h1>
+                <p className="text-slate-400 mt-2">Live status of the Sovereign Power Guard & Hardware Simulator.</p>
+            </header>
+
+            <div className="max-w-4xl mx-auto space-y-8">
+                 <div className="p-6 bg-slate-900/50 border border-slate-800 rounded-2xl">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-3"><Zap className="text-cyan-400"/>ESP32 Hardware Simulator</h3>
+                    <p className="text-sm text-slate-400 mb-4">This panel acts as a virtual ESP32, writing live data to Firestore for the TV Spectrogram to visualize. Open the TV page to see the results in real-time.</p>
+                    <Button onClick={() => setIsSimulating(!isSimulating)} className={cn("w-full h-12 text-base", isSimulating ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500")}>
+                        {isSimulating ? <><Loader2 className="animate-spin mr-2"/> Stop Simulation</> : 'Start ESP32 Simulator'}
+                    </Button>
+                </div>
+
+                <div className={cn("p-8 rounded-3xl border-4 text-center transition-all duration-500", currentConfig.color)}>
+                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest">System State</h2>
+                    <p className="text-5xl font-black tracking-tighter mt-1">{currentConfig.label}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <StatusCard
+                        title="Battery Level"
+                        value={`${battery.percentage.toFixed(1)}%`}
+                        icon={BatteryCharging}
+                        colorClass="border-green-500/50"
+                        pulse={battery.charging}
+                    />
+                    <StatusCard
+                        title="Device Temperature"
+                        value={`${thermal.temperature.toFixed(1)}°C`}
+                        icon={Thermometer}
+                        colorClass={thermal.isThrottled ? "border-red-500/50" : "border-slate-600"}
+                        pulse={thermal.isThrottled}
+                    />
+                </div>
+
+                <div className="p-6 bg-slate-900/50 border border-slate-800 rounded-2xl">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-3"><Activity /> Policy Rules</h3>
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="bg-slate-800 p-4 rounded-xl">
+                            <p className="text-xs text-slate-400 font-bold uppercase">Charge Limit</p>
+                            <p className="text-2xl font-bold">{chargeLimit}%</p>
+                        </div>
+                         <div className="bg-slate-800 p-4 rounded-xl">
+                            <p className="text-xs text-slate-400 font-bold uppercase">Thermal Throttle</p>
+                            <p className="text-2xl font-bold">{throttleTemp}°C</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
