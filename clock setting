@@ -1,0 +1,464 @@
+
+'use client';
+
+import React, { useState, useEffect, useRef, useMemo, Suspense, useContext, useCallback } from 'react';
+import { 
+  User, Shield, Bell, CheckCircle, Hand, Sun, Sunset, Moon, Star, Mic, Zap, BrainCircuit,
+  Landmark, Anchor, Map, Activity, Settings, Briefcase, MessageSquare,
+  FolderKanban, Power as PowerIcon, CreditCard, FileText, Satellite, BookOpen, Baby, BatteryCharging, PowerOff,
+  Eye as EyeIcon, EyeOff as EyeOffIcon, Mail, Wifi, Film, LayoutGrid, X, Users as UsersIcon, History,
+  ArrowLeft, Phone, Nfc, Banknote, ShieldCheck, Gamepad2, Radio, Video, Music, Palette, Disc, Tv,
+  ArrowRight, RotateCw, GitBranch, Cloud, Binary, XCircle, CheckCircle2, AlertTriangle, KeyRound, DollarSign, Wallet,
+  Cpu, SlidersHorizontal, Volume2, Bot, Info, Lock, Unlock, Loader2, Send
+} from 'lucide-react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
+import { useSearchParams } from 'next/navigation';
+import { FamilyDataProvider, type AuditLog, type FamilyMember, useFamilyData } from '@/contexts/FamilyDataContext';
+import { usePowerEnforcementEngine } from '@/lib/power-engine';
+import { toggleReverseCharging } from '@/lib/capacitor-bridge';
+import { addToSpeechQueue } from '@/lib/speechQueue';
+import GuardianSettingsPanel from '@/components/GuardianSettingsPanel';
+import { useGuardianHeartbeat } from '@/hooks/useGuardianHeartbeat';
+import { motion, AnimatePresence, useAnimationFrame } from 'framer-motion';
+
+// --- Utility for classnames ---
+const cn = (...classes: string[]) => classes.filter(Boolean).join(' ');
+
+// --- Live Audit Background Component ---
+const LiveAuditBackground = ({ events }: { events: AuditLog[] }) => {
+    return (
+        <div className="absolute inset-0 z-0 overflow-hidden">
+             <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/20 via-black to-slate-950/20" />
+             <div className="absolute inset-0 columns-2 md:columns-3 lg:columns-4 gap-4 [mask-image:radial-gradient(ellipse_at_center,rgba(0,0,0,0.4)_0%,transparent_70%)] opacity-30">
+                {events.map((e, i) => (
+                    <motion.p 
+                        key={e.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.1, duration: 0.5 }}
+                        className="font-mono text-xs text-slate-700/80 break-inside-avoid-column"
+                    >
+                       <span className="text-indigo-700/80">{e.timestamp.toLocaleTimeString()}:</span> {e.detail}
+                    </motion.p>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
+// --- Particle Component (Memoized for performance) ---
+const Particle = React.memo(({ index, time, color }) => {
+  const angle = (index / 40) * Math.PI * 2 + time / 20;
+  const radius = 100 + Math.sin(time + index) * 20;
+  const x = Math.cos(angle) * radius;
+  const y = Math.sin(angle) * radius;
+  
+  return (
+    <div 
+      className={cn("absolute w-1 h-1 rounded-full", color)} 
+      style={{ 
+        transform: `translate(${x}px, ${y}px)`,
+        willChange: 'transform'
+      }} 
+    />
+  );
+});
+Particle.displayName = 'Particle';
+
+
+// --- Member Ring Component (Memoized for performance) ---
+const MemberRing = React.memo(({ member, index, time }: { member: any; index: number, time: number }) => {
+  const size = 180 + index * 24;
+  const rotation = time * (5 - index * 0.5);
+
+  return (
+    <div
+      className={cn('absolute rounded-full border-2', member.type === 'parent' ? 'border-cyan-400' : 'border-purple-400')}
+      style={{ 
+        width: size, 
+        height: size, 
+        opacity: 0.3,
+        transform: `rotate(${rotation}deg)`,
+        willChange: 'transform'
+      }}
+    />
+  );
+});
+MemberRing.displayName = 'MemberRing';
+
+
+// --- REFACTORED HOLOGRAPHIC UI COMPONENTS ---
+const NavNode = ({ icon: Icon, color, onClick, isActive, label }) => {
+  const colorClasses = {
+    blue: 'border-blue-500/50 text-blue-400',
+    red: 'border-red-500/50 text-red-400',
+    purple: 'border-purple-500/50 text-purple-400',
+    orange: 'border-orange-500/50 text-orange-400',
+    yellow: 'border-yellow-500/50 text-yellow-400',
+    slate: 'border-slate-500/50 text-slate-400',
+    green: 'border-green-500/50 text-green-400'
+  };
+  return (
+    <motion.button 
+      onClick={onClick}
+      className={`relative w-20 h-20 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-2 ${isActive ? `${colorClasses[color]} bg-black/20 shadow-2xl shadow-black` : 'bg-black/50 border-white/10 hover:border-white/30'}`}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.9 }}
+    >
+      <Icon size={32} />
+      <span className="text-[10px] uppercase font-bold tracking-widest mt-1">{label}</span>
+    </motion.button>
+  );
+};
+
+const PanelContainer = ({ children, onClose, isOpen }) => (
+  <AnimatePresence>
+    {isOpen && (
+      <motion.div
+        initial={{ y: 50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 50, opacity: 0 }}
+        className="absolute bottom-40 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl"
+      >
+        <div className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl relative max-h-[60vh] flex flex-col">
+          <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white p-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors z-20"><X size={16} /></button>
+          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            {children}
+          </div>
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+const FamilyTreePanel = ({ members, sessionId, onMemberClick }) => (
+    <div className="space-y-4">
+        <h3 className="font-black text-white text-lg">Family Tree</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {Object.values(members).map((member: any) => (
+                 <div key={member.id} onClick={() => onMemberClick(member)} className="p-3 bg-slate-800/50 rounded-2xl text-center cursor-pointer hover:bg-slate-700/50">
+                    {member.imageUrl ? (
+                        <Image src={member.imageUrl} alt={member.name} width={64} height={64} className="w-16 h-16 rounded-full mx-auto border-2 border-blue-400" />
+                    ) : (
+                        <div className="w-16 h-16 rounded-full mx-auto border-2 border-blue-400 bg-slate-700 flex items-center justify-center">
+                            <User size={32} />
+                        </div>
+                    )}
+                    <p className="mt-2 text-sm font-bold text-slate-200">{member.name}</p>
+                 </div>
+            ))}
+        </div>
+    </div>
+);
+
+const PowerCorePanel = ({ battery, powerState, onToggleCharge, isCharging }) => (
+     <div className="space-y-4">
+        <h3 className="font-black text-white text-lg text-red-400">Power Core</h3>
+        <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl">
+            <div className="flex items-center gap-2 text-4xl font-black">
+                <BatteryCharging className={`w-8 h-8 ${battery.charging ? 'text-green-400 animate-pulse' : 'text-slate-600'}`}/>
+                {battery.percentage.toFixed(0)}<span className="text-2xl opacity-50">%</span>
+            </div>
+            <div className="text-right">
+                <p className="text-xs font-bold text-slate-400 uppercase">{powerState}</p>
+                <p className="text-sm font-semibold">{battery.temperature.toFixed(1)}°C</p>
+            </div>
+        </div>
+        <button onClick={onToggleCharge} className={`w-full py-3 text-sm font-bold rounded-lg transition-colors ${isCharging ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500'}`}>
+            {isCharging ? 'Disengage Charging' : 'Force Reverse Charge'}
+        </button>
+    </div>
+);
+
+const EconomyPanel = ({ onVaultClick }) => {
+    const { familyState } = useFamilyData();
+    const familySpikePoints = useMemo(() => Object.values(familyState.members).reduce((sum, m: any) => sum + (m.spikePoints || 0), 0), [familyState.members]);
+    const familySOVBalance = useMemo(() => Object.values(familyState.members).reduce((sum, m: any) => sum + (m.spdBalance || 0), 0), [familyState.members]);
+    
+    return (
+        <div className="space-y-4">
+            <h3 className="font-black text-white text-lg text-purple-400">Economic Engine</h3>
+            <div className="grid grid-cols-2 gap-4">
+                 <div className="text-center p-4 bg-slate-800/50 rounded-xl">
+                    <p className="text-xs font-bold text-slate-400">SOV$ Balance</p>
+                    <p className="text-2xl font-black text-white">§{familySOVBalance.toFixed(2)}</p>
+                 </div>
+                 <div className="text-center p-4 bg-slate-800/50 rounded-xl">
+                    <p className="text-xs font-bold text-slate-400">Spike Points</p>
+                    <p className="text-2xl font-black text-purple-400">{familySpikePoints.toLocaleString()}</p>
+                 </div>
+            </div>
+             <button onClick={onVaultClick} className="w-full text-xs font-bold bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 rounded-lg py-2">
+                Open Family Vault
+             </button>
+        </div>
+    );
+};
+
+const IgnitionPanel = ({ sessionId }) => (
+    <div className="h-[55vh]">
+        <iframe src={`/admin/dashboard/ignition-dashboard?sessionId=${sessionId}`} className="w-full h-full border-none rounded-xl" title="Ignition Dashboard" />
+    </div>
+);
+
+const MemberDetailModal = ({ member, onClose }) => {
+    if (!member) return null;
+    return (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
+            <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                onClick={(e) => e.stopPropagation()} 
+                className="w-full max-w-sm bg-slate-900 border border-purple-500/50 rounded-3xl p-6 text-center shadow-2xl"
+            >
+                 <div className="w-24 h-24 rounded-full mx-auto border-4 border-slate-700 -mt-16 mb-4 overflow-hidden bg-slate-800 flex items-center justify-center">
+                    {member.imageUrl ? (
+                        <Image src={member.imageUrl} alt={member.name} width={96} height={96} className="w-full h-full object-cover" />
+                    ) : (
+                        <User size={48} className="text-purple-400" />
+                    )}
+                </div>
+                <h3 className="text-xl font-bold text-white">{member.name}</h3>
+                <p className="text-purple-400 text-sm">{member.role}</p>
+                <div className="space-y-2 mt-4 text-left font-mono text-xs text-slate-400">
+                   <p><CreditCard size={14} className="inline mr-2"/>**** **** **** 4242</p>
+                   <p><Phone size={14} className="inline mr-2"/>{member.sovereignPhone || 'N/A'}</p>
+                   <p><Zap size={14} className="inline mr-2"/> Social Score: 850</p>
+                </div>
+                 <button onClick={onClose} className="mt-6 w-full py-2 bg-slate-700/50 rounded-lg text-sm font-bold hover:bg-slate-700">Close</button>
+            </motion.div>
+        </div>
+    );
+};
+
+const JournalPanel = ({ events }) => (
+    <div className="space-y-4">
+        <h3 className="font-black text-white text-lg text-slate-400">Audit Journal</h3>
+        <div className="max-h-[45vh] overflow-y-auto space-y-2 custom-scrollbar pr-2">
+            {events.map((e, i) => (
+                <p key={e.id || i} className="font-mono text-xs text-slate-500/80">
+                    <span className="text-indigo-700/80">{e.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}:</span> {e.detail}
+                </p>
+            ))}
+        </div>
+    </div>
+);
+
+const TrueOathPanel = () => {
+    const services = [
+        { name: 'Netflix', icon: Film, color: 'text-red-500' },
+        { name: 'Spotify', icon: Music, color: 'text-green-500' },
+        { name: 'Prime Video', icon: Video, color: 'text-blue-400' },
+        { name: 'Apple Music', icon: Music, color: 'text-pink-500' },
+        { name: 'RBC', icon: Landmark, color: 'text-yellow-400' },
+        { name: 'TD', icon: Landmark, color: 'text-green-400' },
+        { name: 'Scotiabank', icon: Landmark, color: 'text-red-600' },
+        { name: 'Xbox', icon: Gamepad2, color: 'text-green-400' },
+        { name: 'PlayStation', icon: Gamepad2, color: 'text-blue-500' },
+        { name: 'Steam', icon: Gamepad2, color: 'text-slate-400' },
+    ];
+    return (
+        <div className="space-y-4">
+            <h3 className="font-black text-white text-lg text-yellow-400">TrueOath Handshake</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {services.map(s => (
+                    <button key={s.name} className="p-3 bg-slate-800/50 rounded-xl flex items-center gap-3 hover:bg-slate-700/50">
+                        <s.icon size={16} className={s.color} />
+                        <span className="text-xs font-bold text-slate-300">{s.name}</span>
+                    </button>
+                ))}
+            </div>
+            <Link href="/admin/dashboard/system-settings/sovereign-internet" className="block">
+                 <Button variant="outline" className="w-full mt-4">Manage All Connections</Button>
+            </Link>
+        </div>
+    );
+};
+
+const VaultPanel = ({ members }) => (
+    <div className="space-y-6">
+        <h3 className="font-black text-white text-lg text-purple-400">Family Vault</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            {Object.values(members).filter((m: any) => m.name !== 'Awaiting User...').map((member: any) => (
+                <div key={member.id} className="p-4 bg-slate-800/50 rounded-2xl border border-purple-500/20">
+                    <p className="font-bold text-purple-300 text-sm">{member.name}</p>
+                    <div className="mt-4 space-y-2">
+                        <div className="p-2 bg-black/30 rounded-lg font-mono text-xs flex items-center gap-2"><CreditCard size={14} /><span>**** **** **** 4242</span></div>
+                        <div className="p-2 bg-black/30 rounded-lg font-mono text-xs flex items-center gap-2"><Phone size={14} /><span>{member.sovereignPhone || 'N/A'}</span></div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+
+// --- Guardian Clock Component ---
+const AppContent = () => {
+  const { familyState, isLoaded } = useFamilyData();
+  const { members, auditLogs: memoryEvents } = familyState;
+  const { state: powerState, battery } = usePowerEnforcementEngine();
+  const [isCharging, setIsCharging] = useState(battery.charging);
+  
+  const [activePanel, setActivePanel] = useState(null);
+  const [showMemberDetail, setShowMemberDetail] = useState(null);
+
+  const [guardianState, setGuardianState] = useState('Calm');
+  const [rhythm, setRhythm] = useState('Daytime');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+
+  const familyMembers = useMemo(() => Object.values(members || {}), [members]);
+
+  const [aiSettings, setAiSettings] = useState({
+      isEnabled: true,
+      cooldown: 15000,
+      quietHours: { enabled: true, start: 22, end: 8 },
+      selectedVoice: 'Puck',
+  });
+  
+  const handleUpdateAISettings = useCallback((key, value) => {
+    setAiSettings(prev => ({...prev, [key]: value}));
+  }, []);
+
+  useGuardianHeartbeat({
+      proactiveEnabled: aiSettings.isEnabled,
+      intervalMs: aiSettings.cooldown,
+      quietHours: aiSettings.quietHours,
+  });
+  
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  const timeRef = useRef(0);
+  useAnimationFrame((t) => {
+    timeRef.current = t / 1000;
+  });
+
+  const currentGuardianStyle = useMemo(() => ({
+    Calm: { color: 'border-green-500', shadow: 'shadow-green-500/20', icon: <CheckCircle className="text-green-400" />, text: 'Systems Nominal', particleColor: 'bg-green-500' },
+    Attention: { color: 'border-yellow-500', shadow: 'shadow-yellow-500/20', icon: <Bell className="text-yellow-400" />, text: 'Attention Required', particleColor: 'bg-yellow-500' },
+    Protection: { color: 'border-red-500', shadow: 'shadow-red-500/20', icon: <Shield className="text-red-400" />, text: 'Protection Mode Active', particleColor: 'bg-red-500' },
+  }[guardianState]), [guardianState]);
+
+  const rhythmConfig = {
+    Daytime: { icon: <Sun size={14} />, label: 'Daytime Active' },
+    Evening: { icon: <Sunset size={14} />, label: 'Evening Wind-down' },
+  };
+
+  const handleToggleCharge = async () => {
+      try {
+        const newState = await toggleReverseCharging(!isCharging);
+        setIsCharging(newState);
+        addToSpeechQueue(newState ? "Reverse charging engaged." : "Power transfer disengaged.", { voice: aiSettings.selectedVoice });
+      } catch(e) {
+        console.error("Charge toggle failed:", e);
+      }
+  };
+  
+  const handleNodeClick = (panelId) => {
+    setActivePanel(prev => prev === panelId ? null : panelId);
+  };
+  
+  if (!isLoaded) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="w-8 h-8 text-indigo-400 animate-spin" /></div>;
+  if (!familyMembers) return <div>Loading...</div>;
+
+  return (
+    <div className="min-h-screen bg-black text-white font-sans flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      <LiveAuditBackground events={memoryEvents} />
+      <audio ref={audioRef} />
+      
+      <AnimatePresence>
+        {showMemberDetail && <MemberDetailModal member={showMemberDetail} onClose={() => setShowMemberDetail(null)} />}
+      </AnimatePresence>
+      
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-8 w-full max-w-lg relative z-10">
+        
+        <div className="relative w-56 h-56 flex items-center justify-center" style={{cursor: 'pointer'}}>
+          {familyMembers.filter(m => m.name !== 'Awaiting User...').map((m, i) => <MemberRing key={m.id} member={m} index={i} time={timeRef.current} />)}
+          <motion.div
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="relative w-36 h-36 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 flex items-center justify-center shadow-inner"
+          >
+            <AnimatePresence mode="wait">
+                <motion.div key={guardianState} initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                  <Zap className="w-12 h-12 text-slate-600" />
+                </motion.div>
+            </AnimatePresence>
+          </motion.div>
+          {Array.from({ length: 40 }).map((_, idx) => (
+            <Particle key={idx} index={idx} time={timeRef.current} color={currentGuardianStyle.particleColor} />
+          ))}
+        </div>
+
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center gap-4">
+            <div className={cn('flex items-center gap-2 px-4 py-2 rounded-xl border', currentGuardianStyle.color, currentGuardianStyle.shadow)}>
+              {currentGuardianStyle.icon}<span className="text-sm font-bold">{currentGuardianStyle.text}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-sm">
+              {rhythmConfig.Daytime.icon}<span className="font-bold">{rhythmConfig.Daytime.label}</span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      <PanelContainer isOpen={activePanel === 'family'} onClose={() => setActivePanel(null)}>
+        <FamilyTreePanel members={members} sessionId={sessionId} onMemberClick={setShowMemberDetail} />
+      </PanelContainer>
+      <PanelContainer isOpen={activePanel === 'power'} onClose={() => setActivePanel(null)}>
+        <PowerCorePanel battery={battery} powerState={powerState} onToggleCharge={handleToggleCharge} isCharging={isCharging}/>
+      </PanelContainer>
+      <PanelContainer isOpen={activePanel === 'economy'} onClose={() => setActivePanel(null)}>
+        <EconomyPanel onVaultClick={() => handleNodeClick('vault')} />
+      </PanelContainer>
+      <PanelContainer isOpen={activePanel === 'ignition'} onClose={() => setActivePanel(null)}>
+        <IgnitionPanel sessionId={sessionId} />
+      </PanelContainer>
+      <PanelContainer isOpen={activePanel === 'journal'} onClose={() => setActivePanel(null)}>
+        <JournalPanel events={memoryEvents} />
+      </PanelContainer>
+       <PanelContainer isOpen={activePanel === 'trueoath'} onClose={() => setActivePanel(null)}>
+        <TrueOathPanel />
+      </PanelContainer>
+      <PanelContainer isOpen={activePanel === 'vault'} onClose={() => setActivePanel(null)}>
+        <VaultPanel members={members} />
+      </PanelContainer>
+      <PanelContainer isOpen={activePanel === 'guardian'} onClose={() => setActivePanel(null)}>
+        <GuardianSettingsPanel settings={aiSettings} onUpdate={handleUpdateAISettings} />
+      </PanelContainer>
+      
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-end gap-6">
+        <NavNode icon={UsersIcon} color="blue" label="Family" isActive={activePanel === 'family'} onClick={() => handleNodeClick('family')} />
+        <NavNode icon={PowerIcon} color="red" label="Power" isActive={activePanel === 'power'} onClick={() => handleNodeClick('power')} />
+        <NavNode icon={Landmark} color="purple" label="Vault" isActive={activePanel === 'vault'} onClick={() => handleNodeClick('vault')} />
+        <NavNode icon={Zap} color="orange" label="Ignition" isActive={activePanel === 'ignition'} onClick={() => handleNodeClick('ignition')} />
+        <NavNode icon={History} color="slate" label="Journal" isActive={activePanel === 'journal'} onClick={() => handleNodeClick('journal')} />
+        <NavNode icon={ShieldCheck} color="yellow" label="TrueOath" isActive={activePanel === 'trueoath'} onClick={() => handleNodeClick('trueoath')}/>
+        <NavNode icon={Bot} color="green" label="Guardian" isActive={activePanel === 'guardian'} onClick={() => handleNodeClick('guardian')}/>
+      </div>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+      `}</style>
+    </div>
+  );
+}
+
+
+const App = () => (
+  <Suspense fallback={<div className="bg-black text-white h-screen w-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+    <FamilyDataProvider>
+        <AppContent />
+    </FamilyDataProvider>
+  </Suspense>
+);
+
+export default App;
