@@ -1,0 +1,329 @@
+
+'use client';
+
+import React, { useState, useEffect, useRef, useMemo, Suspense, useContext } from 'react';
+import { 
+  Shield, Zap, X, Search, User, Plus, Heart, 
+  Calendar as CalendarIcon, Edit3, 
+  Phone, MessageSquare, LayoutGrid, CloudSun, MapPin, 
+  Users, AppWindow, Mic, Send, Activity, BrainCircuit,
+  Terminal, Sparkles, Globe, Fingerprint, ArrowLeft, RotateCw, Cpu, Clock, HardHat,
+  Briefcase, Landmark, Wallet, Video, Music, Radio, Palette, FileText, Sheet, Calculator, Camera,
+  Star, HeartPulse, Share2, PowerOff, Eye as EyeIcon, Power as PowerIcon, EyeOff as EyeOffIcon, GraduationCap,
+  Upload, Save, Folder
+} from 'lucide-react';
+import Image from 'next/image';
+import { intelligentSpeak } from '@/ai/flows/tts-flow';
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/hooks/use-toast';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider, type SpeakConfig, useFamilyData, type Device } from '@/contexts/FamilyDataContext';
+import { Button } from '@/components/ui/button';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Calendar } from '@/components/ui/calendar';
+import { ToastProvider } from '@/components/ui/toast-provider';
+import CalendarView from '@/components/calendar/calendar-view';
+import { users, calendarEvents } from '@/lib/mock-data';
+
+const AppContent = () => {
+  const searchParams = useSearchParams();
+  const userId = searchParams.get('userId');
+  const { familyState, isLoaded } = useFamilyData();
+  const familyMembers = useMemo(() => familyState.members ? Object.values(familyState.members) : [], [familyState.members]);
+
+  const router = useRouter();
+
+  const { toast } = useToast();
+  
+  const activeUser = useMemo(() => {
+    if (!isLoaded || !familyMembers || familyMembers.length === 0) return null;
+    return familyMembers.find(m => m.id === userId) || familyMembers.find(m => m.type === 'parent');
+  }, [userId, familyMembers, isLoaded]);
+  
+  // --- UI & Navigation State ---
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isTutorApproved, setIsTutorApproved] = useState(false);
+  const [isSavedVideoModalOpen, setIsSavedVideoModalOpen] = useState(false);
+  const [isUploadVideoModalOpen, setIsUploadVideoModalOpen] = useState(false);
+  
+  const [tutorProfile, setTutorProfile] = useState({
+      name: 'Awaiting User',
+      title: 'Math & Science Tutor',
+      subjects: ['Algebra', 'Calculus', 'Physics', 'Chemistry'],
+      bio: 'Passionate about making complex subjects understandable and fun. 10+ years of experience.',
+      profileImage: null
+  });
+
+  const handleProfileChange = (field, value) => {
+      setTutorProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfileImageUpload = (e) => {
+      const file = e.target.files[0];
+      if(file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+              handleProfileChange('profileImage', event.target.result);
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  useEffect(() => {
+    if (activeUser) {
+        setTutorProfile(prev => ({
+            ...prev,
+            name: activeUser.name,
+            profileImage: activeUser.imageUrl
+        }));
+    }
+  }, [activeUser]);
+
+  if (!isLoaded) {
+    return <div className="h-screen w-screen bg-[#020202] text-white flex items-center justify-center">Loading User Profile...</div>;
+  }
+  
+  if (!activeUser) {
+    return <div className="h-screen w-screen bg-[#020202] text-white flex items-center justify-center">User not found. Please check the URL.</div>;
+  }
+
+  const NavItem = ({ id, icon: Icon, label }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl w-full text-left transition-all ${
+        activeTab === id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800'
+      }`}
+    >
+      <Icon size={20} />
+      <span className="font-semibold text-sm">{label}</span>
+    </button>
+  );
+
+  const DashboardView = () => (
+    <div className="space-y-6">
+      <h2 className="text-3xl font-black text-white">Creator Dashboard</h2>
+      {isTutorApproved ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 text-center">
+            <p className="text-xs text-slate-400 font-bold uppercase">Social Score</p>
+            <p className="text-5xl font-extrabold text-green-400">850</p>
+          </div>
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 text-center">
+            <p className="text-xs text-slate-400 font-bold uppercase">Total Sessions</p>
+            <p className="text-5xl font-extrabold">12</p>
+          </div>
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 text-center">
+            <p className="text-xs text-slate-400 font-bold uppercase">Earnings (SOV$)</p>
+            <p className="text-5xl font-extrabold text-yellow-400">450.75</p>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 p-8 rounded-2xl text-center">
+          <h3 className="text-xl font-bold text-yellow-300">Become a Verified Tutor</h3>
+          <p className="text-yellow-400/80 mt-2 mb-4">Apply to our creator program to start hosting live classes and earning rewards.</p>
+          <Button onClick={() => { setIsTutorApproved(true); toast({ title: "Application Submitted!"}) }} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold">
+            Submit Application
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  const ScheduleView = () => (
+      <div>
+        <h2 className="text-3xl font-black text-white mb-4">My Tutor Schedule</h2>
+        <CalendarView
+            initialEvents={calendarEvents.filter(e => e.participants.includes(userId))}
+            users={users}
+            role="adult"
+        />
+    </div>
+  );
+  
+  const SubjectsView = () => (
+      <div>
+        <h2 className="text-3xl font-black text-white mb-4">My Subjects & Profile</h2>
+        <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 space-y-6">
+            <div className="flex items-center gap-6">
+                <div className="relative w-24 h-24 rounded-full bg-slate-700 flex-shrink-0">
+                    {tutorProfile.profileImage && <Image src={tutorProfile.profileImage} alt="Tutor" layout="fill" className="object-cover rounded-full" />}
+                    <label htmlFor="profile-upload" className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                        <Camera size={24} />
+                    </label>
+                    <input id="profile-upload" type="file" className="hidden" onChange={handleProfileImageUpload} />
+                </div>
+                <div className="flex-1 space-y-2">
+                     <input type="text" value={tutorProfile.name} onChange={(e) => handleProfileChange('name', e.target.value)} placeholder="Your Name" className="w-full bg-transparent text-2xl font-bold border-b border-slate-600 focus:outline-none focus:border-indigo-500" />
+                     <input type="text" value={tutorProfile.title} onChange={(e) => handleProfileChange('title', e.target.value)} placeholder="Your Title (e.g. Math Tutor)" className="w-full bg-transparent text-indigo-400 border-b border-slate-700 focus:outline-none focus:border-indigo-500" />
+                </div>
+            </div>
+            <div>
+                <label className="text-sm text-slate-400">Bio</label>
+                <textarea value={tutorProfile.bio} onChange={(e) => handleProfileChange('bio', e.target.value)} placeholder="Tell students about yourself..." className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 mt-1 h-24 resize-none" />
+            </div>
+             <div>
+                <label className="text-sm text-slate-400">Subjects (comma-separated)</label>
+                <input type="text" value={tutorProfile.subjects.join(', ')} onChange={(e) => handleProfileChange('subjects', e.target.value.split(',').map(s => s.trim()))} className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 mt-1" />
+            </div>
+            <Button onClick={() => toast({ title: "Profile Saved!" })}>Save Profile</Button>
+        </div>
+      </div>
+  );
+  
+  const VideoContentView = () => (
+       <div className="space-y-6">
+        <h2 className="text-3xl font-black text-white mb-4">Video Content Studio</h2>
+        <div className="h-[60vh] bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden flex flex-col items-center justify-center text-center p-8">
+            <div className="w-24 h-24 rounded-full bg-indigo-500/10 border-2 border-indigo-500/30 flex items-center justify-center mb-6">
+                <Video size={48} className="text-indigo-400"/>
+            </div>
+            <h3 className="text-xl font-bold">Launch Video Creator</h3>
+            <p className="text-slate-400 max-w-sm mx-auto mt-2 mb-6">Create promotional videos, lesson previews, or full educational content in the Sovereign Studio.</p>
+            <div className="flex gap-4">
+                <Button onClick={() => setIsSavedVideoModalOpen(true)} variant="outline">
+                    <Folder size={16} className="mr-2"/> View Saved Videos
+                </Button>
+                 <Button onClick={() => setIsUploadVideoModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-500">
+                    <Upload size={16} className="mr-2"/> Upload New Video
+                </Button>
+            </div>
+        </div>
+      </div>
+  );
+  
+  const LiveClassroomView = () => (
+      <div>
+        <h2 className="text-3xl font-black text-white mb-4">Live Classroom</h2>
+        <div className="aspect-video bg-black rounded-2xl border border-slate-700 flex flex-col items-center justify-center">
+            <div className="w-full h-full relative flex items-center justify-center">
+                <Camera size={64} className="text-slate-700"/>
+                <div className="absolute inset-0 bg-black/30" />
+                <div className="absolute top-4 left-4 text-xs font-bold bg-red-600 px-3 py-1 rounded-lg animate-pulse">OFF AIR</div>
+            </div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-4">
+             <Button size="lg" className="bg-green-600 hover:bg-green-500">Start Class</Button>
+             <Link href="/kids-app/my-school?userId=c2" passHref>
+                <Button size="lg" variant="outline" className="w-full">
+                    Go to My School App
+                </Button>
+             </Link>
+        </div>
+      </div>
+  );
+  
+  const SavedVideosModal = ({ isOpen, onClose }) => (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-2xl p-6">
+            <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold">Saved Videos</h3><button onClick={onClose}><X /></button></div>
+            <p className="text-sm text-slate-400 text-center py-10">Your saved video drafts would appear here.</p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const UploadVideoModal = ({ isOpen, onClose }) => (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl p-6">
+            <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold">Upload to Media Vault</h3><button onClick={onClose}><X /></button></div>
+            <div className="h-40 border-2 border-dashed border-slate-600 rounded-xl flex flex-col items-center justify-center text-slate-500">
+              <Upload size={32} />
+              <p className="mt-2 text-sm">Drag & drop your video file</p>
+            </div>
+            <Button className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500">Select File</Button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderView = () => {
+    switch(activeTab) {
+      case 'dashboard': return <DashboardView />;
+      case 'schedule': return <ScheduleView />;
+      case 'subjects': return <SubjectsView />;
+      case 'videos': return <VideoContentView />;
+      case 'live': return <LiveClassroomView />;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-64 bg-slate-950/50 border-r border-slate-800 p-6 flex-col hidden md:flex">
+        <div className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden">
+              {activeUser && activeUser.imageUrl && <Image src={activeUser.imageUrl} alt={activeUser.name} width={40} height={40} className="w-full h-full object-cover" />}
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-sm">{activeUser.name}</h3>
+              <p className="text-xs text-slate-400">Creator Account</p>
+            </div>
+        </div>
+        <nav className="space-y-2">
+            <NavItem id="dashboard" icon={LayoutGrid} label="Dashboard" />
+            <NavItem id="schedule" icon={CalendarIcon} label="My Schedule" />
+            <NavItem id="subjects" icon={GraduationCap} label="My Subjects" />
+            <NavItem id="videos" icon={Video} label="Video Content" />
+            <NavItem id="live" icon={Radio} label="Live Classroom" />
+        </nav>
+        <div className="mt-auto">
+            <Link href="/hire-a-tutor">
+                <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-red-400 hover:bg-red-500/10">
+                    Log Out
+                </Button>
+            </Link>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
+        <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              {renderView()}
+            </motion.div>
+        </AnimatePresence>
+      </main>
+
+      <SavedVideosModal isOpen={isSavedVideoModalOpen} onClose={() => setIsSavedVideoModalOpen(false)} />
+      <UploadVideoModal isOpen={isUploadVideoModalOpen} onClose={() => setIsUploadVideoModalOpen(false)} />
+    </div>
+  );
+};
+
+const AppWithProvider = (props) => (
+    <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading User Data...</div>}>
+      <ToastProvider>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+      </ToastProvider>
+    </Suspense>
+);
+
+export default function App() {
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap'); body { font-family: 'Inter', sans-serif; }`;
+        document.head.appendChild(style);
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
+
+    return <AppWithProvider />;
+}
+
+    
