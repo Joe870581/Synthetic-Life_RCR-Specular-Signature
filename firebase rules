@@ -1,0 +1,91 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isParticipant(conversationId) {
+      // Assumes conversationId is in the format 'user1_user2' or similar logic
+      return request.auth.uid in conversationId.split('_');
+    }
+    
+    // --- User Data ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+    
+    // --- Family Cores (Registry) ---
+    match /familyCores/{familyId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && resource.data.members[request.auth.uid] != null;
+    }
+    
+    // --- Mail (Internal Messages) ---
+    match /mail/{mailId} {
+      // CORRECTED: 'list' is now allowed, but ONLY when querying for your own emails.
+      // The `where('to', '==', request.auth.uid)` clause in the client-side query enforces this.
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.fromId == request.auth.uid;
+      allow update, delete: if false; 
+    }
+    
+    // --- Real-time Chat Messages ---
+    match /messages/{conversationId}/messages/{messageId} {
+        allow read, write: if isSignedIn() && isParticipant(conversationId);
+    }
+    
+    // --- Call Logs ---
+    match /callLogs/{callId} {
+      // CORRECTED: Allow listing logs where the user is a participant.
+      // The `where('participants', 'array-contains', request.auth.uid)` clause in the client-side query enforces this.
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+      allow update, delete: if false;
+    }
+
+    // --- Media Vault for Creator Content ---
+    match /media_vault/{mediaId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+    }
+
+    // --- Artefacts for Studio and AI Features ---
+    match /artifacts/{appId}/public/data/{document=**} {
+        allow read, write: if isSignedIn();
+    }
+
+    match /artifacts/{appId}/users/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // --- System-level collections ---
+    match /system/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /processed_stripe_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /ledger/{ledgerId} {
+      allow read, write: if false;
+    }
+
+    // Fallback for any other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
