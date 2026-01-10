@@ -1,0 +1,590 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { 
+  Shield, Activity, Database, Lock, Eye, Zap, 
+  Users, Terminal, Cpu, MessageSquare, Heart, 
+  Star, Globe, Radio, Mic, ScanFace, Satellite, 
+  Share2, ShieldCheck, Waves, Layout, Layers,
+  Compass, BellRing, Smartphone, Navigation,
+  Thermometer, ShieldAlert, AlertTriangle, History, ArrowLeft, User as UserIcon, Settings, X, Anchor,
+  ShoppingBag, Rocket, User, Palette, LayoutGrid, Camera, KeyRound, Text, Watch, CreditCard, PiggyBank, Edit,
+  PlusCircle, Laptop, Tv, Trash2
+} from 'lucide-react';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { 
+  getFirestore, collection, onSnapshot, doc, 
+  query, addDoc, serverTimestamp, deleteDoc, orderBy
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
+} from 'firebase/auth';
+import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+
+
+// --- Configuration ---
+const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+// --- Corrected Firebase Initialization ---
+let app;
+if (!getApps().length) {
+  try {
+      if (Object.keys(firebaseConfig).length > 0) {
+        app = initializeApp(firebaseConfig);
+      }
+  } catch (e) {
+    console.error("Firebase initialization failed:", e);
+  }
+} else {
+  app = getApp();
+}
+
+const db = app ? getFirestore(app) : null;
+const auth = app ? getAuth(app) : null;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'sovereign-audit-engine-v1';
+
+// --- Biometric Card Component ---
+const BiometricCard = ({ member, isActive }) => {
+  const isAdult = member.role === 'Guardian';
+  const stampText = isAdult ? 'Adult Certified' : 'Child Protected';
+  const stampColor = isAdult ? 'border-blue-400 text-blue-400' : 'border-pink-400 text-pink-400';
+
+  return (
+    <div className={cn(
+      "relative p-2 pr-4 bg-white/5 rounded-2xl border-2 flex items-center gap-3 transition-all",
+      isActive ? 'border-green-400/50 bg-green-900/20' : 'border-transparent'
+    )}>
+      {isActive && (
+          <div className="absolute top-2 left-2 flex items-center gap-2 px-2 py-1 bg-green-500/10 rounded-full text-[8px] font-black text-green-400 uppercase tracking-widest">
+            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+            Active Profile
+          </div>
+      )}
+       <div 
+        className="absolute top-2 right-2 px-2 py-0.5 border-2 rounded-full text-[8px] font-black tracking-widest uppercase"
+        style={{ transform: isAdult ? 'rotate(5deg)' : 'rotate(-5deg)' }}
+      >
+        <div className={stampColor}>{stampText}</div>
+      </div>
+      <div className="w-8 h-8 rounded-full bg-blue-900/40 flex items-center justify-center font-bold text-sm">
+        {member.name[0]}
+      </div>
+      <div className="flex-1">
+        <p className="font-bold text-xs">{member.name}</p>
+        <p className="text-[9px] text-gray-500 uppercase font-medium">{member.role}</p>
+      </div>
+      <div className="w-24">
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500" style={{ width: `${member.confidence}%` }} />
+          </div>
+          <span className="text-[10px] w-10 text-right font-mono">{member.confidence.toFixed(1)}%</span>
+        </div>
+      </div>
+      <div className="flex gap-4 text-gray-600 pl-4 border-l border-white/5">
+        <ScanFace size={16} className={member.confidence > 95 ? 'text-blue-400' : 'text-gray-600'}/>
+        <Mic size={16} className={member.confidence > 90 ? 'text-blue-400' : 'text-gray-600'}/>
+        <Waves size={16} className="text-blue-400"/>
+        <Satellite size={16} className="text-blue-400"/>
+      </div>
+    </div>
+  );
+};
+
+
+export default function App() {
+  const [activeLayer, setActiveLayer] = useState('sentinel');
+  const [user, setUser] = useState(null);
+  const [pebblesThinking, setPebblesThinking] = useState(false);
+  const [activeView, setActiveView] = useState('info');
+
+  
+  // This page simulates being for the 'Parent 01' user.
+  const [currentUserRole, setCurrentUserRole] = useState('Guardian');
+
+  const mockFamilyMembers = useMemo(() => [
+    { id: 1, name: "Parent 01", role: 'Guardian', confidence: 99.8, status: 'Verified' },
+    { id: 2, name: "Parent 02", role: 'Guardian', confidence: 99.7, status: 'Verified' },
+    { id: 3, name: "Child 01", role: 'Dependent', confidence: 98.2, status: 'Verified' },
+    { id: 4, name: "Child 02", role: 'Dependent', confidence: 97.5, status: 'Pending Recalibration' },
+    { id: 5, name: "Awaiting User...", role: 'Unassigned', confidence: 0, status: 'Offline' },
+    { id: 6, name: "Awaiting User...", role: 'Unassigned', confidence: 0, status: 'Offline' }
+  ], []);
+
+  // Auth Initialization
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        if (initialAuthToken) {
+          await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth Error:", err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  const triggerPebbles = () => {
+    setPebblesThinking(true);
+    setTimeout(() => setPebblesThinking(false), 2400);
+  };
+  
+  const PlaceholderView = ({ title, icon: Icon, children = null }) => (
+    <div className="flex flex-col items-center justify-center h-full p-10 text-center text-white/20">
+      {children ? children : (
+        <>
+          <Icon size={48} className="mb-4"/>
+          <h3 className="text-xl font-black uppercase text-white/40">{title}</h3>
+          <p className="text-sm">Ready to be build Joe</p>
+        </>
+      )}
+    </div>
+  );
+
+  const NavItem = ({ id, icon: Icon, label }) => (
+      <button 
+          onClick={() => setActiveView(id)}
+          className={cn(
+              "flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all w-full",
+              activeView === id ? 'text-blue-400 bg-white/5 border border-white/10' : 'text-white/30 hover:text-white hover:bg-white/5'
+          )}
+      >
+          <Icon size={24} />
+          <span className="text-[10px] font-bold uppercase">{label}</span>
+      </button>
+  );
+  
+  const BiometricEnrollmentSlot = ({ icon: Icon, label }) => (
+    <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-700/50 flex items-center gap-3">
+        <Icon className="w-5 h-5 text-indigo-400" />
+        <span className="text-xs font-semibold text-slate-300">{label}</span>
+        <div className="flex-1 h-px bg-slate-700/50" />
+        <div className="flex items-center gap-1">
+            {[...Array(5)].map((_, i) => (
+                <div key={i} className="w-5 h-5 rounded bg-slate-800/60 border border-slate-700 flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                </div>
+            ))}
+        </div>
+    </div>
+  );
+
+  const SecurityView = () => {
+    const userIsAdult = currentUserRole === 'Guardian';
+    const loginLink = userIsAdult 
+      ? "/login/registration/admin/dashboard/audit-login/audit-journal/adult-loggin" 
+      : "/login/registration/admin/dashboard/audit-login/audit-journal/kids-loggin";
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Panel 1: Biometric Enrollment */}
+            <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-10">
+                <h2 className="text-xl font-black uppercase mb-8 flex items-center gap-3">
+                    <ShieldCheck className="text-indigo-500" /> Biometric Authentication
+                </h2>
+                <div className="space-y-4">
+                    <BiometricEnrollmentSlot icon={ScanFace} label="Face ID Scans" />
+                    <BiometricEnrollmentSlot icon={Mic} label="Voice Prints" />
+                    <BiometricEnrollmentSlot icon={Watch} label="Wearable IDs" />
+                    <BiometricEnrollmentSlot icon={Camera} label="Contextual Photo (w/ Wearable)" />
+                </div>
+            </div>
+
+            {/* Panel 2: Identity & Login */}
+            <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-10 space-y-6">
+                 <h2 className="text-xl font-black uppercase mb-4 flex items-center gap-3">
+                    <KeyRound className="text-indigo-500" /> Sovereign Identity
+                </h2>
+                
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Family ID</p>
+                    <p className="font-mono text-lg font-bold text-white">705-18-001</p>
+                </div>
+
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Login Username</p>
+                    <p className="font-mono text-lg font-bold text-white">test@adults.os</p>
+                </div>
+                
+                <div className="flex gap-4 pt-4 border-t border-slate-700/50">
+                    <Link href={loginLink} className="flex-1">
+                        <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors">
+                            Go to Login
+                        </button>
+                    </Link>
+                    <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-colors">
+                        Change Password
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+  
+  const CustomizationView = () => {
+    const [adultTheme, setAdultTheme] = useState({
+        background: 'default',
+        titleColor: '#FFFFFF',
+        textColor: '#E2E8F0',
+        iconSize: 'medium'
+    });
+    const [kidTheme, setKidTheme] = useState({
+        background: 'cosmic',
+        titleColor: '#F472B6',
+        textColor: '#FBCFE8',
+        iconSize: 'large'
+    });
+
+    const bgOptions = ['default', 'cosmic', 'forest', 'ocean'];
+    const sizeOptions = ['small', 'medium', 'large'];
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 bg-[#0c0c0c] border border-white/5 rounded-[40px] p-2 relative overflow-hidden h-[800px]">
+                <iframe src="/Family-Shared/clock-setting" className="w-full h-full border-none rounded-[32px]" title="Clock Customization" />
+            </div>
+            <div className="lg:col-span-1 space-y-6">
+                <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-8">
+                    <h3 className="text-lg font-black uppercase text-blue-400 mb-4">Adult OS Appearance</h3>
+                    <div className="space-y-4">
+                       <p className="text-xs text-slate-400">Background:</p>
+                       <div className="flex gap-2">{bgOptions.map(bg => <button key={bg} className={`w-8 h-8 rounded-full border-2 ${adultTheme.background === bg ? 'border-white' : 'border-transparent'} bg-slate-700`}></button>)}</div>
+                       <p className="text-xs text-slate-400">Colors:</p>
+                       <div className="flex gap-2"><input type="color" value={adultTheme.titleColor} onChange={(e) => setAdultTheme(t => ({...t, titleColor: e.target.value}))} className="w-8 h-8"/> <input type="color" value={adultTheme.textColor} onChange={(e) => setAdultTheme(t => ({...t, textColor: e.target.value}))} className="w-8 h-8"/></div>
+                    </div>
+                </div>
+                 <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-8">
+                    <h3 className="text-lg font-black uppercase text-pink-400 mb-4">Kids OS Appearance</h3>
+                     <div className="space-y-4">
+                       <p className="text-xs text-slate-400">Background:</p>
+                       <div className="flex gap-2">{bgOptions.map(bg => <button key={bg} className={`w-8 h-8 rounded-full border-2 ${kidTheme.background === bg ? 'border-white' : 'border-transparent'} bg-slate-700`}></button>)}</div>
+                       <p className="text-xs text-slate-400">Colors:</p>
+                       <div className="flex gap-2"><input type="color" value={kidTheme.titleColor} onChange={(e) => setKidTheme(t => ({...t, titleColor: e.target.value}))} className="w-8 h-8"/> <input type="color" value={kidTheme.textColor} onChange={(e) => setKidTheme(t => ({...t, textColor: e.target.value}))} className="w-8 h-8"/></div>
+                        <p className="text-xs text-slate-400">Icon Size:</p>
+                       <div className="flex gap-2">{sizeOptions.map(size => <button key={size} className={`px-3 py-1 text-xs rounded-full ${kidTheme.iconSize === size ? 'bg-white text-black' : 'bg-slate-700'}`}>{size}</button>)}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const UserInfoView = () => {
+    const fileInputRef = useRef(null);
+
+    const InfoCard = ({ icon: Icon, title, children, color = 'text-blue-400' }) => (
+      <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-8">
+        <h2 className={`text-xl font-black uppercase mb-6 flex items-center gap-3 ${color}`}>
+          <Icon /> {title}
+        </h2>
+        <div className="space-y-4">{children}</div>
+      </div>
+    );
+
+    const DetailItem = ({ label, value, editable = false }) => (
+      <div className="flex justify-between items-center py-2 border-b border-white/5">
+        <p className="text-sm text-slate-400">{label}</p>
+        <p className="text-sm font-bold text-white">{value}</p>
+      </div>
+    );
+
+    return (
+        <div className="space-y-8">
+            <div className="flex flex-col md:flex-row items-center gap-8">
+                <div className="relative group">
+                    <img src="https://images.unsplash.com/photo-1624395213043-fa2e123b2656?w=200&h=200&fit=crop" alt="User Profile" className="w-40 h-40 rounded-full border-4 border-white/10 object-cover shadow-2xl" />
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute inset-0 bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                        <Edit size={32} className="text-white"/>
+                    </button>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" />
+                </div>
+                <div className="text-center md:text-left">
+                    <h1 className="text-5xl font-black tracking-tighter">Parent 01</h1>
+                    <p className="text-indigo-400 font-bold uppercase tracking-widest mt-1">Guardian & System Auditor</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <InfoCard icon={UserIcon} title="Personal Data">
+                    <DetailItem label="Full Legal Name" value="Joseph D. Bouchard" />
+                    <DetailItem label="Date of Birth" value="1988-11-20" />
+                    <DetailItem label="Sovereign Phone" value="+1 (705) 180-001" />
+                    <DetailItem label="Emergency Contact" value="Parent 02" />
+                </InfoCard>
+
+                <InfoCard icon={Users} title="Family Links" color="text-pink-400">
+                    <DetailItem label="Partner" value="Parent 02 (Spouse)" />
+                    <DetailItem label="Child 01" value="Child 01 (Blood Parent)" />
+                    <DetailItem label="Child 02" value="Child 02 (Blood Parent)" />
+                    <DetailItem label="Child 03" value="Awaiting Registry..." />
+                </InfoCard>
+
+                <InfoCard icon={CreditCard} title="Financials" color="text-green-400">
+                    <DetailItem label="Primary Bank Card" value="**** **** **** 1234" />
+                    <DetailItem label="SOV$ Balance" value="1,850.75 SOV" />
+                    <DetailItem label="Spike Points" value="15,280 SP" />
+                </InfoCard>
+
+                <InfoCard icon={ShieldCheck} title="System" color="text-yellow-400">
+                    <DetailItem label="Profile Tier" value="Sovereign" />
+                    <DetailItem label="Last Login" value={new Date().toLocaleString()} />
+                    <DetailItem label="Data Integrity" value="100% (Verified)" />
+                    <button className="w-full mt-4 py-2 bg-yellow-500/10 text-yellow-300 rounded-lg text-sm font-bold border border-yellow-500/20 hover:bg-yellow-500/20">
+                        View Audit Logs
+                    </button>
+                </InfoCard>
+            </div>
+        </div>
+    )
+  };
+
+  const ConnectionsView = () => {
+    const [devices, setDevices] = useState([
+        { id: 1, name: 'Main Family Hub', type: 'hub', icon: Anchor, status: 'Online' },
+        { id: 2, name: 'Dad\'s iPhone 15 Pro', type: 'personal', icon: Smartphone, status: 'Online' },
+        { id: 3, name: 'Leo\'s Tablet', type: 'personal', icon: Tablet, status: 'Online' },
+        { id: 4, name: 'Living Room Display', type: 'hub', icon: Tv, status: 'Standby' },
+        { id: 5, name: 'Mom\'s Laptop', type: 'personal', icon: Laptop, status: 'Offline' }
+    ]);
+    const canAddHub = currentUserRole === 'Guardian';
+
+    const addDevice = (type) => {
+        const newDevice = {
+            id: Date.now(),
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} Device ${Math.floor(Math.random() * 100)}`,
+            type: type,
+            icon: type === 'hub' ? Anchor : Smartphone,
+            status: 'Connecting'
+        };
+        setDevices(prev => [...prev, newDevice]);
+    };
+
+    const removeDevice = (id) => {
+        setDevices(prev => prev.filter(d => d.id !== id));
+    };
+
+    const DeviceIcon = ({ type }) => {
+        switch(type) {
+            case 'hub': return <Anchor className="w-8 h-8 text-cyan-400"/>;
+            case 'personal': return <Smartphone className="w-8 h-8 text-indigo-400"/>;
+            default: return <Zap className="w-8 h-8 text-gray-500"/>;
+        }
+    };
+  
+    return (
+      <div className="space-y-8">
+        {/* Top Panel: Network Status */}
+        <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-10 grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="text-center">
+            <p className="text-sm font-bold text-green-400 flex items-center justify-center gap-2"><Zap className="text-green-500" /> LASO</p>
+            <p className="text-xs text-slate-400">100% Signal</p>
+          </div>
+           <div className="text-center">
+            <p className="text-sm font-bold text-blue-400 flex items-center justify-center gap-2"><ShieldCheck/> TrueOath</p>
+            <p className="text-xs text-slate-400">Active & Verified</p>
+          </div>
+           <div className="text-center">
+            <p className="text-sm font-bold text-purple-400 flex items-center justify-center gap-2"><Share2/> Mesh WiFi</p>
+            <p className="text-xs text-slate-400">5 Devices Synced</p>
+          </div>
+           <div className="text-center">
+            <p className="text-sm font-bold text-pink-400 flex items-center justify-center gap-2"><BrainCircuit/> Pebbles AI</p>
+            <p className="text-xs text-slate-400">Online & Learning</p>
+          </div>
+        </div>
+  
+        {/* Main Panels */}
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Device Management Panel */}
+          <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-8">
+            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-3">
+              <Database className="text-blue-400" /> Family Hardware Network
+            </h2>
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+              {devices.map(device => (
+                <div key={device.id} className="bg-slate-900/50 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <DeviceIcon type={device.type} />
+                    <div>
+                      <p className="text-sm font-bold text-white">{device.name}</p>
+                      <p className={`text-xs font-semibold ${device.status === 'Online' ? 'text-green-400' : 'text-slate-500'}`}>{device.status}</p>
+                    </div>
+                  </div>
+                  {canAddHub && device.type === 'hub' && (
+                    <button onClick={() => removeDevice(device.id)} className="p-2 text-slate-500 hover:text-red-400 rounded-full transition-colors"><Trash2 size={16}/></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-6">
+                <button onClick={() => addDevice('personal')} className="py-3 bg-indigo-600/20 text-indigo-300 rounded-lg text-xs font-bold border border-indigo-500/30 hover:bg-indigo-600/30">
+                    + Add Personal Device
+                </button>
+                 <button onClick={() => addDevice('hub')} disabled={!canAddHub} className="py-3 bg-cyan-600/20 text-cyan-300 rounded-lg text-xs font-bold border border-cyan-500/30 hover:bg-cyan-600/30 disabled:opacity-50 disabled:cursor-not-allowed">
+                    + Add Family Hub
+                </button>
+            </div>
+          </div>
+  
+          {/* AI Sync Status */}
+           <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-8 flex flex-col">
+            <h2 className="text-xl font-black uppercase mb-6 flex items-center gap-3">
+              <BrainCircuit className="text-pink-400" /> Pebbles AI Sync
+            </h2>
+             <div className="flex-1 grid grid-cols-2 gap-6">
+                 <div className="bg-slate-900/50 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                     <p className="text-5xl font-extrabold text-pink-400">1,284</p>
+                     <p className="text-xs font-bold text-slate-400 mt-1">Chats Logged</p>
+                 </div>
+                  <div className="bg-slate-900/50 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                     <p className="text-5xl font-extrabold text-pink-400">98%</p>
+                     <p className="text-xs font-bold text-slate-400 mt-1">Sync Integrity</p>
+                 </div>
+             </div>
+             <p className="text-xs text-center text-slate-500 mt-6">
+                 Pebbles OS is running optimally, with all family member interactions successfully logged and synchronized across the network.
+             </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+  return (
+    <div className="flex h-screen w-screen bg-[#020202] text-[#e2e8f0] font-mono selection:bg-blue-500/30 overflow-hidden">
+      
+      {/* NEW: Left Side Navigation */}
+      <div className="w-24 border-r border-white/5 flex flex-col items-center py-8 gap-6 bg-black z-40">
+        <Link href="/admin/dashboard/pedlle-tts/client-app-blueprints/internal-content" passHref>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.3)] border border-white/10 cursor-pointer">
+              <Zap size={24} className="text-white fill-white" />
+          </div>
+        </Link>
+        <nav className="flex flex-col gap-4 w-full px-2">
+            <NavItem id="apps" icon={LayoutGrid} label="Apps" />
+            <NavItem id="security" icon={Shield} label="Security" />
+            <NavItem id="customize" icon={Palette} label="Customize" />
+            <NavItem id="info" icon={User} label="Info" />
+            <NavItem id="connections" icon={Share2} label="Connect" />
+        </nav>
+      </div>
+
+      {/* MAIN ENGINE AREA */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        
+        {/* SHARED HEADER */}
+        <header className="h-20 border-b border-white/5 flex items-center justify-between px-10 bg-[#050505] z-30">
+            <div className="flex items-center gap-4">
+                <Link href="/shared-app/family-pebbles/setting-f" passHref>
+                  <div className="cursor-pointer text-white/40 hover:text-white transition-colors">
+                      <ArrowLeft size={24} />
+                  </div>
+                </Link>
+                <div className="flex flex-col">
+                    <h1 className="text-xs font-black tracking-[0.3em] uppercase flex items-center gap-3">
+                    INDIVIDUAL SETTINGS <span className="text-white/20">|</span> PARENT 01
+                    </h1>
+                </div>
+            </div>
+             <div className="flex items-center gap-4">
+                 <div onClick={triggerPebbles} className="cursor-pointer group relative ml-4">
+                    <div className={`w-12 h-12 rounded-full border-2 transition-all flex items-center justify-center ${pebblesThinking ? 'border-blue-500 animate-spin' : 'border-white/10 group-hover:border-white/30'}`}>
+                      <Star size={20} className={pebblesThinking ? 'text-blue-500' : 'text-white/40'} />
+                    </div>
+                 </div>
+            </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto relative scrollbar-hide p-10">
+          
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeView}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {activeView === 'apps' && (
+                <div className="space-y-8">
+                  <div className="bg-[#0c0c0c] border border-white/5 rounded-[40px] p-10 relative overflow-hidden mb-8">
+                    <div className="absolute top-0 right-0 p-10 opacity-5"><ScanFace size={240} /></div>
+                    <h2 className="text-xl font-black uppercase mb-8 flex items-center gap-3">
+                      <ShieldCheck className="text-blue-500" /> Biometric Sentinel Grid
+                    </h2>
+                    <div className="space-y-2">
+                      {mockFamilyMembers.map((member) => (
+                        <BiometricCard key={member.id} member={member} isActive={member.id === 1} />
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-[#0c0c0c] border-2 border-indigo-500/30 rounded-[40px] p-2 relative overflow-hidden h-[800px]">
+                    <iframe 
+                        src={currentUserRole === 'Guardian' ? "/shared-app/family-pebbles/user-client-app-blueprints/adults" : "/shared-app/family-pebbles/user-client-app-blueprints/kids"}
+                        className="w-full h-full border-none rounded-[32px]"
+                        title="User Profile Blueprint"
+                     />
+                  </div>
+                </div>
+              )}
+              {activeView === 'security' && <SecurityView />}
+              {activeView === 'customize' && <CustomizationView />}
+              {activeView === 'info' && <UserInfoView />}
+              {activeView === 'connections' && <ConnectionsView />}
+            </motion.div>
+          </AnimatePresence>
+
+        </div>
+
+      </main>
+
+      <AnimatePresence>
+        {pebblesThinking && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] pointer-events-none flex flex-col items-center justify-center bg-blue-900/5 backdrop-blur-[2px]"
+          >
+            <div className="w-32 h-32 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin flex items-center justify-center">
+               <Star size={40} className="text-blue-500 animate-pulse" />
+            </div>
+            <div className="mt-8 text-[12px] font-black uppercase text-blue-400 tracking-[1em] animate-pulse">Pebbles_is_Auditing</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+      `}} />
+    </div>
+  );
+}
+
+// --- Sub-Components ---
+function NavButton({ active, onClick, icon }) {
+  return (
+    <button onClick={onClick} className={`p-4 rounded-2xl transition-all ${active ? 'text-blue-400 bg-white/5 border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.05)]' : 'text-white/20 hover:text-white'}`}>
+      {icon}
+    </button>
+  );
+}
+
+    
+
+    
