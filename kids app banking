@@ -1,0 +1,254 @@
+
+'use client';
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+    ArrowLeft, Settings, Bell, Home, BarChart2, Repeat, User, CreditCard, Shield, Sun, Moon, Leaf, Zap, Gamepad2, ShoppingBag 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// --- CONFIGURATION & MOCK DATA ---
+
+const userProfiles = {
+    oliver: { name: 'Oliver', balance: 286.24, lastTx: { from: 'Mom', amount: 25.00 }, avatar: 'O' },
+    emma: { name: 'Emma', balance: 412.50, lastTx: { from: 'Dad', amount: 30.00 }, avatar: 'E' },
+    sophia: { name: 'Sophia', balance: 159.80, lastTx: { from: 'Chores', amount: 15.00 }, avatar: 'S' },
+};
+
+const tasks = [
+    { id: 1, text: 'Clean up the room', completed: false },
+    { id: 2, text: 'Finish math homework', completed: true },
+    { id: 3, text: 'Walk the dog', completed: false },
+];
+
+const savingsGoals = [
+    { id: 1, name: 'Holidays', goal: 800, current: 450, icon: '🌴' },
+    { id: 2, name: 'PS5', goal: 1200, current: 750, icon: '🎮' },
+    { id: 3, name: 'Go Out', goal: 50, current: 15, icon: '🍿' },
+];
+
+const themes = {
+    blue: {
+        bg: 'from-cyan-400 to-blue-600',
+        card: 'bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-lg',
+        text: 'text-white',
+        accent: 'text-cyan-300',
+        icon: Sun,
+    },
+    pink: {
+        bg: 'from-pink-500 to-fuchsia-600',
+        card: 'bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-lg',
+        text: 'text-white',
+        accent: 'text-pink-300',
+        icon: Moon,
+    },
+    green: {
+        bg: 'from-emerald-400 to-lime-600',
+        card: 'bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-lg',
+        text: 'text-white',
+        accent: 'text-emerald-200',
+        icon: Leaf,
+    },
+};
+
+// --- HELPER COMPONENTS ---
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+const Card = ({ children, className = '', ...props }) => (
+    <div className={cn("rounded-2xl shadow-lg border border-white/10 p-4 transition-all duration-300", className)} {...props}>
+        {children}
+    </div>
+);
+
+const IconButton = ({ icon: Icon, className = '', onClick }) => (
+    <button onClick={onClick} className={cn("p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors", className)}>
+        <Icon className="w-5 h-5 text-white" />
+    </button>
+);
+
+// --- MAIN UI COMPONENTS ---
+
+const Header = ({ user, onThemeChange, currentThemeKey }) => {
+    const nextTheme = useMemo(() => {
+        const keys = Object.keys(themes);
+        const currentIndex = keys.indexOf(currentThemeKey);
+        return keys[(currentIndex + 1) % keys.length];
+    }, [currentThemeKey]);
+
+    const ThemeIcon = themes[nextTheme].icon;
+
+    return (
+        <motion.header 
+            initial={{ y: -60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 15 }}
+            className="flex justify-between items-center px-6 pt-10 pb-4 text-white z-20"
+        >
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center font-bold text-lg">{user.avatar}</div>
+                <div>
+                    <h1 className="text-xl font-bold">Hi {user.name}</h1>
+                    <p className="text-xs text-white/70">Welcome back!</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-3">
+                <IconButton icon={Settings} />
+                <IconButton icon={ThemeIcon} onClick={onThemeChange} />
+            </div>
+        </motion.header>
+    );
+};
+
+const BalanceCard = ({ balance, lastTx, theme }) => (
+    <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.1, type: 'spring', damping: 15 }}
+        className="px-6 z-10"
+    >
+        <Card className={cn("text-white", theme.card)}>
+            <div className="flex justify-between items-start">
+                <div>
+                    <p className="text-sm text-white/80">Account Balance</p>
+                    <p className="text-4xl font-extrabold tracking-tight mt-1">${balance.toFixed(2)}</p>
+                </div>
+                <div className="px-3 py-1 bg-white/10 rounded-full text-xs font-semibold">SOV$</div>
+            </div>
+            <div className="mt-4 flex justify-between items-center text-xs text-white/80">
+                <p>Last transaction: <span className="font-bold">{lastTx.from}</span></p>
+                <p className="font-bold text-emerald-300">+${lastTx.amount.toFixed(2)}</p>
+            </div>
+        </Card>
+    </motion.div>
+);
+
+const TaskCard = ({ tasks, theme }) => (
+     <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, type: 'spring', damping: 15 }}
+        className="px-6"
+    >
+        <Card className={cn(theme.card, "text-white")}>
+            <h3 className="font-bold mb-2">Tasks</h3>
+            <p className="text-xs text-white/70 mb-3">Today you have {tasks.filter(t => !t.completed).length} tasks</p>
+            {tasks.find(t => !t.completed) ? (
+                <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
+                    <span className="text-sm font-medium">{tasks.find(t => !t.completed).text}</span>
+                    <button className="text-xs font-bold text-emerald-300 hover:underline">Complete</button>
+                </div>
+            ) : (
+                <p className="text-sm text-emerald-300 font-semibold">All tasks done for today!</p>
+            )}
+        </Card>
+    </motion.div>
+);
+
+const SavingsCard = ({ goals, theme }) => (
+     <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.3, type: 'spring', damping: 15 }}
+        className="px-6"
+    >
+        <Card className={cn(theme.card, "text-white")}>
+            <h3 className="font-bold mb-3">Saves</h3>
+            <div className="grid grid-cols-3 gap-3">
+                {goals.map(goal => (
+                    <div key={goal.id} className="p-3 bg-black/20 rounded-xl text-center">
+                        <div className="text-2xl mb-1">{goal.icon}</div>
+                        <p className="text-xs font-bold truncate">{goal.name}</p>
+                        <p className="text-[10px] text-white/60">${goal.current}/${goal.goal}</p>
+                    </div>
+                ))}
+            </div>
+        </Card>
+    </motion.div>
+);
+
+const ActionCard = ({ theme }) => (
+    <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.4, type: 'spring', damping: 15 }}
+        className="px-6"
+    >
+        <Card className={cn(theme.card, "text-white")}>
+             <h3 className="font-bold mb-3">BLK</h3>
+             <button className="w-full p-3 bg-black/20 rounded-lg flex items-center justify-center gap-2 font-semibold text-sm hover:bg-black/40 transition-colors">
+                <Zap size={16} />
+                Generate a BLK Code
+            </button>
+        </Card>
+    </motion.div>
+);
+
+const BottomNav = () => (
+    <motion.footer 
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        transition={{ delay: 0.5, type: 'spring', damping: 20 }}
+        className="mt-auto z-10 bg-white/5 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl px-6 py-3 flex justify-around items-center"
+    >
+        <IconButton icon={Home} className="text-white bg-white/20" />
+        <IconButton icon={Repeat} />
+        <IconButton icon={Gamepad2} />
+        <IconButton icon={User} />
+    </motion.footer>
+);
+
+export default function MyPersonalBankPage() {
+    const [userKey, setUserKey] = useState('oliver');
+    const [themeKey, setThemeKey] = useState('blue');
+
+    const currentUser = userProfiles[userKey];
+    const currentTheme = themes[themeKey];
+    
+    const handleThemeChange = () => {
+        const keys = Object.keys(themes);
+        const currentIndex = keys.indexOf(themeKey);
+        const nextThemeKey = keys[(currentIndex + 1) % keys.length];
+        setThemeKey(nextThemeKey);
+        
+        // Cycle user along with theme for demonstration
+        const userKeys = Object.keys(userProfiles);
+        const currentUserIndex = userKeys.indexOf(userKey);
+        const nextUserKey = userKeys[(currentUserIndex + 1) % userKeys.length];
+        setUserKey(nextUserKey);
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+            <div className={`relative w-full max-w-sm h-[850px] rounded-[3.5rem] overflow-hidden flex flex-col shadow-2xl bg-gradient-to-b ${currentTheme.bg} transition-all duration-700`}>
+                
+                <Header user={currentUser} onThemeChange={handleThemeChange} currentThemeKey={themeKey} />
+
+                <main className="flex-1 flex flex-col space-y-4 overflow-y-auto pb-24">
+                    <BalanceCard balance={currentUser.balance} lastTx={currentUser.lastTx} theme={currentTheme} />
+                    <TaskCard tasks={tasks} theme={currentTheme} />
+                    <SavingsCard goals={savingsGoals} theme={currentTheme} />
+                    <ActionCard theme={currentTheme} />
+                </main>
+
+                <BottomNav />
+                
+                {/* Decorative element from the image */}
+                {themeKey === 'green' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }} 
+                        className="absolute top-1/4 right-0 w-48 h-48 pointer-events-none"
+                    >
+                         <svg viewBox="0 0 200 200" className="opacity-20">
+                            <path fill="#a7f3d0" d="M68.1,-33.5C82.8,-15.5,85.5,14.6,75.1,38.5C64.6,62.4,41,79.9,15.8,84.1C-9.4,88.3,-36.2,79.2,-54.3,59.9C-72.4,40.6,-81.9,11.1,-78.7,-14.8C-75.5,-40.7,-59.6,-63,-40.3,-72.5C-21,-82,-0.4,-78.6,18.1,-65.4C36.6,-52.1,53.4,-51.5,68.1,-33.5Z" transform="translate(100 100)" />
+                        </svg>
+                    </motion.div>
+                )}
+
+            </div>
+        </div>
+    );
+}
+
