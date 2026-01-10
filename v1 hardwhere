@@ -1,0 +1,45 @@
+# WLC1115 + ESP32 Bring-Up Guide
+**Version:** 1.0
+**Status:** LOCKED FOR BENCH VALIDATION
+
+This document provides the step-by-step procedure for initializing and validating the Sovereign Power Guard, integrating the ESP32 (Guard) with the Infineon WLC1115 (Power Plane).
+
+---
+
+## Phase 0 — Bench Sanity (No ESP32 Yet)
+**Goal:** Verify the Qi2 power plane and packet visibility standalone.
+1.  **Power the REF_WLC_TX15W_M1:** Use a 20–30 W USB-C PD adapter. Confirm board LEDs indicate PD negotiation.
+2.  **Infineon GUI:** Install the Wireless Charging Configuration Utility. Connect via USB. Verify Device ID and Firmware revision are visible.
+3.  **Drop iPhone:** Place phone on pad. Watch GUI for state changes (IDLE → RX DETECTED) and packet counters.
+4.  **CRITICAL VALIDATION:** Locate the RX Packet View. You must see packets like `02 4B xx ...` (Charge Status). If you see this, the project is proven.
+
+## Phase 1 — ESP32 Electrical Bring-Up
+**Goal:** Confirm clean I²C communication.
+1.  **Wiring:** Connect ESP32 (3.3V, GND, SDA, SCL, INT) to the WLC1115 HPI header.
+2.  **I²C Probe Sketch:** Flash a minimal scanner. Expected result: "Found device at 0x42".
+
+## Phase 2 — Driver Validation (No Policy Yet)
+**Goal:** Confirm register-level reads are correct.
+1.  **begin() Validation:** Flash your driver. Confirm "Sovereign Guard Active." message. Log SYSTEM_STATUS transitions.
+2.  **Packet Verification:** Drop iPhone. Confirm serial monitor logs: "Telemetry: iPhone at XX%". Let it run 10-15 mins.
+
+## Phase 3 — Controlled Veto Test (Moment of Truth)
+**Goal:** Prove charger-side authority.
+1.  **Temporary Low Threshold:** Set `if (currentSOC >= 30)`.
+2.  **Observe the Kill:** Charging should stop instantly when the phone's battery reaches 30%. The iPhone should report "Not Charging."
+3.  **Lift & Re-place:** Verify that charging resumes, and the 30% veto is re-enforced.
+
+## Phase 4 — Fault Injection (Liability Shield Test)
+**Goal:** Prove WLC1115 silicon supremacy.
+1.  **ESP32 Crash Test:** Add a `while(1);` loop to hang the MCU during charging.
+2.  **Short SDA to GND momentarily.**
+3.  **Freeze ESP32 firmware (while loop).**
+4.  **Pass condition:** WLC1115 continues charging safely. FOD & OT must still trigger a shutdown.
+
+## Phase 5 — 8-Hour Overnight Soak (hands-off)
+- Phone at ~40%, Guard enabled, enclosure closed.
+- Check in morning: Final SOC = 80%, No disconnects, Max coil temp < 70°C.
+
+## FINAL GO / NO-GO RULE
+- ✅ **GO** if ALL are true: Guard always acts first, ESP32 failure is safe, 80% stop is reliable.
+- ❌ **NO-GO** if ANY occur: Thermal shutdown without Guard intervention, I2C glitches, reconnect loops.
