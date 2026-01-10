@@ -1,0 +1,12 @@
+
+'use server';
+// Flows will be imported for their side effects in this file.
+import './tools/calendar';
+import './tools/knowledge';
+import './tools/telephony';
+import './tools/system'; // This import is now essential
+
+import '@/ai/flows/provide-ai-recommendations.ts';
+import '@/ai/flows/moderate-kids-social-zone-content.ts';
+import '@/ai/flows/generate-calendar-event-details.ts';
+import '@/ai/flows/tts-flow.ts';
