@@ -1,0 +1,148 @@
+
+'use client';
+
+import { create } from 'zustand';
+import { produce } from 'immer';
+
+export type FamilyMember = {
+  id: string;
+  name: string;
+  dob: string;
+  role: 'adult' | 'child';
+  spikePoints: number;
+};
+
+export type MemoryEvent = {
+  id: number;
+  type: 'system' | 'presence' | 'taskCompleted' | 'guest' | 'audit';
+  description: string;
+  timestamp: Date;
+  affectedMembers?: string[];
+};
+
+type GuardianState = 'Calm' | 'Attention' | 'Welcome' | 'Protection' | 'Recognized';
+type RhythmPhase = 'Morning' | 'Daytime' | 'Evening' | 'Night';
+
+export interface Device {
+    id: string;
+    name: string;
+    type: 'phone' | 'laptop' | 'tv' | 'hub' | 'tablet' | 'watch';
+    status: 'online' | 'offline' | 'unstable';
+    lastPing: Date;
+    ownerId: string;
+}
+
+export interface AppStatus {
+    name: string;
+    status: 'online' | 'offline' | 'maintenance';
+}
+
+interface FamilyPebbleStore {
+  familyMembers: FamilyMember[];
+  familySpikePoints: number;
+  memoryEvents: MemoryEvent[];
+  guardianState: GuardianState;
+  rhythm: RhythmPhase;
+  devices: Device[];
+  apps: AppStatus[];
+  
+  logEvent: (type: MemoryEvent['type'], description: string, affectedMembers?: string[]) => void;
+  updateSpikePoints: (memberId: string, points: number, reason: string) => void;
+  evaluateGuardianState: () => void;
+  setRhythm: (phase: RhythmPhase) => void;
+  simulateDeviceActivity: () => void;
+}
+
+const useFamilyPebbleStore = create<FamilyPebbleStore>((set, get) => ({
+  familyMembers: [
+    { id: 'p1', name: 'Joseph', dob: '1988-11-20', role: 'adult', spikePoints: 1200 },
+    { id: 'p2', name: 'Caitlin', dob: '1990-05-15', role: 'adult', spikePoints: 1500 },
+    { id: 'c1', name: 'Leo', dob: '2015-08-22', role: 'child', spikePoints: 850 },
+    { id: 'c2', name: 'Mia', dob: '2017-11-10', role: 'child', spikePoints: 950 },
+  ],
+  familySpikePoints: 0,
+  memoryEvents: [
+    { id: 1, type: 'system', description: 'Guardian Protocol Initialized.', timestamp: new Date(Date.now() - 3600000) }
+  ],
+  guardianState: 'Calm',
+  rhythm: 'Daytime',
+  devices: [
+    { id: 'dev1', name: "Living Room TV", type: 'tv', status: 'online', lastPing: new Date(), ownerId: 'family' },
+    { id: 'dev2', name: "Dad's Phone", type: 'phone', status: 'online', lastPing: new Date(), ownerId: 'p1' },
+    { id: 'dev3', name: "Mom's Laptop", type: 'laptop', status: 'online', lastPing: new Date(), ownerId: 'p2' },
+    { id: 'dev4', name: "Leo's Tablet", type: 'tablet', status: 'online', lastPing: new Date(), ownerId: 'c1' },
+  ],
+  apps: Array.from({ length: 52 }, (_, i) => ({ name: `App ${i + 1}`, status: 'online' })),
+
+  logEvent: (type, description, affectedMembers = []) => {
+    set(produce((state: FamilyPebbleStore) => {
+      state.memoryEvents.unshift({ id: Date.now(), type, description, timestamp: new Date(), affectedMembers });
+      if (state.memoryEvents.length > 50) { // Increased log size
+        state.memoryEvents.pop();
+      }
+    }));
+  },
+
+  updateSpikePoints: (memberId, points, reason) => {
+    set(produce((state: FamilyPebbleStore) => {
+      const member = state.familyMembers.find(m => m.id === memberId);
+      if (member) {
+        member.spikePoints += points;
+        const description = `${member.name} ${reason} (${points > 0 ? '+' : ''}${points} SP)`;
+        state.memoryEvents.unshift({ id: Date.now(), type: 'taskCompleted', description, timestamp: new Date(), affectedMembers: [memberId] });
+      }
+    }));
+  },
+
+  evaluateGuardianState: () => {
+    set(produce((state: FamilyPebbleStore) => {
+        const totalPoints = state.familyMembers.reduce((sum, m) => sum + m.spikePoints, 0);
+        state.familySpikePoints = totalPoints;
+
+        const recentGuest = state.memoryEvents.some(e => e.type === 'guest' && (new Date().getTime() - e.timestamp.getTime() < 60000));
+        const deviceOffline = state.devices.some(d => d.status === 'offline');
+        
+        let newState: GuardianState = 'Calm';
+        if (deviceOffline) {
+            newState = 'Protection';
+        } else if (recentGuest) {
+            newState = 'Welcome';
+        } else if (totalPoints < 4000) {
+            newState = 'Attention';
+        }
+        
+        if (state.guardianState !== newState) {
+          get().logEvent('system', `Guardian state transitioned to [${newState}]`);
+        }
+        state.guardianState = newState;
+    }));
+  },
+
+  setRhythm: (phase) => set({ rhythm: phase }),
+  
+  simulateDeviceActivity: () => {
+      set(produce((state: FamilyPebbleStore) => {
+          state.devices.forEach(device => {
+              if (device.status === 'offline') {
+                  if (Math.random() > 0.6) { 
+                      device.status = 'online';
+                      get().logEvent('audit', `Device '${device.name}' reconnected to the mesh.`, [device.ownerId]);
+                  }
+              } else {
+                  if (Math.random() < 0.05) { 
+                      device.status = 'offline';
+                      get().logEvent('audit', `CRITICAL: Device '${device.name}' lost connection.`, [device.ownerId]);
+                  } else if (Math.random() < 0.1) { 
+                      device.status = 'unstable';
+                  } else {
+                      device.status = 'online';
+                  }
+              }
+              device.lastPing = new Date();
+          });
+      }));
+      get().evaluateGuardianState();
+  }
+}));
+
+export default useFamilyPebbleStore;
