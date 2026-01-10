@@ -1,0 +1,256 @@
+
+'use client';
+
+import React, { useState, useEffect, useRef, useMemo, Suspense, useContext, useCallback } from 'react';
+import { 
+  Shield, 
+  ArrowLeft, User, Baby, X, Camera, Users as UsersIcon, 
+  Tablet, Car, Home, Mic, Settings, BatteryCharging as BatteryChargingIcon, Radio, MapPin, Zap, Lock, Unlock, Gauge, Navigation,
+  Activity, Cpu, Database, Volume2, Ghost, Sparkles, Wand2, Cat, Dog, Bot, RotateCw,
+  Smartphone, Laptop, Watch, Headphones, Tv, HardDrive, Loader, Calendar, Mail, Phone, Globe, Star,
+  ShieldCheck, Fingerprint, Waves, Wifi, Power as PowerIcon, GitBranch, Satellite, CheckCircle, Hand, AlertTriangle, XCircle,
+  Bell, Loader2
+} from 'lucide-react';
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, useAnimationFrame } from 'framer-motion';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { FamilyDataProvider, useFamilyData, type FamilyMember } from '@/contexts/FamilyDataContext';
+import { usePowerEnforcementEngine } from '@/lib/power-engine';
+import { toggleReverseCharging } from '@/lib/capacitor-bridge';
+import { intelligentSpeak, simpleSpeak } from '@/ai/flows/tts-flow';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { unlockAudio } from '@/lib/audio-unlock';
+import * as Tone from 'tone';
+import GuardianSettingsPanel from '@/components/GuardianSettingsPanel';
+import { useGuardianHeartbeat } from '@/hooks/useGuardianHeartbeat';
+import { addToSpeechQueue } from '@/lib/speechQueue';
+
+// ========================
+// Components
+// ========================
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+const CinematicBackground = ({ mouseX, mouseY }) => {
+  const bgX = useTransform(mouseX, [-500, 500], [20, -20]);
+  const bgY = useTransform(mouseY, [-500, 500], [20, -20]);
+
+  return (
+    <div className="fixed inset-0 overflow-hidden bg-[#020205] z-0">
+      <motion.div style={{ x: bgX, y: bgY, scale: 1.1 }} className="absolute inset-0 opacity-30">
+        <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[120%] bg-[radial-gradient(circle_at_50%_50%,#1e1b4b_0%,transparent_70%)]" />
+      </motion.div>
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+    </div>
+  );
+};
+
+const GlowButton = ({ children, onClick, active, className = "" }) => (
+  <motion.button
+    whileHover={{ scale: 1.05, y: -2 }}
+    whileTap={{ scale: 0.95 }}
+    onClick={onClick}
+    className={`relative px-8 py-3 rounded-xl overflow-hidden group font-bold text-[10px] tracking-[0.3em] uppercase transition-all duration-500 ${className}`}
+  >
+    <div className={`absolute inset-0 transition-all duration-500 ${active ? 'bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/5 group-hover:bg-white/10'}`} />
+    <span className="relative z-10 flex items-center justify-center gap-2">{children}</span>
+  </motion.button>
+);
+
+const Particle = React.memo(({ index, time, color }) => {
+  const angle = (index / 40) * Math.PI * 2 + time / 20;
+  const radius = 100 + Math.sin(time + index) * 20;
+  const x = Math.cos(angle) * radius;
+  const y = Math.sin(angle) * radius;
+  
+  return (
+    <div 
+      className={cn("absolute w-1 h-1 rounded-full", color)} 
+      style={{ transform: `translate(${x}px, ${y}px)` }} 
+    />
+  );
+});
+Particle.displayName = 'Particle';
+
+
+const MemberRing = React.memo(({ member, index, time }: { member: any; index: number, time: number }) => {
+  const size = 180 + index * 24;
+  const rotation = time * (5 - index * 0.5);
+
+  return (
+    <div
+      className={cn('absolute rounded-full border-2', member.type === 'parent' ? 'border-cyan-400' : 'border-purple-400')}
+      style={{ 
+        width: size, 
+        height: size, 
+        opacity: 0.3,
+        transform: `rotate(${rotation}deg)`,
+      }}
+    />
+  );
+});
+MemberRing.displayName = 'MemberRing';
+
+
+const PanelContainer = ({ children, onClose, isOpen }) => (
+  <AnimatePresence>
+    {isOpen && (
+      <motion.div
+        initial={{ y: 50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 50, opacity: 0 }}
+        className="absolute bottom-40 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl"
+      >
+        <div className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl relative max-h-[60vh] flex flex-col">
+          <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white p-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors z-20"><X size={16} /></button>
+          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            {children}
+          </div>
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+// ========================
+// The Guardian Clock AI
+// ========================
+
+const GuardianClockAI = () => {
+    const { familyState, isLoaded } = useFamilyData();
+    const { members, auditLogs: memoryEvents } = familyState;
+    const { state: powerState, battery } = usePowerEnforcementEngine();
+    const [isCharging, setIsCharging] = useState(battery.charging);
+
+    const [activePanel, setActivePanel] = useState(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const timeRef = useRef(0);
+    const [guardianState, setGuardianState] = useState('Calm');
+    const router = useRouter();
+
+    const familyMembers = useMemo(() => Object.values(members || {}), [members]);
+
+    const [aiSettings, setAiSettings] = useState({
+        isEnabled: true, cooldown: 15000,
+        quietHours: { enabled: true, start: 22, end: 8 },
+        selectedVoice: 'Puck',
+    });
+    
+    // Moved hooks to the top
+    const mouseX = useMotionValue(0);
+    const mouseY = useMotionValue(0);
+
+    useGuardianHeartbeat({
+        proactiveEnabled: aiSettings.isEnabled,
+        intervalMs: aiSettings.cooldown,
+        quietHours: aiSettings.quietHours,
+    });
+    
+    useAnimationFrame((t) => { timeRef.current = t / 1000; });
+
+    const handleUpdateAISettings = useCallback((key, value) => {
+      setAiSettings(prev => ({ ...prev, [key]: value }));
+    }, []);
+
+    const currentGuardianStyle = useMemo(() => ({
+      Calm: { color: 'border-green-500', shadow: 'shadow-green-500/20', icon: <CheckCircle className="text-green-400" />, text: 'Systems Nominal', particleColor: 'bg-green-500' },
+      Attention: { color: 'border-yellow-500', shadow: 'shadow-yellow-500/20', icon: <Bell className="text-yellow-400" />, text: 'Attention Required', particleColor: 'bg-yellow-500' },
+      Protection: { color: 'border-red-500', shadow: 'shadow-red-500/20', icon: <Shield className="text-red-500" />, text: 'Protection Mode', particleColor: 'bg-red-500' },
+      Welcome: { color: 'border-blue-500', shadow: 'shadow-blue-500/20', icon: <Hand className="text-blue-400" />, text: 'Welcome Home', particleColor: 'bg-blue-500' },
+    }[guardianState]), [guardianState]);
+
+    const handleToggleCharge = async () => {
+        const newState = await toggleReverseCharging(!isCharging);
+        setIsCharging(newState);
+        addToSpeechQueue(newState ? "Reverse charging engaged." : "Power transfer disengaged.", { voice: aiSettings.selectedVoice });
+    };
+
+    const handleNodeClick = (panelId) => setActivePanel(prev => prev === panelId ? null : panelId);
+    
+    if (!isLoaded) return <div className="h-screen w-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+
+    return (
+        <div className="min-h-screen bg-black text-white font-sans flex flex-col items-center justify-center p-8 relative overflow-hidden">
+            <CinematicBackground mouseX={mouseX} mouseY={mouseY} />
+            <audio ref={audioRef} />
+
+            <div className="flex flex-col items-center gap-8 w-full max-w-lg relative z-10">
+                
+                <div className="relative w-56 h-56 flex items-center justify-center">
+                    {familyMembers.filter(m => m.name !== 'Awaiting User...').map((m, i) => <MemberRing key={m.id} member={m} index={i} time={timeRef.current} />)}
+                    <motion.div
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        className="relative w-36 h-36 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 flex items-center justify-center shadow-inner"
+                    >
+                        <AnimatePresence mode="wait">
+                            <motion.div key={guardianState} initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                                <Zap className="w-12 h-12 text-slate-600" />
+                            </motion.div>
+                        </AnimatePresence>
+                    </motion.div>
+                    {Array.from({ length: 40 }).map((_, idx) => <Particle key={idx} index={idx} time={timeRef.current} color={currentGuardianStyle.particleColor} />)}
+                </div>
+
+                <div className={cn('flex items-center gap-2 px-4 py-2 rounded-xl border', currentGuardianStyle.color, currentGuardianStyle.shadow)}>
+                    {currentGuardianStyle.icon}<span className="text-sm font-bold">{currentGuardianStyle.text}</span>
+                </div>
+            </div>
+
+            <PanelContainer isOpen={activePanel === 'power'} onClose={() => setActivePanel(null)}>
+                <div className="space-y-4">
+                    <h3 className="font-black text-white text-lg text-red-400">Power Core</h3>
+                    <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl">
+                        <div className="flex items-center gap-2 text-4xl font-black">
+                            <BatteryChargingIcon className={`w-8 h-8 ${battery.charging ? 'text-green-400 animate-pulse' : 'text-slate-600'}`}/>
+                            {battery.percentage.toFixed(0)}<span className="text-2xl opacity-50">%</span>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs font-bold text-slate-400 uppercase">{powerState}</p>
+                            <p className="text-sm font-semibold">{battery.temperature.toFixed(1)}°C</p>
+                        </div>
+                    </div>
+                    <button onClick={handleToggleCharge} className={`w-full py-3 text-sm font-bold rounded-lg transition-colors ${isCharging ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500'}`}>
+                        {isCharging ? 'Disengage Charging' : 'Force Reverse Charge'}
+                    </button>
+                </div>
+            </PanelContainer>
+            
+            <PanelContainer isOpen={activePanel === 'guardian'} onClose={() => setActivePanel(null)}>
+                <GuardianSettingsPanel settings={aiSettings} onUpdate={handleUpdateAISettings} />
+            </PanelContainer>
+            
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-end gap-6">
+                <GlowButton onClick={() => router.push('/login/registration/admin/dashboard/audit-login/audit-journal')}><UsersIcon size={16}/></GlowButton>
+                <GlowButton onClick={() => handleNodeClick('power')} active={activePanel === 'power'}><PowerIcon size={16}/></GlowButton>
+                <GlowButton onClick={() => router.push('/admin/dashboard/system-settings/studio')}><Cpu size={16} /></GlowButton>
+                <GlowButton onClick={() => handleNodeClick('guardian')} active={activePanel === 'guardian'}><Bot size={16}/></GlowButton>
+            </div>
+        </div>
+    );
+};
+
+const App = () => (
+  <FamilyDataProvider>
+    <GuardianClockAI />
+  </FamilyDataProvider>
+);
+
+export default function AppWrapper() {
+    return (
+        <Suspense fallback={<div className="bg-black text-white h-screen w-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+            <App />
+        </Suspense>
+    );
+}
+
+// Styles are needed for the component
+// This can be refactored later if we have a global stylesheet management system
+const style = document.createElement('style');
+style.innerHTML = `
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+@keyframes slow-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-slow-spin { animation: slow-spin 30s linear infinite; }
+`;
+if(typeof document !== 'undefined') document.head.appendChild(style);
