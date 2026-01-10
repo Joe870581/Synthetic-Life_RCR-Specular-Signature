@@ -1,0 +1,340 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { 
+  Phone, ChevronLeft, Send, Mail, Clock, Globe, Settings, Search 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useUser, useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, limit } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+
+// Utility
+const cn = (...classes) => classes.filter(Boolean).join('');
+
+// --- Active Call Overlay ---
+const ActiveCallOverlay = ({ contact, state, duration, onEnd }) => (
+  <motion.div 
+    initial={{opacity:0}} 
+    animate={{opacity:1}} 
+    exit={{opacity:0}} 
+    className="fixed inset-0 bg-black/90 backdrop-blur-3xl z-[200] flex flex-col items-center justify-center p-8 text-white"
+  >
+    <AnimatePresence mode="wait">
+      <motion.div key={state} initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-20}} className="flex flex-col items-center gap-6">
+        <Image src={contact.avatar || contact.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=placeholder'} 
+               alt={contact.name} width={128} height={128} 
+               className={`w-32 h-32 rounded-full border-4 ${state==='dialing' ? 'border-slate-700 animate-pulse' : 'border-green-500 shadow-2xl shadow-green-500/20'}`} />
+        <h2 className="text-4xl font-black">{contact.name}</h2>
+        <p className={state==='dialing' ? 'text-slate-400 text-lg' : 'text-green-400 text-lg font-mono'}>
+          {state==='dialing' ? 'Dialing...' : new Date(duration*1000).toISOString().substr(14,5)}
+        </p>
+      </motion.div>
+    </AnimatePresence>
+    <button onClick={onEnd} className="absolute bottom-16 w-20 h-20 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-500 transition-colors">
+      <Phone size={32} />
+    </button>
+  </motion.div>
+);
+
+// --- Navigation Item ---
+const NavItem = ({ id, icon: Icon, label, activeView, onClick, badge }) => (
+  <button 
+    onClick={() => onClick(id)} 
+    className={cn("flex flex-col items-center gap-1.5 transition-colors relative", activeView===id ? "text-white" : "text-slate-500 hover:text-slate-300")}
+  >
+    {badge > 0 && (
+      <div className="absolute top-0 right-0 -mr-1 -mt-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{badge}</div>
+    )}
+    <Icon size={24} />
+    <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
+  </button>
+);
+
+// --- Bottom Navigation ---
+const BottomNav = ({ view, setView, callLogs, emails }) => (
+  <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-3xl border-t border-white/5">
+    <nav className="h-24 flex justify-around items-center px-8">
+      <NavItem id="universe" icon={Globe} label="Hub" activeView={view} onClick={setView} badge={0} />
+      <NavItem id="recents" icon={Clock} label="Recents" activeView={view} onClick={setView} badge={callLogs.length} />
+      <NavItem id="inbox" icon={Mail} label="Inbox" activeView={view} onClick={() => setView('inbox')} badge={emails.filter(e=>!e.read).length} />
+    </nav>
+  </div>
+);
+
+// --- Main App Content ---
+const AppContent = () => {
+  const { user: authUser } = useUser();
+  const { familyState, isLoaded } = useFamilyData();
+  const { firestore } = useFirebase();
+  const { toast } = useToast();
+
+  const [view, setView] = useState('universe');
+  const [callState, setCallState] = useState('idle');
+  const [activeContact, setActiveContact] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [messageInput, setMessageInput] = useState('');
+  const [chatMessages, setChatMessages] = useState({});
+  const [universeQuery, setUniverseQuery] = useState('');
+  const callTimerRef = useRef(null);
+
+  const userId = authUser?.uid;
+
+  // Current authenticated user in family
+  const currentUser = useMemo(() => {
+    if (!isLoaded || !userId || !familyState.members) return null;
+    const members = Object.values(familyState.members);
+    return members.find((m: any) => m.id === userId) || members.find((m: any) => m.type === 'parent') || null;
+  }, [userId, familyState.members, isLoaded]);
+
+  // Universe Search Query
+  const usersQuery = useMemoFirebase(()=>{
+    if(!firestore || !universeQuery.trim()) return null;
+    return query(
+      collection(firestore,'users'),
+      where('name','>=',universeQuery),
+      where('name','<=',universeQuery+'\uf8ff'),
+      limit(10)
+    );
+  },[firestore, universeQuery]);
+  const { data: universeResults } = useCollection(usersQuery);
+
+  // --- Real-time listeners ---
+  const emailsQuery = useMemoFirebase(() => {
+    if (!firestore || !currentUser?.id) return null;
+    return query(collection(firestore, 'mail'), where('toId', '==', currentUser.id));
+  }, [firestore, currentUser?.id]);
+  const { data: emails } = useCollection(emailsQuery);
+
+  const callLogsQuery = useMemoFirebase(() => {
+    if (!firestore || !currentUser?.id) return null;
+    return query(collection(firestore, 'callLogs'), where('participants', 'array-contains', currentUser.id));
+  }, [firestore, currentUser?.id]);
+  const { data: callLogs } = useCollection(callLogsQuery);
+
+  // Client-side sorting
+  const sortedEmails = useMemo(() => emails ? [...emails].sort((a, b) => (b.timestamp?.toDate() || 0) - (a.timestamp?.toDate() || 0)) : [], [emails]);
+  const sortedCallLogs = useMemo(() => callLogs ? [...callLogs].sort((a, b) => (b.timestamp?.toDate() || 0) - (a.timestamp?.toDate() || 0)) : [], [callLogs]);
+
+
+  // Chat messages listener
+  useEffect(()=>{
+    if(!firestore || !activeContact?.id || !currentUser?.id) return;
+    const conversationId = [currentUser.id, activeContact.id].sort().join('_');
+    const messagesQuery = query(collection(firestore,'messages',conversationId,'messages'), orderBy('timestamp','asc'), limit(100));
+    const unsub = onSnapshot(messagesQuery,snap=>{
+      setChatMessages(prev=>({...prev,[activeContact.id]: snap.docs.map(d=>({...d.data(),id:d.id}))}));
+    });
+    return ()=>unsub();
+  },[firestore,activeContact?.id,currentUser?.id]);
+
+  // --- Actions ---
+  const startCall = async(contact)=>{
+    if(!firestore || !currentUser) return;
+    setActiveContact(contact);
+    setCallState('dialing');
+
+    try{
+      await addDoc(collection(firestore,'callLogs'),{
+        participants:[currentUser.id,contact.id],
+        initiator:currentUser.id,
+        type:'outgoing',
+        status:'dialing',
+        timestamp:serverTimestamp()
+      });
+
+      setTimeout(()=>{
+        setCallState('connected');
+        setCallDuration(0);
+        callTimerRef.current = setInterval(()=>setCallDuration(d=>d+1),1000);
+      },1500);
+
+    }catch(e){ toast({ title: 'Failed to start call', variant: 'destructive'}) }
+  };
+
+  const endCall = ()=>{
+    clearInterval(callTimerRef.current);
+    setCallState('idle');
+    setActiveContact(null);
+  };
+
+  const sendMessage = async()=>{
+    if(!activeContact || !messageInput.trim() || !firestore || !currentUser) return;
+    const conversationId = [currentUser.id, activeContact.id].sort().join('_');
+    try{
+      await addDoc(collection(firestore,'messages',conversationId,'messages'),{
+        content:messageInput,
+        from:currentUser.id,
+        to:activeContact.id,
+        timestamp:serverTimestamp()
+      });
+      setMessageInput('');
+    }catch(e){ toast({ title: 'Failed to send message', variant: 'destructive'}) }
+  };
+
+  const handleEmailReply = (email)=>{
+    setActiveContact({id:email.fromId,name:email.from,avatar:email.avatar,isEmailPromoted:true});
+    setView('conversation');
+  };
+
+  if(!currentUser) return <div className="text-white p-8 text-center">Loading User...</div>;
+
+  // --- Render ---
+  return (
+    <div className="h-full w-full bg-slate-950 text-slate-200 overflow-hidden">
+      <AnimatePresence>
+        {callState!=='idle' && activeContact && <ActiveCallOverlay contact={activeContact} state={callState} duration={callDuration} onEnd={endCall} />}
+      </AnimatePresence>
+
+      <main className="flex-1 overflow-hidden relative">
+        <AnimatePresence mode="wait">
+          {/* Universe / Hub */}
+          {view==='universe' && (
+            <motion.div key="universe" initial={{opacity:0}} animate={{opacity:1}} className="p-4 h-full overflow-y-auto space-y-6">
+              <header className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-black tracking-tighter text-white">HUB</h1>
+                  <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest">Global Family Link</p>
+                </div>
+                <Link href="/login/registration">
+                  <div className="flex -space-x-2">
+                    {Object.values(familyState.members).slice(0,4).map((m: any)=>(
+                      <div key={m.id} className="w-8 h-8 rounded-full border-2 border-slate-950 overflow-hidden ring-2 ring-blue-500/20">
+                        <Image src={m.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=placeholder'} alt={m.name} width={32} height={32}/>
+                      </div>
+                    ))}
+                  </div>
+                </Link>
+              </header>
+
+              <section className="grid grid-cols-3 gap-3">
+                {Object.values(familyState.members).filter((m: any)=>m.id!==currentUser.id && m.name!=='Awaiting User...').map((member: any)=>(
+                  <button key={member.id} onClick={()=>{setActiveContact(member); setView('conversation')}} className="flex flex-col items-center p-3 rounded-3xl bg-slate-900/30 border border-white/5">
+                    <Image src={member.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=placeholder'} alt={member.name} width={40} height={40} className="w-10 h-10 rounded-xl"/>
+                    <span className="mt-2 font-black text-xs text-white truncate w-full text-center">{member.name}</span>
+                    <span className="text-[8px] text-blue-400 font-bold uppercase truncate">{member.type}</span>
+                  </button>
+                ))}
+              </section>
+
+              <section className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4"/>
+                  <input type="text" placeholder="Search registered members..." value={universeQuery} onChange={e=>setUniverseQuery(e.target.value)} className="w-full bg-slate-900 border-none rounded-2xl py-4 pl-10 pr-4 text-sm text-white focus:ring-1 focus:ring-blue-500"/>
+                </div>
+
+                <div className="space-y-2">
+                  {universeResults?.map((user: any)=>(
+                    <div key={user.id} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-900/50 border border-white/5">
+                      <Image src={user.avatar || user.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=placeholder'} alt={user.name} width={40} height={40} className="w-10 h-10 rounded-full"/>
+                      <div className="flex-1">
+                        <p className="font-bold text-sm text-white">{user.name}</p>
+                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-tighter">Registered Member</p>
+                      </div>
+                      <button onClick={()=>startCall(user)} className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-xl"><Phone size={14}/></button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </motion.div>
+          )}
+
+          {/* Recents */}
+          {view==='recents' && (
+            <motion.div key="recents" className="p-6 h-full overflow-y-auto space-y-4">
+              <header className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-black text-white">RECENTS</h1>
+              </header>
+              {sortedCallLogs.map(log=>{
+                const familyMembersList = Object.values(familyState.members);
+                const contact = familyMembersList.find((u: any) => u.id === (log.participants.find(p => p !== currentUser.id))) || { name: 'Unknown', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Unknown' };
+                return (
+                  <div key={log.id} onClick={()=>{setActiveContact(contact); setView('conversation')}} className="flex items-center gap-4 p-5 rounded-[2rem] bg-slate-900/40 border border-white/5 hover:bg-slate-800 cursor-pointer">
+                    <Image src={contact.imageUrl} alt={contact.name} width={56} height={56} className="w-14 h-14 rounded-2xl grayscale hover:grayscale-0"/>
+                    <div className="flex-1">
+                      <p className="font-black text-lg text-white">{contact.name}</p>
+                      <p className="text-[10px] text-blue-400/80 font-bold uppercase tracking-widest">{log.type==='email-reply' ? 'Email Conversation' : 'Voice Link'}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </motion.div>
+          )}
+
+          {/* Inbox */}
+          {view==='inbox' && (
+            <motion.div key="inbox" className="p-6 h-full flex flex-col">
+              <header className="flex items-center justify-between mb-8">
+                <h1 className="text-3xl font-black text-white">INBOX</h1>
+                <button onClick={()=>{}} className="p-3 bg-slate-900 rounded-2xl text-slate-500"><Settings size={20}/></button>
+              </header>
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {sortedEmails.map(email=>(
+                  <div key={email.id} onClick={()=>handleEmailReply(email)} className={cn("flex items-center gap-4 p-4 rounded-3xl transition-all cursor-pointer", email.read ? "bg-slate-900/20" : "bg-slate-900 border-l-4 border-blue-500")}>
+                    <Image src={email.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=placeholder'} alt={email.from} width={40} height={40} className="w-10 h-10 rounded-full"/>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-sm", email.read ? "text-slate-400" : "font-black text-white")}>{email.from}</p>
+                      <p className="text-xs text-slate-500 truncate">{email.subject}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Conversation */}
+          {view==='conversation' && activeContact && (
+            <motion.div key="conversation" initial={{x:20}} animate={{x:0}} className="h-full flex flex-col bg-slate-950">
+              <div className="p-6 flex items-center gap-4 border-b border-white/5 bg-slate-900/40 backdrop-blur-2xl">
+                <button onClick={()=>setView(activeContact.isEmailPromoted?'inbox':'universe')} className="p-2 -ml-2 text-slate-400"><ChevronLeft size={24}/></button>
+                <Image src={activeContact.avatar || activeContact.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=placeholder'} alt={activeContact.name} width={48} height={48} className="w-12 h-12 rounded-2xl"/>
+                <div className="flex-1">
+                  <h2 className="font-black text-lg text-white leading-tight">{activeContact.name || activeContact.from}</h2>
+                  <span className="text-[9px] text-blue-400 font-black uppercase tracking-widest">Active Thread</span>
+                </div>
+                <button onClick={()=>startCall(activeContact)} className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl"><Phone size={20}/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                {(chatMessages[activeContact.id] || []).map(msg=>(
+                  <div key={msg.id} className={cn("max-w-[80%] p-4 rounded-3xl break-words", msg.from===currentUser.id ? "ml-auto bg-emerald-500/20 text-white" : "bg-slate-900/50 text-slate-200")}>
+                    {msg.content}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 flex gap-3 border-t border-white/5 bg-slate-900/30">
+                <input type="text" value={messageInput} onChange={e=>setMessageInput(e.target.value)} placeholder="Type a message..." className="flex-1 bg-slate-950 rounded-2xl px-4 py-3 focus:outline-none text-white"/>
+                <button onClick={sendMessage} className="p-4 bg-blue-500/20 rounded-xl text-blue-400"><Send size={18}/></button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      <BottomNav view={view} setView={setView} callLogs={sortedCallLogs} emails={sortedEmails}/>
+    </div>
+  );
+};
+
+// --- Wrap with FamilyData ---
+export default function SharedAppEmail() {
+  return (
+    <FamilyDataProvider>
+      <Suspense fallback={<div className="text-white p-8">Loading Family Data...</div>}>
+        <AppContent />
+      </Suspense>
+    </FamilyDataProvider>
+  );
+}
+
+// Add global styles for font
+const style = document.createElement('style');
+style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');`;
+if (typeof document !== 'undefined') {
+  document.head.appendChild(style);
+}
