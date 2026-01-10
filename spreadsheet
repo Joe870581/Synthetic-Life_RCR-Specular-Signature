@@ -1,0 +1,476 @@
+
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Mic, HelpCircle, Sigma, Divide, X, Minus, Plus, Percent, PlusMinus, CornerDownLeft, BrainCircuit, CaseSensitive, FileText, Undo, Redo, Printer, Bold, Italic, Underline, ChevronDown, AlignLeft, AlignCenter, AlignRight, Merge, Bot, Calculator, Save, Upload, Camera, BookOpen, ListChecks, Paintbrush, FileUp, RotateCw, Palette, Pen, Highlighter, PaintBucket, Edit3 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
+import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import Link from 'next/link';
+
+// --- Core Spreadsheet Logic & State Management ---
+
+const ROWS = 20;
+const COLS = 12; // A-L
+
+function useSpreadsheet() {
+    const [grid, setGrid] = useState<Array<Array<string | number | null>>>(() =>
+        Array(ROWS).fill(0).map(() => Array(COLS).fill(null))
+    );
+    const [activeCell, setActiveCell] = useState('A1');
+    const [isSelecting, setIsSelecting] = useState(false);
+    const [selectionRange, setSelectionRange] = useState({ start: 'A1', end: 'A1' });
+
+    const colToLetter = (colIndex: number) => String.fromCharCode(65 + colIndex);
+
+    const cellToCoords = useCallback((cellAddress: string): { row: number, col: number } | null => {
+        const match = cellAddress.match(/([A-Z]+)(\d+)/i);
+        if (match) {
+            const colName = match[1].toUpperCase();
+            let col = 0;
+            for (let i = 0; i < colName.length; i++) {
+                col = col * 26 + (colName.charCodeAt(i) - 64);
+            }
+            col -= 1;
+            const row = parseInt(match[2], 10) - 1;
+
+            if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+                return { row, col };
+            }
+        }
+        return null;
+    }, []);
+
+    const updateCell = (address: string, value: string) => {
+        const coords = cellToCoords(address);
+        if (!coords) return;
+
+        setGrid(prevGrid => {
+            const newGrid = prevGrid.map(row => [...row]);
+            const numValue = parseFloat(value);
+            if (value.startsWith('=')) {
+                 newGrid[coords.row][coords.col] = value;
+            } else {
+                 newGrid[coords.row][coords.col] = isNaN(numValue) || value.trim() === '' ? value : numValue;
+            }
+            return newGrid;
+        });
+    };
+    
+    const evaluateCell = useCallback((address: string, processingStack: string[] = []): string | number => {
+        if (processingStack.includes(address)) {
+            return '#REF!'; // Circular reference detected
+        }
+
+        const coords = cellToCoords(address);
+        if (!coords) return '#REF!';
+        
+        const cellValue = grid[coords.row][coords.col];
+        if (typeof cellValue === 'string' && cellValue.startsWith('=')) {
+            try {
+                const formula = cellValue.substring(1).toUpperCase();
+                
+                // Handle SUM ranges
+                const sumMatch = formula.match(/SUM\(([A-Z]+\d+):([A-Z]+\d+)\)/);
+                if (sumMatch) {
+                    const startCoords = cellToCoords(sumMatch[1]);
+                    const endCoords = cellToCoords(sumMatch[2]);
+                    if(startCoords && endCoords) {
+                        let sum = 0;
+                        for(let r = Math.min(startCoords.row, endCoords.row); r <= Math.max(startCoords.row, endCoords.row); r++) {
+                            for(let c = Math.min(startCoords.col, endCoords.col); c <= Math.max(startCoords.col, endCoords.col); c++) {
+                                const val = evaluateCell(`${colToLetter(c)}${r + 1}`, [...processingStack, address]);
+                                if(typeof val === 'number') sum += val;
+                            }
+                        }
+                        return sum;
+                    }
+                }
+                
+                // Replace cell references with their evaluated values
+                const formulaWithValues = formula.replace(/([A-Z]+\d+)/g, (match) => {
+                    const val = evaluateCell(match, [...processingStack, address]);
+                    if (typeof val === 'number') {
+                        return String(val);
+                    }
+                    return '0'; // Treat non-numeric text cells as 0 in calculations
+                });
+
+                // Use new Function for safe evaluation
+                const result = new Function('return ' + formulaWithValues.replace(/×/g, '*').replace(/÷/g, '/'))();
+                 if (typeof result !== 'number' || !isFinite(result)) {
+                    return '#VALUE!';
+                }
+                return result;
+
+            } catch (e) {
+                return '#ERROR!';
+            }
+        }
+        return cellValue === null ? '' : cellValue;
+    }, [grid, colToLetter, cellToCoords]);
+
+
+    const applyTemplate = (template: (string|number|null)[][]) => {
+        const newGrid = Array(ROWS).fill(0).map(() => Array(COLS).fill(null));
+        for(let r=0; r < template.length && r < ROWS; r++) {
+            for(let c=0; c < template[r].length && c < COLS; c++) {
+                newGrid[r][c] = template[r][c];
+            }
+        }
+        setGrid(newGrid);
+    };
+
+    const isCellInRange = (address: string) => {
+        const current = cellToCoords(address);
+        const start = cellToCoords(selectionRange.start);
+        const end = cellToCoords(selectionRange.end);
+
+        if (!current || !start || !end) return false;
+
+        const minRow = Math.min(start.row, end.row);
+        const maxRow = Math.max(start.row, end.row);
+        const minCol = Math.min(start.col, end.col);
+        const maxCol = Math.max(start.col, end.col);
+
+        return current.row >= minRow && current.row <= maxRow &&
+               current.col >= minCol && current.col <= maxCol;
+    };
+
+    return { grid, setGrid, activeCell, setActiveCell, updateCell, colToLetter, cellToCoords, evaluateCell, applyTemplate, selectionRange, setSelectionRange, isSelecting, setIsSelecting, isCellInRange };
+}
+
+const templates = {
+    profitCost: [
+        ["Item", "Sale Price", "Cost", "Profit"],
+        ["Sample Item 1", 20, 12, "=B2-C2"],
+        ["Sample Item 2", 50, 35, "=B3-C3"],
+        ["Total", "=SUM(B2:B3)", "=SUM(C2:C3)", "=SUM(D2:D3)"]
+    ],
+    breakEven: [
+        ["Fixed Costs", 500],
+        ["Variable Cost per Unit", 10],
+        ["Sale Price per Unit", 30],
+        [],
+        ["Break-Even Point (Units)", "=B1/(B3-B2)"],
+        ["Break-Even Point ($)", "=B5*B3"]
+    ],
+    budget: [
+        ["Category", "Budgeted", "Actual", "Difference"],
+        ["Allowance", 50, 45, "=B2-C2"],
+        ["Toys", 20, 25, "=B3-C3"],
+        ["Snacks", 30, 20, "=B4-C4"]
+    ]
+};
+
+// --- PEDALS / Sovereign Orb Component ---
+const PEDALS_STATES = {
+    IDLE: { color: 'rgba(107, 114, 128, 0.5)', glow: 'rgba(107, 114, 128, 0.6)', eyeScaleY: 1.0, mouthD: 'M 40 70 L 60 70' },
+    LISTENING: { color: 'rgba(6, 182, 212, 0.7)', glow: 'rgba(6, 182, 212, 0.8)', eyeScaleY: 1.0, mouthD: 'M 40 70 Q 50 80 60 70' },
+    THINKING: { color: 'rgba(147, 51, 234, 0.7)', glow: 'rgba(147, 51, 234, 0.8)', eyeScaleY: 0.1, mouthD: 'M 40 70 L 60 70' },
+};
+type PedalsState = keyof typeof PEDALS_STATES;
+
+const SovereignBuddy = ({ state }: { state: any }) => {
+    const mouseX = useMotionValue(0);
+    const mouseY = useMotionValue(0);
+    const smoothMouseX = useSpring(mouseX, { stiffness: 300, damping: 20 });
+    const smoothMouseY = useSpring(mouseY, { stiffness: 300, damping: 20 });
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        const { clientX, clientY } = e;
+        const { innerWidth, innerHeight } = window;
+        const x = (clientX - innerWidth / 2) / (innerWidth / 2);
+        const y = (clientY - innerHeight / 2) / (innerHeight / 2);
+        mouseX.set(x * 10);
+        mouseY.set(y * 10);
+    }, [mouseX, mouseY]);
+
+    useEffect(() => {
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+    }, [handleMouseMove]);
+
+    return (
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+            <motion.path
+                d={state.mouthD}
+                stroke="#FFF"
+                strokeWidth="4"
+                fill="none"
+                strokeLinecap="round"
+                transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+            />
+            <g>
+                <motion.path d="M 25 40 Q 30 30 35 40" stroke="#FFF" strokeWidth="4" fill="none" strokeLinecap="round" animate={{ scaleY: state.eyeScaleY, y: state.eyeScaleY === 1 ? 0 : 10 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }}/>
+                <motion.circle cx="30" cy="40" r="4" fill="#FFF" style={{ x: smoothMouseX, y: smoothMouseY }} />
+            </g>
+            <g>
+                <motion.path d="M 65 40 Q 70 30 75 40" stroke="#FFF" strokeWidth="4" fill="none" strokeLinecap="round" animate={{ scaleY: state.eyeScaleY, y: state.eyeScaleY === 1 ? 0 : 10 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }}/>
+                <motion.circle cx="70" cy="40" r="4" fill="#FFF" style={{ x: smoothMouseX, y: smoothMouseY }} />
+            </g>
+        </svg>
+    );
+};
+
+const SovereignOrb = ({ state, onClick }: { state: PedalsState, onClick: () => void }) => {
+    const visualState = PEDALS_STATES[state];
+    
+    return (
+        <motion.div drag dragMomentum={false} className="fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing" onClick={onClick}>
+            <div className="w-16 h-16 rounded-full relative">
+                <motion.div className="absolute inset-0 rounded-full" animate={{ backgroundColor: visualState.color, boxShadow: `0 0 40px ${visualState.glow}` }} transition={{ duration: 0.5, ease: 'circOut' }}/>
+                <SovereignBuddy state={visualState} />
+            </div>
+        </motion.div>
+    );
+};
+
+
+// --- UI Components ---
+
+const ToolbarSelect = ({ label, children }: { label?: string, children?: React.ReactNode }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+        <div className="relative" onMouseLeave={() => setIsOpen(false)}>
+            <Button variant="ghost" className="text-sm font-medium text-gray-800 hover:bg-gray-200 h-8 px-2 flex items-center" onClick={() => setIsOpen(prev => !prev)}>
+                {label && <span className="truncate max-w-[80px]">{label}</span>}
+                <ChevronDown className="w-4 h-4 ml-1 opacity-50" />
+            </Button>
+            <AnimatePresence>
+            {isOpen && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute top-full mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50 p-1">
+                    {React.Children.map(children, child =>
+                        React.isValidElement(child) ? React.cloneElement(child, { onClick: () => { if (child.props.onClick) child.props.onClick(); setIsOpen(false); } } as any) : child
+                    )}
+                </motion.div>
+            )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+const Toolbar = ({ onAction }: { onAction: (action: string) => void }) => (
+    <div className="flex items-center gap-1 text-gray-600 p-1 px-2 border-b border-gray-300 bg-gray-100">
+        <Button variant="ghost" size="icon" className="w-8 h-8"><Undo /></Button>
+        <Button variant="ghost" size="icon" className="w-8 h-8"><Redo /></Button>
+        <Button variant="ghost" size="icon" className="w-8 h-8"><Printer /></Button>
+        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => onAction('merge')}><Merge /></Button>
+    </div>
+);
+
+const SpreadsheetGrid = ({ gridData, activeCell, selectionRange, onCellSelect, onCellChange, evaluateCell, onSelectionStart, onSelectionChange, onSelectionEnd, isCellInRange }: any) => {
+    const { cellToCoords } = useSpreadsheet();
+
+    return (
+        <div className="spreadsheet-container rounded-xl shadow-inner overflow-auto bg-gray-200 border border-gray-300 flex-grow" onPointerUp={onSelectionEnd}>
+            <table className="spreadsheet-grid">
+                <thead>
+                    <tr>
+                        <th className="row-header"></th>
+                        {Array.from({ length: COLS }, (_, i) => (
+                            <th key={i}>{String.fromCharCode(65 + i)}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {gridData.map((row: any[], r: number) => (
+                        <tr key={r}>
+                            <th className="row-header">{r + 1}</th>
+                            {row.map((cellValue, c) => {
+                                const address = `${String.fromCharCode(65 + c)}${r + 1}`;
+                                const displayValue = useMemo(() => evaluateCell(address), [evaluateCell, address, gridData]);
+                                const isSelected = isCellInRange(address);
+
+                                return (
+                                    <td key={c} id={`td-${address}`} 
+                                        className={cn(activeCell === address && 'cell-active', isSelected && 'cell-selected')}
+                                        onPointerDown={() => onSelectionStart(address)}
+                                        onPointerEnter={() => onSelectionChange(address)}
+                                    >
+                                        <Input
+                                            type="text"
+                                            id={`cell-${address}`}
+                                            value={(activeCell === address ? (cellValue === null ? '' : String(cellValue)) : (displayValue === null ? '' : String(displayValue)))}
+                                            onFocus={() => onCellSelect(address)}
+                                            onChange={(e) => onCellChange(address, e.target.value)}
+                                            className="cell-input"
+                                        />
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
+// --- Main Page Component ---
+const SpreadsheetPage = () => {
+    const { grid, setGrid, activeCell, setActiveCell, updateCell, evaluateCell, applyTemplate, selectionRange, setSelectionRange, isSelecting, setIsSelecting, isCellInRange, cellToCoords } = useSpreadsheet();
+    
+    const [isCalculatorVisible, setIsCalculatorVisible] = useState(false);
+    const [pedalsState, setPedalsState] = useState<PedalsState>('IDLE');
+    const { toast } = useToast();
+    
+    const activeCellValue = useMemo(() => {
+        const coords = activeCell ? cellToCoords(activeCell) : null;
+        const cellContent = coords ? grid[coords.row][coords.col] : '';
+        return cellContent === null ? '' : String(cellContent);
+    }, [activeCell, grid, cellToCoords]);
+
+
+    const handleMenuAction = (action: string) => {
+        if(action === 'toggleCalculator') {
+            setIsCalculatorVisible(prev => !prev);
+        } else {
+            toast({ title: `Action: ${action}`, description: "This feature is coming soon." });
+        }
+    };
+
+    const handleToolbarAction = (action: string) => {
+        if(action === 'merge') {
+            toast({ title: "Merge Cells", description: "This feature is under construction." });
+        }
+    };
+    
+    const handleSelectionStart = (address: string) => {
+        setIsSelecting(true);
+        setActiveCell(address);
+        setSelectionRange({ start: address, end: address });
+    };
+
+    const handleSelectionChange = (address: string) => {
+        if (isSelecting) {
+            setSelectionRange(prev => ({ ...prev, end: address }));
+        }
+    };
+
+    const handleSelectionEnd = () => {
+        setIsSelecting(false);
+    };
+
+    return (
+        <div className="flex flex-col h-full w-full bg-[#f8f9fa] font-sans">
+            <style jsx global>{`
+                .spreadsheet-grid { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 800px; user-select: none; }
+                .spreadsheet-grid th, .spreadsheet-grid td { border: 1px solid #d1d5db; padding: 0; height: 32px; text-align: right; font-size: 14px; background-color: white; }
+                .spreadsheet-grid th { background-color: #f3f4f6; text-align: center; font-weight: 600; color: #4b5563; position: sticky; top: 0; z-index: 10; }
+                .row-header { width: 40px; text-align: center !important; position: sticky; left: 0; z-index: 5; background-color: #f3f4f6;}
+                .cell-active { outline: 2px solid #3b82f6 !important; position:relative; z-index:2; }
+                .cell-selected { background-color: #dbeafe !important; }
+                .cell-input { width: 100%; height: 100%; padding: 4px 6px; border: none; background: transparent; text-align: right; outline: none; box-sizing: border-box; font-family: inherit; color: black; }
+                .cell-active .cell-input { background-color: #eff6ff; }
+            `}</style>
+            
+            <header className="flex-shrink-0 bg-white border-b border-gray-300 p-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                         <div className="text-4xl text-green-600">
+                            <Sigma />
+                        </div>
+                        <div>
+                            <h1 className="text-lg text-gray-800 font-semibold">Untitled Spreadsheet</h1>
+                             <div className="flex items-center text-sm text-gray-600 space-x-1 mt-1">
+                                <ToolbarSelect label="File">
+                                     <button onClick={() => handleMenuAction('save')} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><Save className="w-4 h-4 mr-2"/> Save</button>
+                                     <button onClick={() => handleMenuAction('upload')} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><Upload className="w-4 h-4 mr-2"/> Upload Data</button>
+                                     <button onClick={() => handleMenuAction('camera-scan')} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><Camera className="w-4 h-4 mr-2"/> Scan Math Problem</button>
+                                </ToolbarSelect>
+                                <ToolbarSelect label="Edit" />
+                                 <ToolbarSelect label="View">
+                                     <button onClick={() => handleMenuAction('toggleCalculator')} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><Calculator className="w-4 h-4 mr-2"/> Calculator</button>
+                                 </ToolbarSelect>
+                                <ToolbarSelect label="Insert">
+                                     <button onClick={() => handleMenuAction('insert-math')} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Math Problems</button>
+                                     <button onClick={() => handleMenuAction('insert-hw')} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Homework Assignments</button>
+                                </ToolbarSelect>
+                                 <ToolbarSelect label="Format">
+                                     <button onClick={() => applyTemplate(templates.profitCost)} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Profit &amp; Cost</button>
+                                     <button onClick={() => applyTemplate(templates.breakEven)} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Break-Even Analysis</button>
+                                     <button onClick={() => applyTemplate(templates.budget)} className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Simple Budget</button>
+                                 </ToolbarSelect>
+                                 <ToolbarSelect label="Tools">
+                                    <Link href={'/shared-app/word-processor'} passHref><button className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><Edit3 className="w-4 h-4 mr-2"/> Word Processor</button></Link>
+                                    <Link href={'/shared-app/art-studio'} passHref><button className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><Paintbrush className="w-4 h-4 mr-2"/> Art Studio</button></Link>
+                                    <Link href={'/shared-app/school-hub'} passHref><button className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><BookOpen className="w-4 h-4 mr-2"/> My School</button></Link>
+                                    <Link href={'/shared-app/chores'} passHref><button className="flex items-center w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"><ListChecks className="w-4 h-4 mr-2"/> Notes &amp; Goals</button></Link>
+                                </ToolbarSelect>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <Toolbar onAction={handleToolbarAction} />
+
+                <div id="formula-bar-container" className="flex items-center space-x-3 p-1 px-2 border-b border-gray-300 bg-gray-50">
+                    <div className="py-1 px-2 text-center font-mono font-bold bg-gray-200 rounded text-gray-600">{activeCell}</div>
+                    <div className="text-xl font-bold text-gray-400 italic">fx</div>
+                    <Input 
+                        type="text" 
+                        id="formula-input" 
+                        value={activeCellValue} 
+                        onChange={(e) => updateCell(activeCell, e.target.value)}
+                        onFocus={() => {
+                            const cell = document.getElementById(`cell-${activeCell}`);
+                            if(cell) cell.focus();
+                        }}
+                        className="flex-grow py-1 px-2 border-0 bg-transparent focus:ring-0 text-sm font-mono text-gray-900" 
+                    />
+                </div>
+                
+                <div className="relative flex-grow">
+                    <SpreadsheetGrid 
+                        gridData={grid} 
+                        activeCell={activeCell} 
+                        selectionRange={selectionRange}
+                        onCellSelect={setActiveCell} 
+                        onCellChange={updateCell} 
+                        evaluateCell={evaluateCell}
+                        onSelectionStart={handleSelectionStart}
+                        onSelectionChange={handleSelectionChange}
+                        onSelectionEnd={handleSelectionEnd}
+                        isCellInRange={isCellInRange}
+                    />
+                     <AnimatePresence>
+                        {isCalculatorVisible && (
+                             <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="absolute bottom-4 right-4 z-20">
+                                 <Dialog open={isCalculatorVisible} onOpenChange={setIsCalculatorVisible}>
+                                     <DialogContent className="max-w-sm p-0 border-blue-500 bg-gray-800">
+                                         <iframe src="/shared-app/calculator" className="w-full h-96 border-0 rounded-md"></iframe>
+                                     </DialogContent>
+                                 </Dialog>
+                             </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </header>
+            
+            <main className="flex-1 bg-[#e8eaed] p-4 sm:p-8 flex justify-center overflow-y-auto">
+                {/* The main grid is now part of the header component to achieve the classic layout */}
+            </main>
+            
+            <SovereignOrb state={pedalsState} onClick={() => setPedalsState(prev => prev === 'IDLE' ? 'LISTENING' : 'IDLE')} />
+        </div>
+    );
+};
+
+
+export default function AppWrapper() {
+    return (
+        <div className="flex flex-col min-h-screen w-full">
+            <SpreadsheetPage />
+        </div>
+    );
+}
+
+
+    
