@@ -1,0 +1,278 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { 
+  Heart, MessageSquare, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon,
+  ShieldAlert
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/hooks/use-toast';
+import { FamilyDataContext, FamilyDataProvider, useFamilyData } from '@/contexts/FamilyDataContext';
+import Link from 'next/link';
+import Image from 'next/image';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy, limit, serverTimestamp, addDoc } from 'firebase/firestore';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { mockFeedData } from '@/lib/mock-data'; // Import the mock data
+
+// --- UTILITY & HELPER FUNCTIONS ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+// --- NAVIGATION HUB ---
+const HeaderNav = ({ onSearchToggle, isSearchOpen }) => {
+    const navLinks = [
+        { href: '/shared-app/myclips?sessionId=null&userId=p1', icon: Home, label: 'MyClips Feed' },
+        { href: '/adult-app/adult-socialpost-view?sessionId=null&userId=p1', icon: ImageIcon, label: 'Editorial' },
+        { href: '/shared-app/video-posting?sessionId=null&userId=p1', icon: Video, label: 'Video Gallery' },
+        { href: '/adult-app/adults-message?sessionId=null&userId=p1', icon: MessageSquare, label: 'Comms' },
+    ];
+
+    return (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+            <div className="flex flex-col items-center gap-2">
+                <motion.div 
+                    layout
+                    className="flex items-center gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/[0.05] rounded-3xl"
+                >
+                    <motion.button
+                        layout
+                        onClick={onSearchToggle}
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isSearchOpen ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+                    >
+                        <Search />
+                    </motion.button>
+                    <AnimatePresence>
+                        {isSearchOpen && (
+                            <motion.div
+                                layout
+                                initial={{opacity: 0, width: 0}}
+                                animate={{opacity: 1, width: 'auto'}}
+                                exit={{opacity: 0, width: 0}}
+                                className="flex items-center gap-2 overflow-hidden"
+                            >
+                                <div className="w-px h-8 bg-white/10" />
+                                {navLinks.map((link) => (
+                                    <Link key={link.href} href={link.href} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center" title={link.label}>
+                                        <link.icon className="text-white/70"/>
+                                    </Link>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
+                 {isSearchOpen && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mt-2 w-72">
+                        <Link href="/adult-app/adult-socialpost-view?sessionId=null&userId=p1">
+                            <input type="text" placeholder="Search the universe..." className="w-full bg-black/40 backdrop-blur-3xl border border-white/10 rounded-2xl p-4 text-sm font-bold placeholder:text-white/30 outline-none focus:ring-2 focus:ring-cyan-500 text-center cursor-pointer" readOnly/>
+                        </Link>
+                    </motion.div>
+                 )}
+            </div>
+        </div>
+    );
+};
+
+
+// --- Post Card Component ---
+const PostCard = ({ post, isFlipped, onFlip }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isLiked, setIsLiked] = useState(false);
+    
+    const containerRef = useRef(null);
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+    const handleMove = (e) => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+        setMousePos({ x, y });
+    };
+    
+    if (post.type === 'special') {
+        return (
+            <div ref={containerRef} onMouseMove={handleMove} className="relative aspect-[4/5] w-full max-w-[480px] mx-auto bg-zinc-900 rounded-[3rem] overflow-hidden cursor-crosshair" style={{ perspective: '1200px' }}>
+                <div className="absolute inset-[-25%] bg-cover bg-center" style={{ backgroundImage: `url('${post.bgImage}')`, transform: `translate3d(${mousePos.x * -40}px, ${mousePos.y * -40}px, -100px) scale(1.2)`}} />
+                {post.subjectImage && <div className="absolute inset-0 flex items-center justify-center" style={{ transform: `translate3d(${mousePos.x * 60}px, ${mousePos.y * 60}px, 150px)`}}><img src={post.subjectImage} className="max-h-[80%] max-w-[80%] object-contain rounded-2xl" alt="Subject" /></div>}
+                <div className="absolute bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent w-full text-white">{post.caption}</div>
+            </div>
+        );
+    }
+    
+    if (post.type === 'news') {
+        return (
+            <div className="relative aspect-[16/9] w-full cursor-pointer" onClick={onFlip} style={{ perspective: '1000px' }}>
+                <motion.div className="relative w-full h-full" style={{ transformStyle: 'preserve-3d' }} animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: 0.6 }}>
+                    <div className="absolute w-full h-full bg-zinc-800 rounded-2xl overflow-hidden p-6 flex flex-col justify-end" style={{ backfaceVisibility: 'hidden' }}>
+                        <Image src={post.image} alt={post.title} layout="fill" objectFit="cover" className="absolute inset-0 opacity-30" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+                        <div className="relative z-10">
+                            <h3 className="text-2xl font-bold text-white">{post.title}</h3>
+                            <button className="text-xs font-bold text-blue-400 mt-2">Click to Read More</button>
+                        </div>
+                    </div>
+                    <div className="absolute w-full h-full bg-zinc-800 rounded-2xl p-6 overflow-y-auto" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
+                        <h3 className="text-xl font-bold text-white mb-2">{post.title}</h3>
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{post.excerpt}</p>
+                    </div>
+                </motion.div>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="bg-zinc-900 rounded-2xl border border-white/5 overflow-hidden">
+            <div className="flex items-center gap-3 p-4">
+                <Image src={post.avatar} width={40} height={40} className="w-10 h-10 rounded-full object-cover" alt="author" />
+                <div><h4 className="text-sm font-bold">{post.user}</h4></div>
+            </div>
+            {post.desc && <p className="px-4 pb-4 text-sm text-zinc-300">{post.desc}</p>}
+            
+            {(post.url) && (
+                <div className="relative aspect-square bg-black">
+                    <video src={post.url} className="w-full h-full object-cover" controls={false} muted loop playsInline autoPlay={true} />
+                    {(post.type === 'video' || post.type === 'live') && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                             <button onClick={() => setIsPlaying(!isPlaying)} className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                                {isPlaying ? <Pause size={32} /> : <Play size={32} />}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className="flex justify-between items-center p-3 text-zinc-400">
+                <div className="flex gap-4">
+                    <button onClick={() => setIsLiked(!isLiked)} className={`flex items-center gap-1.5 hover:text-red-500 transition-colors ${isLiked ? 'text-red-500' : ''}`}>
+                        <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
+                    </button>
+                    <button className="flex items-center gap-1.5 hover:text-blue-400"><MessageSquare size={20} /></button>
+                </div>
+                <button className="hover:text-white"><Share2 size={20} /></button>
+            </div>
+        </div>
+    );
+};
+
+
+// --- REAL POST CREATION COMPONENT ---
+const CreatePost = ({ currentUser }) => {
+    const [content, setContent] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { toast } = useToast();
+    const { firestore } = useFirebase();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!content.trim() || !currentUser?.id || !firestore) return;
+
+        setIsSubmitting(true);
+        try {
+            // This is now a real write to Firestore
+            await addDoc(collection(firestore, 'posts'), {
+                authorId: currentUser.id,
+                content: content,
+                createdAt: serverTimestamp(),
+                visibility: 'public', // Default visibility for adult posts
+            });
+
+            setContent('');
+            toast({ title: 'Success', description: 'Your post is live!' });
+            
+        } catch (error) {
+            console.error("Post creation error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Post Failed',
+                description: 'Could not create post. You may not have permissions.',
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="bg-zinc-900 rounded-2xl border border-white/10 p-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
+                 <Textarea 
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder={`What's on your mind, ${currentUser?.name}?`}
+                    className="bg-black/20 border-zinc-700 min-h-[80px]"
+                 />
+                 <Button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-blue-600 hover:bg-blue-500">
+                     <Send className="mr-2 h-4 w-4"/> {isSubmitting ? 'Posting...' : 'Post'}
+                 </Button>
+            </form>
+        </div>
+    )
+}
+
+// --- MAIN APP ---
+const AppContent = (props) => {
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [flippedPostId, setFlippedPostId] = useState(null);
+    const { familyMembers, isLoaded } = useFamilyData();
+    const searchParams = useSearchParams();
+    const userId = searchParams.get('userId');
+
+    const currentUser = useMemo(() => {
+        if (!familyMembers) return null;
+        return familyMembers.find(m => m.id === userId);
+    }, [userId, familyMembers]);
+
+    // Handle initial loading and data readiness
+    if (!isLoaded) {
+        return <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">Loading Live Feed...</div>;
+    }
+
+    return (
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center py-10 px-4 font-sans">
+            <HeaderNav onSearchToggle={() => setIsSearchOpen(p => !p)} isSearchOpen={isSearchOpen} />
+            
+            <main className="w-full max-w-2xl mt-16">
+                <div className="space-y-6">
+                    {currentUser && <CreatePost currentUser={currentUser} />}
+                    
+                    {/* Using mock data temporarily to preserve UI */}
+                    {mockFeedData.map(post => (
+                        <PostCard 
+                            key={post.id} 
+                            post={post} 
+                            isFlipped={flippedPostId === post.id} 
+                            onFlip={() => setFlippedPostId(flippedPostId === post.id ? null : post.id)} 
+                        />
+                    ))}
+                </div>
+            </main>
+        </div>
+    );
+};
+
+const AppWithProvider = (props) => (
+    <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading User Data...</div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default function App() {
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,400;1,700&family=Inter:wght@400;700;900&display=swap'); body { font-family: 'Inter', sans-serif; background: #050505; color: white; margin: 0; }`;
+        document.head.appendChild(style);
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
+
+    return <AppWithProvider />;
+}
