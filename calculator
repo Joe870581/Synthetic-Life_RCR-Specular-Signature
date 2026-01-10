@@ -1,0 +1,603 @@
+
+'use client';
+
+import React, { useState, useEffect, useCallback, useReducer, useMemo } from 'react';
+// Corrected icon import
+import { Mic, HelpCircle, Sigma, Divide, X, Minus, Plus, Percent, Baseline, CornerDownLeft, BrainCircuit, CaseSensitive } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { motion, AnimatePresence } from 'framer-motion';
+
+
+// --- TYPE DEFINITIONS ---
+type Mode = 'junior' | 'pro';
+type CalculatorState = {
+    input: string;
+    history: string;
+    showStepByStep: boolean;
+    error: string | null;
+    isError: boolean; // Added flag for visual error feedback
+};
+type Action = 
+    | { type: 'PRESS_KEY'; key: string }
+    | { type: 'OPERATOR'; op: string }
+    | { type: 'FUNCTION'; func: string }
+    | { type: 'UNARY_OP'; op: string } 
+    | { type: 'CALCULATE' }
+    | { type: 'CLEAR' }
+    | { type: 'BACKSPACE' }
+    | { type: 'SET_INPUT'; input: string }
+    | { type: 'TOGGLE_STEPS' };
+
+// --- CONFIGURATION ---
+
+// Explicit 4-column grid for Junior mode (Row 5 has '0' spanning 2 columns)
+const JUNIOR_KEYS_GRID = [
+    ['AC', '⌫', '%', '÷'],
+    ['7', '8', '9', '×'],
+    ['4', '5', '6', '-'],
+    ['1', '2', '3', '+'],
+    ['+/-', '0', '.', '='],
+];
+
+// Explicit 5-column grid for Pro mode
+const PRO_KEYS_GRID = [
+    ['sin', 'cos', 'tan', 'log', 'ln'], // Functions 1
+    ['π', 'e', '(', ')', 'xʸ'],         // Functions 2
+    ['√', 'x²', '1/x', 'AC', '⌫'],     // Functions 3 + Controls
+    ['7', '8', '9', '÷', '×'],          // Numbers + M/D
+    ['4', '5', '6', '+', '-'],          // Numbers + A/S
+    ['1', '2', '3', '%', '='],          // Numbers + % + Equals
+    ['0', '0', '.', '='],               // Special: '0' spans 2 columns, '=' spans 2 columns
+];
+
+
+// --- CORE LOGIC ---
+
+// Simple Order of Operations Parser for "Why this works" 
+function solveOrderOfOperations(expr: string): string[] {
+    if (!expr) return [];
+    
+    let expressionToSolve = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/ /g, '');
+    const stepsArray: string[] = [];
+
+    // Function to safely evaluate a sub-expression using JS's engine
+    const evaluateSubExpression = (exp: string): string => {
+        try {
+            // Apply calculation replacements needed for 'eval'
+            let evalExp = exp
+                .replace(/π/g, 'Math.PI')
+                .replace(/e/g, 'Math.E')
+                .replace(/xʸ/g, '**')
+                .replace(/√/g, 'Math.sqrt')
+                .replace(/sin/g, 'Math.sin')
+                .replace(/cos/g, 'Math.cos')
+                .replace(/tan/g, 'Math.tan')
+                .replace(/log10/g, 'Math.log10') // Corrected log base 10 replacement
+                .replace(/ln/g, 'Math.log'); 
+
+            // Safety check: prevent simple injection but rely on environment limitations
+            if (evalExp.includes(';')) throw new Error('Syntax violation'); 
+
+            const result = new Function('return ' + evalExp)();
+            if (!isFinite(result)) throw new Error('Result is not finite');
+            
+            // Format result for display (up to 8 decimal places)
+            return String(parseFloat(result.toFixed(8)));
+        } catch {
+            return exp; // Return expression unchanged if evaluation fails
+        }
+    };
+
+    // --- 1. Parentheses (P) - Iterate until no parentheses remain, ensuring nested evaluation
+    const parenRegex = /\(([^()]+)\)/g;
+    let maxParenIterations = 20; // Increased limit for nested structures
+    
+    while(maxParenIterations-- > 0) {
+        let replacementMade = false;
+        
+        // Find the innermost parentheses pair first (e.g., in sin(30+(45*2)), it finds (45*2))
+        const innerParenRegex = /\(([^()]+)\)/;
+        const match = expressionToSolve.match(innerParenRegex);
+        
+        if (!match) break;
+        
+        const [fullMatch, innerExpr] = match;
+        const evaluatedInner = evaluateSubExpression(innerExpr);
+        
+        // Replace the *specific* match with its result
+        expressionToSolve = expressionToSolve.replace(fullMatch, evaluatedInner);
+        
+        stepsArray.push(`(P) Simplified: ${expressionToSolve.replace(/\*/g, '×').replace(/\//g, '÷')}`);
+        
+        if (maxParenIterations === 0) {
+             stepsArray.push("Warning: Maximum simplification steps reached for parentheses.");
+             break;
+        }
+    }
+
+    // --- 2. Multiplication and Division (MD) - Left to Right
+    const mdRegex = /(-?\d+\.?\d*)\s*([*/])\s*(-?\d+\.?\d*)/;
+    let mdIterations = 0;
+    while (expressionToSolve.match(mdRegex) && mdIterations++ < 50) {
+        const match = expressionToSolve.match(mdRegex);
+        if (!match) break;
+        
+        const [subExpr] = match;
+        const replacement = evaluateSubExpression(subExpr);
+        
+        const firstMatchIndex = expressionToSolve.indexOf(subExpr);
+        expressionToSolve = expressionToSolve.substring(0, firstMatchIndex) + replacement + expressionToSolve.substring(firstMatchIndex + subExpr.length);
+
+        stepsArray.push(`(M/D) Intermediate: ${expressionToSolve.replace(/\*/g, '×').replace(/\//g, '÷')}`);
+    }
+
+    // --- 3. Addition and Subtraction (AS) - Left to Right
+    // Handles unary minus by ensuring we look for two numbers separated by + or -
+    const asRegex = /(-?\d+\.?\d*)\s*([+-])\s*(-?\d+\.?\d*)/; 
+    let asIterations = 0;
+    while (expressionToSolve.match(asRegex) && asIterations++ < 50) {
+        const match = expressionToSolve.match(asRegex);
+        if (!match) break;
+        
+        const [subExpr] = match;
+        const replacement = evaluateSubExpression(subExpr);
+        
+        const firstMatchIndex = expressionToSolve.indexOf(subExpr);
+        expressionToSolve = expressionToSolve.substring(0, firstMatchIndex) + replacement + expressionToSolve.substring(firstMatchIndex + subExpr.length);
+
+        stepsArray.push(`(A/S) Intermediate: ${expressionToSolve.replace(/\*/g, '×').replace(/\//g, '÷')}`);
+    }
+
+    // Final formatting and summary
+    if (stepsArray.length > 0) {
+         stepsArray.unshift(`Start: ${expr.replace(/\s+/g, '')}`);
+         // Use the final remaining expression for the absolute final result calculation
+         const finalResult = evaluateSubExpression(expressionToSolve); 
+         stepsArray.push(`→ Final Result: ${Number(finalResult).toLocaleString()}`);
+    } else {
+        return ["This expression is already simplified or too simple for step-by-step breakdown."];
+    }
+
+    return stepsArray;
+}
+
+
+function calculatorReducer(state: CalculatorState, action: Action): CalculatorState {
+    switch (action.type) {
+        case 'PRESS_KEY':
+            // Reset error state on any new key press
+            if (state.input === '0' || state.isError) {
+                 return { ...state, input: action.key, error: null, isError: false };
+            }
+            return { ...state, input: state.input + action.key, error: null, isError: false };
+            
+        case 'OPERATOR':
+            if (state.isError) return state;
+            // Prevent consecutive operators, replacing the last one if it exists
+            const trimmedInput = state.input.trim();
+            if (['÷', '×', '-', '+', 'xʸ', '**2'].some(op => trimmedInput.endsWith(op))) {
+                 return { ...state, input: state.input.replace(/[\s\÷\×\-+\*\*2\xʸ]+$/, '') + ` ${action.op} ` };
+            }
+            return { ...state, input: `${trimmedInput} ${action.op} ` };
+
+        case 'UNARY_OP':
+            if (state.isError) return state;
+            
+            const lastNumberRegex = /(-?\d+\.?\d*(?:e[+-]?\d+)?)$/; 
+            const match = state.input.match(lastNumberRegex);
+            
+            if (!match) return state;
+
+            const lastNumStr = match[1];
+            const restOfInput = state.input.substring(0, state.input.length - lastNumStr.length);
+            let newValue: string;
+
+            if (action.op === '+/-') {
+                const num = parseFloat(lastNumStr);
+                // Toggle sign.
+                newValue = String(-num);
+            } else if (action.op === '%') {
+                const num = parseFloat(lastNumStr);
+                newValue = String(num / 100);
+            } else {
+                return state;
+            }
+            
+            return { ...state, input: restOfInput + newValue, error: null, isError: false };
+            
+        case 'FUNCTION':
+             if (state.isError) return state;
+             if (action.func === '1/()') {
+                // Improved safety for reciprocal: 1/(current_expression)
+                 return { ...state, input: `1/(${state.input})`, error: null, isError: false };
+             }
+             // For other functions like sin, log, etc.
+             return { ...state, input: `${action.func}(${state.input})` }; 
+            
+        case 'CLEAR':
+            return { input: '0', history: '', showStepByStep: false, error: null, isError: false };
+            
+        case 'BACKSPACE':
+            if(state.isError) return { ...state, input: '0', error: null, isError: false };
+            return { ...state, input: state.input.length > 1 ? state.input.slice(0, -1) : '0', error: null, isError: false };
+            
+        case 'SET_INPUT':
+            return { ...state, input: action.input, error: null, isError: false };
+            
+        case 'CALCULATE':
+            try {
+                let evalStr = state.input
+                    .replace(/×/g, '*')
+                    .replace(/÷/g, '/')
+                    .replace(/π/g, 'Math.PI')
+                    .replace(/e/g, 'Math.E')
+                    .replace(/xʸ/g, '**')
+                    .replace(/x²/g, '**2') 
+                    .replace(/√/g, 'Math.sqrt')
+                    .replace(/sin/g, 'Math.sin')
+                    .replace(/cos/g, 'Math.cos')
+                    .replace(/tan/g, 'Math.tan')
+                    .replace(/log/g, 'Math.log10') // base 10
+                    .replace(/ln/g, 'Math.log'); // natural log
+                
+                // Perform simple syntax checking
+                const syntaxError = detectSyntaxError(evalStr);
+                if (syntaxError) throw new Error(syntaxError);
+                
+                // Use new Function() for evaluation
+                const result = new Function('return ' + evalStr)();
+                if (typeof result !== 'number' || !isFinite(result)) throw new Error('Invalid Math');
+
+                return { ...state, history: state.input + ' =', input: String(parseFloat(result.toFixed(8))), error: null, isError: false, showStepByStep: false };
+            } catch (error: any) {
+                const errorMessage = error.message.includes('Syntax') ? error.message : "Invalid Expression or Calculation Error.";
+                return { ...state, history: state.input, input: 'Error', error: errorMessage, isError: true, showStepByStep: false };
+            }
+            
+        case 'TOGGLE_STEPS':
+            return { ...state, showStepByStep: !state.showStepByStep };
+            
+        default:
+            return state;
+    }
+}
+
+function detectSyntaxError(expr: string): string | null {
+    if (/[*\/+\-]{2,}/.test(expr)) return "Multiple operators together.";
+    const openParen = (expr.match(/\(/g) || []).length;
+    const closeParen = (expr.match(/\)/g) || []).length;
+    if (openParen !== closeParen) return "Unmatched parentheses count.";
+    if (/[*\/+\-]$/.test(expr.trim())) return "Expression ends with an operator.";
+    return null;
+}
+
+
+// --- MAIN COMPONENT ---
+
+export default function App() { 
+    const [state, dispatch] = useReducer(calculatorReducer, { input: '0', history: '', showStepByStep: false, error: null, isError: false });
+    const { toast } = useToast();
+    const [mode, setMode] = useState<Mode>('junior');
+    const [isProModalVisible, setIsProModalVisible] = useState(false);
+    const [hasSeenProInfo, setHasSeenProInfo] = useState(false);
+    const [showHelpModal, setShowHelpModal] = useState(false);
+
+    // Load initial state and check for modal flag
+    useEffect(() => {
+        const seen = localStorage.getItem('hasSeenProCalcInfo') === 'true';
+        setHasSeenProInfo(seen);
+        if (mode === 'pro' && !seen) {
+            setIsProModalVisible(true);
+        }
+    }, [mode]);
+
+    const handleModeToggle = () => {
+        const newMode = mode === 'junior' ? 'pro' : 'junior';
+        setMode(newMode);
+        dispatch({type: 'CLEAR'});
+        
+        if (newMode === 'pro' && !hasSeenProInfo) {
+            setIsProModalVisible(true);
+        }
+    };
+    
+    const handleProModalConfirm = () => {
+        setIsProModalVisible(false);
+        setHasSeenProInfo(true);
+        localStorage.setItem('hasSeenProCalcInfo', 'true');
+    }
+
+    const getKeyType = (key: string): 'num' | 'op' | 'func' | 'accent' | 'control' => {
+        if (['÷', '×', '-', '+', 'xʸ', 'x²'].includes(key)) return 'op';
+        if (['='].includes(key)) return 'accent';
+        if (['AC', '⌫'].includes(key)) return 'control';
+        if (['%', '+/-', '1/x', '(', ')', 'sin', 'cos', 'tan', 'log', 'ln', '√', 'π', 'e'].includes(key)) return 'func';
+        return 'num';
+    };
+
+    const handleKeyClick = (key: string) => {
+        switch(key) {
+            case 'AC': dispatch({ type: 'CLEAR' }); break;
+            case '=': dispatch({ type: 'CALCULATE' }); break;
+            case '⌫': dispatch({ type: 'BACKSPACE' }); break;
+            case 'xʸ': dispatch({ type: 'OPERATOR', op: 'xʸ' }); break;
+            case 'x²': dispatch({ type: 'OPERATOR', op: '**2' }); break; 
+            
+            case '%': case '+/-': // Unary operations
+                dispatch({ type: 'UNARY_OP', op: key });
+                break;
+                
+            case '1/x': // Reciprocal (uses the safer FUNCTION action)
+                dispatch({ type: 'FUNCTION', func: '1/()' }); 
+                break;
+                
+            case 'sin': case 'cos': case 'tan': case 'log': case 'ln': case '√': case '(': case ')': case 'π': case 'e':
+                // Functions, constants, and parentheses are added directly
+                dispatch({ type: 'PRESS_KEY', key }); 
+                break;
+            
+            case '×': case '÷': case '+': case '-':
+                dispatch({ type: 'OPERATOR', op: key });
+                break;
+                
+            default: // Numbers, and decimal
+                dispatch({ type: 'PRESS_KEY', key });
+                break;
+        }
+    }
+    
+    const calculationSteps = useMemo(() => {
+        if (state.history && state.showStepByStep) {
+            return solveOrderOfOperations(state.history.replace(' =','').trim());
+        }
+        return [];
+    }, [state.history, state.showStepByStep]);
+
+    // Consolidate the keys to render based on the explicit grid structures
+    const keysToRender = useMemo(() => {
+        if (mode === 'pro') {
+            return PRO_KEYS_GRID;
+        } else {
+            return JUNIOR_KEYS_GRID;
+        }
+    }, [mode]);
+
+    const renderKeyContent = (key: string) => {
+        switch(key) {
+            case '⌫': return <CornerDownLeft className="w-6 h-6 rotate-90" />;
+            case '÷': return <Divide className="w-6 h-6" />;
+            case '×': return <X className="w-6 h-6" />;
+            case '-': return <Minus className="w-6 h-6" />;
+            case '+': return <Plus className="w-6 h-6" />;
+            case '+/-': return <Baseline className="w-6 h-6" />; 
+            case 'x²': return <span className="text-xl">x²</span>;
+            case 'xʸ': return <span className="text-xl">xʸ</span>;
+            case '√': return <span className="text-xl">√</span>;
+            case 'log': return <span className="text-xl">log₁₀</span>;
+            case 'ln': return <span className="text-xl">ln</span>;
+            case 'π': return <span className="text-xl">π</span>;
+            case 'e': return <span className="text-xl">e</span>;
+            case '%': return <Percent className="w-6 h-6" />;
+            default: return key;
+        }
+    };
+
+    return (
+        <>
+        {/* Pro Mode Info Modal */}
+        <Dialog open={isProModalVisible} onOpenChange={setIsProModalVisible}>
+           <DialogContent>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+                    <div className="bg-gray-800 border-2 border-yellow-500/50 text-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+                        <div className="space-y-4">
+                            <h2 className="text-2xl text-yellow-400 font-extrabold">Welcome to AeroCalc Pro!</h2>
+                            <p className="text-gray-400">
+                                The Pro mode is designed for advanced scientific and academic calculations.
+                            </p>
+                        </div>
+                        <div className="py-4 text-gray-300 space-y-3">
+                            <p className="flex items-start">
+                                <Sigma className="w-5 h-5 text-indigo-400 mr-3 mt-1 flex-shrink-0" />
+                                Includes: Trigonometry, Logarithms, and Exponents.
+                            </p>
+                            <p className="flex items-start">
+                                <BrainCircuit className="w-5 h-5 text-green-400 mr-3 mt-1 flex-shrink-0" />
+                                Tip: Always use parentheses `()` for complex functions and nested operations.
+                            </p>
+                        </div>
+                        <div className="flex justify-between items-center mt-4">
+                            <label className="flex items-center text-sm text-gray-400 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={hasSeenProInfo}
+                                    onChange={() => setHasSeenProInfo(p => !p)}
+                                    className="mr-2 h-4 w-4 text-indigo-500 rounded border-gray-600 focus:ring-indigo-500 bg-gray-700"
+                                />
+                                Don't show this again
+                            </label>
+                            <div className="flex space-x-3">
+                                <motion.button 
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => { setIsProModalVisible(false); setMode('junior'); }} 
+                                    className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-all text-sm"
+                                >
+                                    Stay in Junior Mode
+                                </motion.button>
+                                <motion.button 
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={handleProModalConfirm} 
+                                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded-lg transition-all text-sm"
+                                >
+                                    Enter Pro Mode
+                                </motion.button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+            
+        {/* Main Calculator App */}
+        <div className={cn("min-h-screen flex items-center justify-center p-4 transition-colors duration-500 bg-gray-900")}>
+            <div className={cn("calculator-container w-full max-w-sm rounded-3xl shadow-2xl p-6 transition-all duration-500", state.isError ? 'border-4 border-red-500/50 animate-pulse-slow' : mode === 'junior' ? 'bg-gray-900 border-2 border-orange-500/30' : 'bg-gray-900 border-2 border-indigo-500/30')}>
+                
+                <div className="flex justify-between items-center mb-4">
+                    <h1 id="mode-title" className={cn("text-2xl font-black transition-colors", mode === 'junior' ? 'text-orange-400' : 'text-indigo-400')}>
+                        {mode === 'junior' ? 'Junior Calc' : 'AeroCalc Pro'}
+                    </h1>
+                    <div className="flex space-x-2">
+                        <button onClick={() => setShowHelpModal(true)} className="p-2 text-white/70 hover:text-white transition-colors">
+                            <HelpCircle className="w-6 h-6" />
+                        </button>
+                        <button onClick={handleModeToggle} className={cn("px-3 py-1 text-xs rounded-full font-semibold transition-all shadow-md", mode === 'junior' ? 'bg-orange-500 text-black hover:bg-orange-400' : 'bg-indigo-500 text-black hover:bg-indigo-400')}>
+                            {mode === 'junior' ? 'Switch to Pro' : 'Switch to Junior'}
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Display */}
+                <div id="display" className={cn("display flex flex-col justify-end items-end p-4 mb-4 rounded-xl transition-all duration-300 min-h-[120px] bg-gray-800 text-white shadow-inner", state.isError && 'border-2 border-red-500')}>
+                    <AnimatePresence>
+                    {state.history && (
+                        <motion.div initial={{opacity:0, height: 0}} animate={{opacity:1, height: 'auto'}} exit={{opacity:0, height: 0}} id="history-display" className="history-text text-lg opacity-60 text-right overflow-hidden break-all max-h-12">
+                            {state.history}
+                        </motion.div>
+                    )}
+                    </AnimatePresence>
+                    <div id="input-display" className={cn("input-text text-5xl font-extrabold break-all text-right max-h-[70px] overflow-x-auto custom-scrollbar", state.isError && 'text-red-400')}>
+                        {state.input}
+                    </div>
+                    {state.error && <div className="text-xs text-red-400 font-semibold mt-1">{state.error}</div>}
+                </div>
+
+                {/* Step-by-Step Feature */}
+                {state.history && !state.isError && mode === 'junior' && (
+                    <div className="mb-4 text-center">
+                        <button 
+                            onClick={() => dispatch({type: 'TOGGLE_STEPS'})} 
+                            className="text-blue-400 text-sm font-medium hover:text-blue-300 transition-colors"
+                        >
+                            {state.showStepByStep ? 'Hide Steps (PEMDAS/BODMAS)' : 'Why this works? Show steps...'}
+                        </button>
+                        <AnimatePresence>
+                        {state.showStepByStep && (
+                            <motion.div 
+                                initial={{opacity: 0, height: 0}} 
+                                animate={{opacity: 1, height: 'auto'}} 
+                                exit={{opacity: 0, height: 0}} 
+                                transition={{duration: 0.3}}
+                                className="mt-2 p-3 bg-blue-900/50 border border-blue-500/30 rounded-lg text-left text-blue-300 font-mono text-xs max-h-40 overflow-y-auto space-y-1 custom-scrollbar"
+                            >
+                                {calculationSteps.map((step, i) => <p key={i}>{step}</p>)}
+                            </motion.div>
+                        )}
+                        </AnimatePresence>
+                    </div>
+                )}
+                 
+                {/* Keypad */}
+                <div id="keypad" className={cn("grid gap-3 transition-all duration-300", mode === 'junior' ? 'grid-cols-4' : 'grid-cols-5')}>
+                    
+                    {keysToRender.flat().map((key, index) => {
+                        const type = getKeyType(key);
+                        let colSpan = 1;
+                        let gridKey = key;
+
+                        // Explicit column spanning logic based on grid structure
+                        if (mode === 'junior') {
+                            const row = JUNIOR_KEYS_GRID.find(r => r.includes(key));
+                            if (row === JUNIOR_KEYS_GRID[4] && key === '0') {
+                                colSpan = 2;
+                            }
+                        } else {
+                           const proRowIndex = PRO_KEYS_GRID.findIndex(r => r.includes(key));
+                           if (proRowIndex === 6) { // Last row of Pro grid
+                               if (key === '0') {
+                                   colSpan = 2;
+                                   gridKey = '0-pro-span';
+                               }
+                               if (key === '=') {
+                                   colSpan = 2;
+                                   gridKey = '=-pro-span';
+                               }
+                           }
+                        }
+
+                        // Skip rendering placeholders that are handled by colSpan
+                        if (mode === 'pro' && index === 31) return null; // Skips the second '0'
+                        if (mode === 'pro' && index === 33) return null; // Skips the second '='
+
+
+                        return (
+                            <motion.button
+                                key={gridKey + index}
+                                layout
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                transition={{ duration: 0.2, type: 'spring', stiffness: 300, damping: 25 }}
+                                onClick={() => handleKeyClick(key.replace('-start', ''))}
+                                className={cn(
+                                    "p-4 rounded-xl text-xl font-bold transition-all duration-150 shadow-md active:shadow-inner active:scale-95 flex items-center justify-center", 
+                                    `col-span-${colSpan}`,
+                                    
+                                    // Base Styles
+                                    type === 'num' && 'bg-gray-600 text-white hover:bg-gray-500',
+                                    type === 'func' && 'bg-gray-700 text-white hover:bg-gray-600',
+                                    type === 'control' && 'bg-red-700 text-white hover:bg-red-600',
+                                    type === 'accent' && 'bg-green-600 text-white hover:bg-green-500',
+
+                                    // Mode-specific operator coloring
+                                    mode === 'junior' && type === 'op' && 'bg-orange-600 text-white hover:bg-orange-500',
+                                    mode === 'pro' && type === 'op' && 'bg-indigo-600 text-white hover:bg-indigo-500',
+
+                                    // Function Keys (Pro mode)
+                                    mode === 'pro' && type === 'func' && 'bg-gray-700 text-indigo-300 hover:bg-gray-600',
+
+                                    // Final AC coloring
+                                    key === 'AC' && 'bg-red-700 hover:bg-red-600',
+                                    
+                                    // Fix: '0' and '.' keys in junior mode need correct coloring
+                                    (key === '0' || key === '.') && mode === 'junior' && 'bg-gray-600 text-white hover:bg-gray-500',
+                                )}
+                            >
+                                {renderKeyContent(key)}
+                            </motion.button>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+        </>
+    );
+}
+
+// Custom CSS for scrollbar visibility and aesthetic improvements
+const style = document.createElement('style');
+style.textContent = `
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(156, 163, 175, 0.4); /* Tailwind gray-400/40 */
+        border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .animate-pulse-slow {
+        animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse-slow {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.8;
+        }
+    }
+`;
+document.head.appendChild(style);
