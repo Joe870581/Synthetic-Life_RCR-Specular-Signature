@@ -1,0 +1,119 @@
+
+'use server';
+
+/**
+ * Genkit system control tools
+ */
+
+import { ai } from '@/ai/genkit-client';
+import { z } from 'zod';
+import {
+  toggleReverseCharging,
+  getSystemStatus,
+} from '@/lib/capacitor-bridge';
+import { AppRegistry, AppSchema } from '@/ai/apps';
+
+/* ─────────────────────────────── */
+
+export const getSystemHealthTool = ai.defineTool(
+  {
+    name: 'getSystemHealthTool',
+    description: 'Retrieves current system health and status, including battery level, charging state, and sensor activity.',
+    inputSchema: z.object({}),
+    outputSchema: z.object({
+      battery: z.object({
+        percentage: z.number(),
+        charging: z.boolean(),
+        temperature: z.number(),
+      }),
+      thermal: z.object({
+        status: z.enum(['normal', 'warm', 'hot', 'critical']),
+      }),
+    }),
+  },
+  async () => getSystemStatus()
+);
+
+/* ─────────────────────────────── */
+
+export const setSystemThemeTool = ai.defineTool(
+  {
+    name: 'setSystemThemeTool',
+    description: 'Sets the visual theme for the operating system interface.',
+    inputSchema: z.object({
+      theme: z.enum(['light', 'dark', 'auto']),
+    }),
+    outputSchema: z.object({
+      success: z.boolean(),
+      message: z.string(),
+    }),
+  },
+  async ({ theme }) => {
+    // In a real app, this would call a bridge function.
+    console.log(`[System Tool] Theme changed to: ${theme}`);
+    return {
+      success: true,
+      message: `System theme switched to ${theme}`,
+    };
+  }
+);
+
+/* ─────────────────────────────── */
+
+export const toggleChargeTool = ai.defineTool(
+  {
+    name: 'toggleChargeTool',
+    description: 'Toggles reverse wireless charging on or off to charge another device.',
+    inputSchema: z.object({
+        enable: z.boolean().optional().describe("Explicitly set charging state. If not provided, it will toggle the current state."),
+    }),
+    outputSchema: z.object({
+      success: z.boolean(),
+      newState: z.boolean(),
+    }),
+  },
+  async ({ enable }) => {
+    const newState = await toggleReverseCharging(enable); // This now returns a promise
+    return {
+      success: true,
+      newState,
+    };
+  }
+);
+
+/* ─────────────────────────────── */
+
+/**
+ * A Genkit tool that allows the AI to find an application in the registry.
+ * The AI will use this tool when a user asks to "open," "launch," or "pull up" an app.
+ * This tool is READ-ONLY. It finds the app definition but does not execute anything.
+ */
+export const openAppTool = ai.defineTool(
+  {
+    name: 'openApp',
+    description: 'Finds and retrieves the definition of an application from the OS App Registry.',
+    inputSchema: z.object({
+      appName: z.string().describe('The name of the app the user wants to open. Examples: "Work Helper", "Family Map", "Clock".'),
+    }),
+    outputSchema: AppSchema.optional(),
+  },
+  async ({ appName }) => {
+    if (!appName) return undefined;
+    console.log(`[Tool: Finder] AI is searching for app: "${appName}"`);
+    
+    const searchTerm = appName.toLowerCase().replace(/\s+/g, '');
+    
+    const foundApp = Object.values(AppRegistry).find(app => 
+      app.id.toLowerCase().includes(searchTerm) ||
+      app.title.toLowerCase().includes(searchTerm) ||
+      app.description.toLowerCase().includes(searchTerm)
+    );
+
+    if (foundApp) {
+      console.log(`[Tool: Finder] Found app definition: ${foundApp.title}`);
+      return foundApp; // Return the app metadata, not a URL or action.
+    }
+    
+    return undefined; // Explicitly return undefined if no app is found
+  }
+);
