@@ -1,0 +1,618 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import {
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Link,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  List,
+  ListOrdered,
+  Maximize,
+  Mic,
+  Pencil, // Used for drawing mode toggle
+  Code,
+  Highlighter,
+  Indent,
+  Outdent,
+  ChevronDown,
+  Eraser,
+  Printer,
+  Ruler,
+  Palette,
+  Redo, // Used for clearing drawing
+} from 'lucide-react';
+import { useFirebase, useUser } from '@/firebase';
+
+// --- Utility Functions ---
+
+// Debounce function to limit how often we call the save function
+const debounce = (func, delay) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), delay);
+  };
+};
+
+
+// --- Main App Component ---
+
+const App = () => {
+  const editorRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [content, setContent] = useState('');
+  const { firestore, user: firebaseUser, isUserLoading } = useUser();
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [userId, setUserId] = useState('Loading...');
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [isDrawingMode, setIsDrawingMode] = useState(false); // New state for drawing mode
+
+  // 1. Core Exec Command Function
+  const execCmd = useCallback((command, value = null) => {
+    // Focus the editor before executing to ensure the command targets the right place
+    if (editorRef.current) {
+        editorRef.current.focus();
+    }
+    // Specific handling for 'formatBlock' to ensure clean application
+    if (command === 'formatBlock' && value) {
+        // execCommand requires block elements to be enclosed in < >
+        document.execCommand(command, false, `<${value}>`);
+    } else {
+        document.execCommand(command, false, value);
+    }
+    
+  }, []);
+
+  // 2. Debounced Save Function
+  const saveDocument = useMemo(() => {
+    if (!firestore || !appId) return () => {};
+
+    // Public document path: /artifacts/{appId}/public/data/editorDocuments/{documentId}
+    const docRef = doc(firestore, 'artifacts', appId, 'public', 'data', 'editorDocuments', 'main-document');
+
+    const save = async (htmlContent) => {
+      try {
+        await setDoc(docRef, {
+          content: htmlContent,
+          updatedAt: Date.now(),
+          lastUserId: userId,
+        }, { merge: true });
+        console.log("Document saved successfully!");
+      } catch (e) {
+        console.error("Error saving document: ", e);
+      }
+    };
+    // Use a 1000ms (1 second) debounce delay
+    return debounce(save, 1000);
+  }, [userId, firestore]);
+
+  // 3. Handle Input/Change and Trigger Save
+  const handleInput = useCallback(() => {
+    const currentContent = editorRef.current?.innerHTML || '';
+    setContent(currentContent);
+    saveDocument(currentContent);
+  }, [saveDocument]);
+  
+  // Toggle drawing mode
+  const toggleDrawingMode = () => {
+    setIsDrawingMode(prev => !prev);
+  };
+  
+  // Clear the canvas drawing
+  const handleClearDrawing = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+  };
+
+  useEffect(() => {
+    if (!isUserLoading && firebaseUser) {
+        setUserId(firebaseUser.uid);
+        setIsAuthReady(true);
+    } else if (!isUserLoading) {
+        setUserId('anonymous');
+        setIsAuthReady(true);
+    }
+  }, [isUserLoading, firebaseUser]);
+
+
+  // 5. Firestore Listener for Real-Time Updates
+  useEffect(() => {
+    if (!isAuthReady || !firestore || !appId) return;
+
+    const docRef = doc(firestore, 'artifacts', appId, 'public', 'data', 'editorDocuments', 'main-document');
+
+    const unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const newContent = data.content || '';
+        
+        if (editorRef.current && editorRef.current.innerHTML !== newContent) {
+          editorRef.current.innerHTML = newContent;
+          setContent(newContent);
+          console.log("Document updated from remote.");
+        }
+      } else {
+        console.log("No document found. Initializing new one.");
+        if (editorRef.current) {
+            editorRef.current.innerHTML = "<p>Welcome to Nexus Editor. Start writing your professional document here...</p>";
+            handleInput();
+        }
+      }
+    }, (error) => {
+      console.error("Firestore Snapshot Error:", error);
+    });
+
+    return () => unsubscribeSnapshot();
+  }, [isAuthReady, handleInput, firestore]);
+
+  // 6. Canvas Drawing Logic
+  useEffect(() => {
+      const canvas = canvasRef.current;
+      const editor = editorRef.current;
+      if (!canvas || !editor) return;
+      const ctx = canvas.getContext('2d');
+      
+      const updateCanvasSize = () => {
+          // Set canvas size to match the visible client area of the editor
+          // Note: Does not cover scrolled content, only the viewport of the editor.
+          const { clientWidth, clientHeight } = editor;
+          canvas.width = clientWidth;
+          canvas.height = clientHeight;
+      };
+
+      updateCanvasSize();
+      window.addEventListener('resize', updateCanvasSize);
+
+      if (!isDrawingMode) {
+          return () => window.removeEventListener('resize', updateCanvasSize);
+      }
+
+      // --- Drawing Handlers ---
+      let isDrawing = false;
+      
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 15; 
+      // Translucent Color: Indigo 500 at 30% opacity (0.3)
+      ctx.strokeStyle = 'rgba(99, 102, 241, 0.3)'; 
+
+      const getCoords = (e) => {
+        let clientX, clientY;
+        if (e.touches && e.touches.length) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+          e.preventDefault(); // Prevent touch-scrolling while drawing
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+
+        // Calculate offset relative to the canvas element's position
+        const rect = canvas.getBoundingClientRect();
+        const offsetX = clientX - rect.left;
+        const offsetY = clientY - rect.top;
+        return { offsetX, offsetY };
+      };
+
+      const startDrawing = (e) => {
+          isDrawing = true;
+          const { offsetX, offsetY } = getCoords(e);
+          ctx.beginPath();
+          ctx.moveTo(offsetX, offsetY);
+      };
+
+      const draw = (e) => {
+          if (!isDrawing) return;
+          const { offsetX, offsetY } = getCoords(e);
+          ctx.lineTo(offsetX, offsetY);
+          ctx.stroke();
+      };
+
+      const stopDrawing = () => {
+          isDrawing = false;
+          ctx.closePath();
+      };
+      
+      // Attach listeners
+      canvas.addEventListener('mousedown', startDrawing);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', stopDrawing);
+      canvas.addEventListener('mouseout', stopDrawing);
+
+      canvas.addEventListener('touchstart', startDrawing);
+      canvas.addEventListener('touchmove', draw);
+      canvas.addEventListener('touchend', stopDrawing);
+      canvas.addEventListener('touchcancel', stopDrawing);
+
+      return () => {
+          // Cleanup listeners
+          window.removeEventListener('resize', updateCanvasSize);
+          canvas.removeEventListener('mousedown', startDrawing);
+          canvas.removeEventListener('mousemove', draw);
+          canvas.removeEventListener('mouseup', stopDrawing);
+          canvas.removeEventListener('mouseout', stopDrawing);
+          canvas.removeEventListener('touchstart', startDrawing);
+          canvas.removeEventListener('touchmove', draw);
+          canvas.removeEventListener('touchend', stopDrawing);
+          canvas.removeEventListener('touchcancel', stopDrawing);
+      };
+  }, [isDrawingMode]);
+
+
+  // --- Link Modal Logic ---
+  const handleLinkInsertion = (e) => {
+    e.preventDefault();
+    if (linkUrl) {
+      const selectedText = document.getSelection().toString();
+      if (selectedText) {
+        execCmd('createLink', linkUrl);
+      } else {
+        execCmd('insertHTML', `<a href="${linkUrl}" target="_blank" class="text-indigo-400 underline">${linkUrl}</a>`);
+      }
+    }
+    setLinkUrl('');
+    setShowLinkModal(false);
+  };
+
+  const openLinkModal = () => {
+    setShowLinkModal(true);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // --- Styled Components ---
+
+  const ToolbarButton = ({ icon: Icon, tooltip, onClick, active }) => (
+    <button
+      onClick={onClick}
+      className={`
+        flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-150
+        text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400
+        ${active 
+          ? "bg-indigo-600 shadow-md scale-105 text-white" 
+          : "bg-slate-700 hover:bg-slate-600 hover:text-indigo-300"
+        }
+      `}
+      title={tooltip}
+    >
+      <Icon className="w-5 h-5" />
+    </button>
+  );
+
+  const ColorSwatch = ({ color, tooltip, command }) => (
+    <div
+      key={color}
+      style={{ backgroundColor: color }}
+      className="w-6 h-6 rounded-md cursor-pointer shadow-sm hover:scale-110 transition duration-150 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400"
+      onClick={() => execCmd(command, color)}
+      title={tooltip}
+    />
+  );
+
+  const ToolbarSeparator = () => (
+    <div className="w-px bg-slate-500/50 h-8 mx-2 rounded-full hidden sm:block"></div>
+  );
+
+  const BlockFormatDropdown = () => {
+    const formats = [
+      { tag: 'P', label: 'Paragraph' },
+      { tag: 'H1', label: 'Heading 1' },
+      { tag: 'H2', label: 'Heading 2' },
+      { tag: 'H3', label: 'Heading 3' },
+      { tag: 'BLOCKQUOTE', label: 'Quote' },
+    ];
+
+    const [currentFormat, setCurrentFormat] = useState('Paragraph');
+
+    const handleFormatChange = (e) => {
+      const tag = e.target.value;
+      const label = formats.find(f => f.tag === tag)?.label || 'Paragraph';
+      execCmd('formatBlock', tag);
+      setCurrentFormat(label);
+    };
+
+    return (
+      <div className="relative">
+        <select
+          onChange={handleFormatChange}
+          className="appearance-none bg-slate-700 text-slate-300 border border-slate-600 rounded-lg h-10 px-3 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition duration-150 cursor-pointer text-sm font-medium"
+          value={formats.find(f => f.label === currentFormat)?.tag || 'P'}
+          title="Change Block Format"
+        >
+          {formats.map(f => (
+            <option key={f.tag} value={f.tag}>{f.label}</option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+      </div>
+    );
+  };
+
+  const FontSizeDropdown = () => {
+    // Values are HTML font sizes (1 to 7) corresponding roughly to 8pt to 36pt
+    const sizes = [
+        { value: '1', label: '8pt' },
+        { value: '2', label: '10pt' },
+        { value: '3', label: '12pt (Default)' },
+        { value: '4', label: '14pt' },
+        { value: '5', label: '18pt' },
+        { value: '6', label: '24pt' },
+        { value: '7', label: '36pt' },
+    ];
+    const [currentSize, setCurrentSize] = useState('3');
+
+    const handleSizeChange = (e) => {
+        const size = e.target.value;
+        execCmd('fontSize', size);
+        setCurrentSize(size);
+    };
+
+    return (
+        <div className="relative">
+            <select
+                onChange={handleSizeChange}
+                className="appearance-none bg-slate-700 text-slate-300 border border-slate-600 rounded-lg h-10 px-3 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition duration-150 cursor-pointer text-sm font-medium w-24"
+                value={currentSize}
+                title="Change Font Size"
+            >
+                {sizes.map(s => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        </div>
+    );
+  };
+  
+  // --- Render ---
+
+  return (
+    <div className="min-h-screen p-4 sm:p-8 bg-slate-900 font-sans relative">
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Header and User Info */}
+        <header className="mb-6 p-4 bg-slate-800/80 backdrop-blur-sm rounded-xl shadow-lg flex justify-between items-center flex-wrap gap-4 border-b border-indigo-600">
+          <h1 className="text-3xl font-extrabold text-indigo-400 tracking-tight">
+            <Code className="inline-block w-8 h-8 mr-2" /> Nexus Editor
+          </h1>
+          <div className="text-sm font-medium text-slate-400 bg-slate-700 px-4 py-2 rounded-full shadow-inner">
+            User ID: <span className="text-indigo-400 font-mono break-all">{userId}</span>
+          </div>
+        </header>
+
+        {/* Main Editor Card Container */}
+        <div className="bg-slate-800/90 rounded-xl shadow-[0_15px_30px_rgba(0,0,0,0.5)] p-4 sm:p-6 backdrop-blur-sm border border-slate-700">
+          
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-slate-700 rounded-lg shadow-inner border border-slate-600">
+            
+            {/* 1. Block and Font Controls */}
+            <BlockFormatDropdown />
+            <FontSizeDropdown />
+
+            <ToolbarSeparator />
+            
+            {/* 2. Font Styling */}
+            <ToolbarButton icon={Bold} tooltip="Bold" onClick={() => execCmd('bold')} />
+            <ToolbarButton icon={Italic} tooltip="Italic" onClick={() => execCmd('italic')} />
+            <ToolbarButton icon={Underline} tooltip="Underline" onClick={() => execCmd('underline')} />
+            <ToolbarButton icon={Strikethrough} tooltip="Strikethrough" onClick={() => execCmd('strikeThrough')} />
+            <ToolbarButton icon={Eraser} tooltip="Clear Formatting" onClick={() => execCmd('removeFormat')} />
+
+            <ToolbarSeparator />
+
+            {/* 3. Colors & Highlight */}
+            <div className="flex flex-col gap-1.5">
+                <div className="flex gap-1.5">
+                    {/* Foreground Colors */}
+                    <ColorSwatch command="foreColor" color="#000000" tooltip="Text Color: Black" />
+                    <ColorSwatch command="foreColor" color="#EF4444" tooltip="Text Color: Red" />
+                    <ColorSwatch command="foreColor" color="#34D399" tooltip="Text Color: Teal" />
+                </div>
+                <div className="flex gap-1.5">
+                    {/* Background Colors (Highlight) */}
+                    <ColorSwatch command="backColor" color="#FACC15" tooltip="Highlight Color: Amber" />
+                    <ColorSwatch command="backColor" color="#6366F1" tooltip="Highlight Color: Indigo" />
+                    <ColorSwatch command="backColor" color="#475569" tooltip="Highlight Color: Slate" />
+                </div>
+            </div>
+            <ToolbarButton icon={Palette} tooltip="Reset Text Color to Black" onClick={() => execCmd('foreColor', '#000000')} />
+            <ToolbarButton icon={Highlighter} tooltip="Remove Highlight" onClick={() => execCmd('backColor', 'transparent')} />
+
+            <ToolbarSeparator />
+
+            {/* 4. Alignment & Lists */}
+            <ToolbarButton icon={AlignLeft} tooltip="Align Left" onClick={() => execCmd('justifyLeft')} />
+            <ToolbarButton icon={AlignCenter} tooltip="Align Center" onClick={() => execCmd('justifyCenter')} />
+            <ToolbarButton icon={AlignRight} tooltip="Align Right" onClick={() => execCmd('justifyRight')} />
+            
+            <ToolbarSeparator />
+
+            <ToolbarButton icon={List} tooltip="Bullet List" onClick={() => execCmd('insertUnorderedList')} />
+            <ToolbarButton icon={ListOrdered} tooltip="Numbered List" onClick={() => execCmd('insertOrderedList')} />
+            <ToolbarButton icon={Indent} tooltip="Increase Indent" onClick={() => execCmd('indent')} />
+            <ToolbarButton icon={Outdent} tooltip="Decrease Indent" onClick={() => execCmd('outdent')} />
+            <ToolbarButton icon={Ruler} tooltip="Insert Horizontal Rule" onClick={() => execCmd('insertHorizontalRule')} />
+
+            <ToolbarSeparator />
+
+            {/* 5. Utility */}
+            <ToolbarButton icon={Link} tooltip="Insert Link" onClick={openLinkModal} />
+            <ToolbarButton icon={Printer} tooltip="Print Document (or Export to PDF)" onClick={handlePrint} />
+            <ToolbarButton icon={Maximize} tooltip="Full Screen (Placeholder)" onClick={() => console.log('Fullscreen clicked')} />
+            
+          </div>
+
+          {/* Editor Panel Wrapper: Allows canvas overlay */}
+          <div className="relative mt-6">
+              
+              {/* Layer 1: The Drawing Canvas (Absolute position, z-index: 1) */}
+              <canvas
+                  ref={canvasRef}
+                  className={`
+                      absolute top-0 left-0 w-full h-full 
+                      rounded-lg 
+                      transition-opacity duration-300
+                      ${isDrawingMode ? 'opacity-100 z-10' : 'opacity-0 z-10'}
+                  `}
+                  style={{
+                      // When drawing mode is off, pointer events should be ignored so text editor is clickable
+                      pointerEvents: isDrawingMode ? 'auto' : 'none',
+                  }}
+              />
+
+              {/* Layer 2: The Content Editable Text Editor (Relative position, z-index: 2) */}
+              <div 
+                  ref={editorRef} 
+                  contentEditable={!isDrawingMode} // Disable editing when drawing
+                  onInput={handleInput}
+                  suppressContentEditableWarning={true}
+                  className={`
+                      min-h-[60vh] max-h-[80vh] overflow-y-auto 
+                      text-gray-900 rounded-lg p-6 sm:p-8 
+                      shadow-inner border border-gray-300 
+                      focus:ring-4 focus:ring-indigo-500 focus:outline-none 
+                      text-base leading-normal relative z-20
+                      transition duration-300
+                      ${isDrawingMode 
+                          ? 'bg-white/0 opacity-70 cursor-crosshair pointer-events-none' 
+                          : 'bg-white opacity-100'
+                      }
+                  `}
+                  style={{
+                      fontFamily: 'Inter, sans-serif'
+                  }}
+              >
+                  <p>Welcome to Nexus Editor. Start writing your professional document here...</p>
+              </div>
+              
+          </div>
+          
+        </div>
+
+        {/* Floating Controls (AI Assistant / Print / Annotate) - Sleek and Subdued */}
+        <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50 print:hidden">
+          <button 
+            className="rounded-full bg-indigo-600 text-white px-4 py-2 shadow-xl hover:bg-indigo-700 transition duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-indigo-500"
+            title="AI Assistant Mode"
+          >
+            <Mic className="w-4 h-4" /> AI Assistant
+          </button>
+          
+          <button 
+            onClick={toggleDrawingMode}
+            className={`
+                rounded-full px-4 py-2 shadow-xl transition duration-200 flex items-center justify-center gap-2 text-sm font-medium border
+                ${isDrawingMode 
+                    ? 'bg-red-600 text-white hover:bg-red-700 border-red-500' // Changed to Red for clear active state
+                    : 'bg-slate-700 text-indigo-400 hover:bg-slate-600 border-slate-600'
+                }
+            `}
+            title={isDrawingMode ? "Exit Annotation Mode (Drawing Active)" : "Annotation Mode (Draw)"}
+          >
+            <Pencil className="w-4 h-4" /> {isDrawingMode ? 'Exit Drawing' : 'Annotate'}
+          </button>
+          
+          {isDrawingMode && (
+              <button 
+                onClick={handleClearDrawing}
+                className="rounded-full bg-slate-700 text-yellow-400 px-4 py-2 shadow-xl hover:bg-slate-600 transition duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-slate-600"
+                title="Clear Drawing"
+              >
+                <Redo className="w-4 h-4" /> Clear Drawing
+              </button>
+          )}
+
+          <button 
+            onClick={handlePrint}
+            className="rounded-full bg-slate-700 text-indigo-400 px-4 py-2 shadow-xl hover:bg-slate-600 transition duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-slate-600"
+            title="Print Document"
+          >
+            <Printer className="w-4 h-4" /> Print/PDF
+          </button>
+        </div>
+      </div>
+      
+      {/* Link Insertion Modal - Professional Style */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
+          <form 
+            onSubmit={handleLinkInsertion}
+            className="bg-slate-800 rounded-xl p-6 sm:p-8 shadow-2xl border border-indigo-600 w-full max-w-md transition-all duration-300"
+          >
+            <h3 className="text-2xl font-bold text-indigo-400 mb-4 border-b border-slate-600 pb-2">Insert Hyperlink</h3>
+            <p className="text-slate-400 mb-6">Provide the full URL for the link.</p>
+            
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+              required
+              className="w-full p-4 border border-slate-600 bg-slate-700 text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200 text-base"
+            />
+            
+            <div className="flex gap-4 mt-6">
+              <button 
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-700 text-slate-300 rounded-lg font-semibold shadow-md hover:bg-slate-600 transition duration-150"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                className="flex-1 px-4 py-3 text-white rounded-lg font-semibold shadow-lg bg-indigo-600 hover:bg-indigo-700 transition duration-150"
+              >
+                Apply Link
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      
+      {/* Print Styles (hidden from screen, visible on print) */}
+      <style>{`
+        @media print {
+          /* Hide non-document elements */
+          body > div > div:not(.max-w-7xl) { display: none !important; }
+          header, .floating-controls, .toolbar-container, .shadow-lg { display: none !important; }
+          
+          /* Prepare editor content for printing */
+          .bg-white, .bg-slate-900, .bg-slate-800 { background: white !important; }
+          .text-gray-900, p, h1, h2, h3, blockquote, ul, ol { color: black !important; }
+          .min-h-screen, .max-w-7xl, .editor-container { 
+            max-width: none !important; 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            width: 100%;
+          }
+          /* This class is applied to the contentEditable div */
+          .mt-6.min-h-\[60vh\].max-h-\[80vh\] {
+            overflow: visible !important;
+            min-height: auto !important;
+            max-height: auto !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 1in !important; /* Standard print margin */
+          }
+          /* Hide canvas on print */
+          canvas { display: none !important; } 
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
