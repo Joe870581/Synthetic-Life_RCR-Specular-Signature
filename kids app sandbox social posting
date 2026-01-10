@@ -1,0 +1,254 @@
+
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
+import { 
+  Heart, MessageCircle, Share2, Music, Bell, PhoneMissed, Search, X, Zap, Mail, 
+  Mic, Send, Bookmark, CreditCard, UserPlus, Flame, Users, Sticker, Newspaper, 
+  Radio, ChevronRight, ChevronLeft, Play, Pause, Disc, Repeat, Volume2, Languages, AtSign, Plus,
+  ImageIcon, PartyPopper, Sparkles, Video, Camera, Home, Clapperboard, Film, ThumbsUp, Eye, MoreHorizontal, HomeIcon, MessageSquare
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
+import { FamilyDataContext, FamilyDataProvider } from '@/contexts/FamilyDataContext';
+import Link from 'next/link';
+
+// --- UTILITY & HELPER FUNCTIONS ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- KID-FRIENDLY MOCK DATA & CONFIG ---
+const TABS = [
+    { id: 'social', label: 'Friends', icon: Users },
+    { id: 'shorts', label: 'Funny Clips', icon: Video },
+    { id: 'live', label: 'Live Hangouts', icon: Radio },
+    { id: 'announcements', label: 'Family News', icon: PartyPopper },
+    { id: 'projects', label: 'My Creations', icon: Sparkles },
+];
+
+const FEED_DATA = [
+  {
+    id: 1,
+    type: 'video',
+    url: 'https://assets.mixkit.co/videos/preview/mixkit-little-girl-with-her-dog-in-the-park-934-large.mp4',
+    user: 'Leo',
+    avatar: 'https://images.unsplash.com/photo-1513956589380-bad6acb9b9d4?w=100&q=80',
+    desc: 'Playing with Sparky at the park! 🐶',
+    music: 'Original Sound - Leo',
+    likes: '12',
+    commentsCount: '4'
+  },
+  {
+    id: 2,
+    type: 'news',
+    title: 'Family Movie Night Tomorrow!',
+    excerpt: 'Mom and Dad said we can watch The Lion King tomorrow at 7 PM. Get the popcorn ready! 🍿',
+    user: 'Family Calendar',
+    avatar: 'https://i.pravatar.cc/150?u=calendar_bot',
+    category: 'FAMILY EVENT',
+    readTime: '1 min',
+    likes: '5',
+    commentsCount: '3',
+    image: 'https://images.unsplash.com/photo-1595758234322-a6344f84d643?q=80&w=800&auto=format&fit=crop',
+  },
+  {
+    id: 3,
+    type: 'live',
+    url: 'https://assets.mixkit.co/videos/preview/mixkit-little-girl-painting-a-picture-4422-large.mp4',
+    user: 'Mia',
+    avatar: 'https://images.unsplash.com/photo-1557053908-4793c484d06f?w=100&q=80',
+    desc: 'LIVE: Finishing my new painting!',
+    viewerCount: '3',
+    likes: '8',
+    commentsCount: '2'
+  },
+  {
+    id: 4,
+    type: 'special',
+    caption: "My awesome new drawing! #art #dinosaur",
+    bgImage: 'https://images.unsplash.com/photo-1646617747568-51d6d5b5ee02?q=80&w=800&auto=format&fit=crop',
+    subjectImage: 'https://images.unsplash.com/photo-1646617747568-51d6d5b5ee02?w=400&q=80',
+    author: 'Leo',
+    avatar: 'https://images.unsplash.com/photo-1513956589380-bad6acb9b9d4?w=100&q=80',
+    likes: '15',
+    commentsCount: '6'
+  }
+];
+
+// --- NAVIGATION HUB ---
+const HeaderNav = ({ onSearchToggle, isSearchOpen }) => {
+    const navLinks = [
+        { href: '/kids-app/kids-hub?sessionId=null&userId=c1', icon: Home, label: 'Kids Hub' },
+        { href: '/kids/kids-app/socialpost-view?sessionId=null&userId=c1', icon: ImageIcon, label: 'Social' },
+        { href: '/kids/kids-app/kids-video-music?sessionId=null&userId=c1', icon: Video, label: 'Videos' },
+        { href: '/kids-app/kids-message?sessionId=null&userId=c1', icon: MessageSquare, label: 'Messages' },
+    ];
+
+    return (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+            <div className="flex flex-col items-center gap-2">
+                <motion.div 
+                    layout
+                    className="flex items-center gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/[0.05] rounded-3xl"
+                >
+                    <motion.button
+                        layout
+                        onClick={onSearchToggle}
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isSearchOpen ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+                    >
+                        <Search />
+                    </motion.button>
+                    <AnimatePresence>
+                        {isSearchOpen && (
+                            <motion.div
+                                layout
+                                initial={{opacity: 0, width: 0}}
+                                animate={{opacity: 1, width: 'auto'}}
+                                exit={{opacity: 0, width: 0}}
+                                className="flex items-center gap-2 overflow-hidden"
+                            >
+                                <div className="w-px h-8 bg-white/10" />
+                                {navLinks.map((link) => (
+                                    <Link key={link.href} href={link.href} className="w-14 h-14 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center" title={link.label}>
+                                        <link.icon className="text-white/70"/>
+                                    </Link>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
+            </div>
+        </div>
+    );
+};
+
+
+// --- Post Card ---
+const PostCard = ({ post, isFlipped, onFlip }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isLiked, setIsLiked] = useState(false);
+    
+    // Parallax effect for Special Post
+    const containerRef = useRef(null);
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+    const handleMove = (e) => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+        setMousePos({ x, y });
+    };
+    
+    if (post.type === 'special') {
+        return (
+            <div ref={containerRef} onMouseMove={handleMove} className="relative aspect-[4/5] w-full max-w-[480px] mx-auto bg-zinc-900 rounded-[3rem] overflow-hidden cursor-crosshair" style={{ perspective: '1200px' }}>
+                <div className="absolute inset-[-25%] bg-cover bg-center" style={{ backgroundImage: `url('${post.bgImage}')`, transform: `translate3d(${mousePos.x * -40}px, ${mousePos.y * -40}px, -100px) scale(1.2)`}} />
+                {post.subjectImage && <div className="absolute inset-0 flex items-center justify-center" style={{ transform: `translate3d(${mousePos.x * 60}px, ${mousePos.y * 60}px, 150px)`}}><img src={post.subjectImage} className="max-h-[80%] max-w-[80%] object-contain rounded-2xl" alt="Subject" /></div>}
+                <div className="absolute bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent w-full text-white">{post.caption}</div>
+            </div>
+        );
+    }
+    
+    if (post.type === 'news') {
+        return (
+            <div className="relative aspect-[16/9] w-full cursor-pointer" onClick={onFlip} style={{ perspective: '1000px' }}>
+                <motion.div className="relative w-full h-full" style={{ transformStyle: 'preserve-3d' }} animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: 0.6 }}>
+                    <div className="absolute w-full h-full bg-zinc-800 rounded-2xl overflow-hidden p-6 flex flex-col justify-end" style={{ backfaceVisibility: 'hidden' }}>
+                        <img src={post.image} alt={post.title} className="absolute inset-0 w-full h-full object-cover opacity-30" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+                        <div className="relative z-10">
+                            <h3 className="text-2xl font-bold text-white">{post.title}</h3>
+                            <button className="text-xs font-bold text-blue-400 mt-2">Click to Read More</button>
+                        </div>
+                    </div>
+                    <div className="absolute w-full h-full bg-zinc-800 rounded-2xl p-6 overflow-y-auto" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
+                        <h3 className="text-xl font-bold text-white mb-2">{post.title}</h3>
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{post.excerpt}</p>
+                    </div>
+                </motion.div>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="bg-zinc-900 rounded-2xl border border-white/5 overflow-hidden">
+            <div className="flex items-center gap-3 p-4">
+                <img src={post.avatar} className="w-10 h-10 rounded-full object-cover" alt="author" />
+                <div><h4 className="text-sm font-bold">{post.user}</h4></div>
+            </div>
+            {post.desc && <p className="px-4 pb-4 text-sm text-zinc-300">{post.desc}</p>}
+            
+            {(post.url) && (
+                <div className="relative aspect-square bg-black">
+                    <video src={post.url} className="w-full h-full object-cover" />
+                    {(post.type === 'video' || post.type === 'live') && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                             <button onClick={() => setIsPlaying(!isPlaying)} className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                                {isPlaying ? <Pause size={32} /> : <Play size={32} />}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className="flex justify-between items-center p-3 text-zinc-400">
+                <div className="flex gap-4">
+                    <button onClick={() => setIsLiked(!isLiked)} className={`flex items-center gap-1.5 hover:text-red-500 transition-colors ${isLiked ? 'text-red-500' : ''}`}>
+                        <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
+                    </button>
+                    <button className="flex items-center gap-1.5 hover:text-blue-400"><MessageCircle size={20} /></button>
+                </div>
+                <button className="hover:text-white"><Share2 size={20} /></button>
+            </div>
+        </div>
+    );
+};
+
+
+// --- MAIN APP ---
+const AppContent = (props) => {
+    const [phase, setPhase] = useState('feed');
+    const [flippedPostId, setFlippedPostId] = useState(null);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    return (
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center py-10 px-4 font-sans">
+            <HeaderNav onSearchToggle={() => setIsSearchOpen(p => !p)} isSearchOpen={isSearchOpen} />
+            
+            <main className="w-full max-w-2xl mt-16">
+                <div className="space-y-6">
+                    {FEED_DATA.map(post => (
+                        <PostCard 
+                            key={post.id} 
+                            post={post} 
+                            isFlipped={flippedPostId === post.id} 
+                            onFlip={() => setFlippedPostId(flippedPostId === post.id ? null : post.id)} 
+                        />
+                    ))}
+                </div>
+            </main>
+        </div>
+    );
+};
+
+const AppWithProvider = (props) => (
+    <Suspense fallback={<div className="bg-[#050505] text-white flex items-center justify-center h-screen">Loading User Data...</div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default function App() {
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap'); body { font-family: 'Inter', sans-serif; background: #050505; color: white; margin: 0; }`;
+        document.head.appendChild(style);
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
+
+    return <AppWithProvider />;
+}
