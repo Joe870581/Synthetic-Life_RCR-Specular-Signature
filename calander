@@ -1,0 +1,53 @@
+
+'use server';
+/**
+ * @fileoverview This file defines the Genkit tool for interacting with the user's calendar.
+ */
+
+import { ai } from '@/ai/genkit-client';
+import { z } from 'zod';
+
+export const getCalendarEventsTool = ai.defineTool(
+  {
+    name: 'getCalendarEventsTool',
+    description: 'Retrieves events from the user\'s calendar for a given day. Use this tool whenever the user asks about their schedule, appointments, or what they have going on.',
+    inputSchema: z.object({
+      date: z.string().describe('The date to retrieve events for, in YYYY-MM-DD format. If no date is provided, today\'s date will be used.'),
+    }),
+    outputSchema: z.object({
+      events: z.array(z.object({
+        title: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+        description: z.string().optional(),
+      })),
+    }),
+  },
+  async ({ date }) => {
+    console.log(`[getCalendarEventsTool] Retrieving events for date: ${date}`);
+    // In a real implementation, this would fetch data from a database or a calendar API.
+    // For now, we return a mock response.
+    return {
+      events: [
+        {
+          title: 'Morning Stand-up',
+          startTime: '09:00',
+          endTime: '09:15',
+          description: 'Team daily sync meeting.',
+        },
+        {
+          title: 'Design Review',
+          startTime: '11:00',
+          endTime: '12:00',
+          description: 'Review the new dashboard design mockups.',
+        },
+        {
+            title: 'Lunch with Sarah',
+            startTime: '12:30',
+            endTime: '13:30',
+            description: 'Catch up at the downtown cafe.',
+        }
+      ],
+    };
+  }
+);
