@@ -1,0 +1,47 @@
+
+'use client';
+
+import React, { useEffect } from 'react';
+import { RoleProvider, useRole } from '@/contexts/role-context';
+import { useRouter } from 'next/navigation';
+import { Skeleton } from '@/components/ui/skeleton';
+
+function AdminLayoutContent({ children }: { children: React.ReactNode }) {
+  const { role, isLoading } = useRole();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && role !== 'admin') {
+      console.warn("Security: Non-admin user detected. Redirecting to login.");
+      router.push('/login');
+    }
+  }, [role, isLoading, router]);
+
+  if (isLoading || role !== 'admin') {
+    return (
+        <div className="flex h-screen w-full items-center justify-center bg-background">
+            <div className="space-y-4 text-center">
+                <Skeleton className="mx-auto h-12 w-12 rounded-full" />
+                <Skeleton className="h-4 w-[250px]" />
+                <Skeleton className="h-4 w-[200px]" />
+                <p className="pt-4 font-semibold text-muted-foreground">Verifying Admin Credentials...</p>
+            </div>
+        </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <RoleProvider>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+    </RoleProvider>
+  );
+}
