@@ -1,0 +1,44 @@
+'use client';
+import { useRole } from '@/contexts/role-context';
+import { socialPosts, users } from '@/lib/mock-data';
+import SocialView from '@/components/social/social-view';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { EyeOff } from 'lucide-react';
+
+export default function SocialPage() {
+  const { role } = useRole();
+
+  if (!role) return null;
+
+  if (role === 'admin') {
+     return (
+        <Card className="mt-10">
+          <CardHeader className="text-center">
+            <EyeOff className="mx-auto size-12 text-muted-foreground" />
+            <CardTitle>Admin View</CardTitle>
+            <CardDescription>Social Zone is not available for admins.</CardDescription>
+          </CardHeader>
+          <CardContent />
+        </Card>
+     );
+  }
+
+  const currentUser = users.find(u => u.role === role);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold font-headline">Social Zone</h1>
+        <p className="text-muted-foreground">
+          {role === 'kid' ? "Share your day with the family!" : "A read-only view of the kids' social activity."}
+        </p>
+      </div>
+      <SocialView
+        initialPosts={socialPosts}
+        users={users}
+        currentUser={currentUser || users[0]}
+        role={role}
+      />
+    </div>
+  );
+}
