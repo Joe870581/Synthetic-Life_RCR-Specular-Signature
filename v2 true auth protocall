@@ -1,0 +1,46 @@
+# V2 TrueOath Handshake Protocol
+**Version:** 1.0
+**Status:** **LOCKED & AUTHORITATIVE**
+
+## 1. Mandate
+This protocol defines the user-initiated, cryptographically secure method for authorizing a V2 Governed Field Charging session between a user's device (e.g., iPhone) and a V2-capable Anchor (e.g., Sovereign Vehicle). It is designed to be compliant with standard mobile OS security models while delivering the core promise of on-demand, point-to-point wireless power.
+
+## 2. Core Principles
+- **User Intent is Sovereign:** The user must explicitly initiate every V2 charging session. No background or unsolicited connections are permitted.
+- **Time-Decaying Tokens:** All authorization tokens are single-use and have a short TTL (Time-To-Live) to prevent replay attacks.
+- **Dual-Factor Handshake (User + Anchor):** A valid session requires proof of presence from both the user's device (via a charge request) and the V2 Anchor (via a dynamic QR code).
+
+## 3. The Handshake Flow
+1.  **User Initiates (The "Ask"):**
+    - The user, low on battery, opens the Sovereign OS app.
+    - They tap a primary UI element, e.g., `INITIATE V2 HANDSHAKE`.
+
+2.  **Client-Side Action:**
+    - The app generates a one-time `charge_request_token`.
+    - It securely sends this token to the Sovereign backend associated with the user's TrueOath ID.
+    - The app immediately transitions its UI into "Anchor Hunter" mode, activating the device's camera.
+
+3.  **Anchor-Side Action (The "Offer"):**
+    - The V2 Anchor (e.g., a car's infotainment screen) displays a dynamic, time-decaying QR code.
+    - This QR code contains a unique, single-use `anchor_offer_token`.
+
+4.  **The Bridge (Scan & Verification):**
+    - The user scans the Anchor's QR code with their phone's camera.
+    - The app sends the captured `anchor_offer_token` to the Sovereign backend.
+
+5.  **Backend Authorization (The "Handshake"):**
+    - The backend receives both the `charge_request_token` from the user and the `anchor_offer_token` from the scan.
+    - It verifies that both tokens are valid, unexpired, and linked to the same potential session.
+    - Upon successful validation, the backend creates a secure session and logs the "TrueOath Handshake" event in the immutable ledger.
+
+6.  **Execution:**
+    - The backend sends a cryptographically signed `BEGIN_CHARGE` command to the V2 Anchor.
+    - The V2 Anchor validates the command and initiates the governed, point-to-point power transfer to the user's device.
+
+7.  **Termination:**
+    - The session ends when the user's device reaches the pre-defined charge limit (e.g., 80%), the user manually stops it, or the user moves out of the Anchor's safe operating range.
+
+## 4. Security
+- The dual-token system ensures that only a user physically present at a specific anchor can authorize a charging session.
+- The short TTL of both tokens mitigates the risk of interception or replay.
+- All communication with the backend is over TLS, and commands to the Anchor are signed.
