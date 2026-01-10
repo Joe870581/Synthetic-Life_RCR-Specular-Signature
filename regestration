@@ -1,0 +1,114 @@
+
+'use client';
+
+import { useRouter } from 'next/navigation';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import type { Role } from '@/contexts/role-context';
+import { Shield, User, Rocket, UserPlus } from 'lucide-react';
+
+type SelectableRole = 'adult' | 'kid' | 'admin' | 'Registration';
+
+const roles: { name: SelectableRole; icon: React.ReactNode; description: string; href?: string }[] = [
+  {
+    name: 'adult',
+    icon: <User className="size-8" />,
+    description: 'Manage schedules, chores, and family settings.',
+    href: '/login/registration/admin/dashboard/audit-login/audit-journal/adult-loggin',
+  },
+  {
+    name: 'kid',
+    icon: <Rocket className="size-8" />,
+    description: 'View your tasks, events, and connect with family.',
+    href: '/login/registration/admin/dashboard/audit-login/audit-journal/kids-loggin',
+  },
+  {
+    name: 'admin',
+    icon: <Shield className="size-8" />,
+    description: 'Oversee family accounts and system settings.',
+    href: '/login/admin',
+  },
+  {
+    name: 'Registration',
+    icon: <UserPlus className="size-8" />,
+    description: 'Create a new FamilyOS account and universe.',
+    href: '/login/registration',
+  },
+];
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  const handleRoleSelect = (role: (typeof roles)[number]) => {
+    if (role.href) {
+      router.push(role.href);
+    } else {
+      // Fallback for roles without a specific login page, though all have one now.
+      localStorage.setItem('family-os-role', role.name as Role);
+      router.push('/dashboard');
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-5xl shadow-2xl">
+        <CardHeader className="text-center">
+          <div className="flex justify-center items-center gap-2 mb-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-8 text-primary"
+            >
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+            <h1 className="text-3xl font-bold font-headline">FamilyOS</h1>
+          </div>
+          <CardTitle className="text-2xl font-semibold">
+            Who are you?
+          </CardTitle>
+          <CardDescription>
+            Select a role to experience FamilyOS. This is for demo purposes
+            only.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {roles.map((role) => (
+              <Button
+                key={role.name}
+                variant="outline"
+                className="h-auto p-6 flex flex-col items-center justify-center gap-4 text-center transition-all hover:bg-accent/50 hover:border-accent"
+                onClick={() => handleRoleSelect(role)}
+              >
+                <div className="p-4 rounded-full bg-primary/10 text-primary">
+                  {role.icon}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold capitalize">
+                    {role.name}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {role.description}
+                  </p>
+                </div>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
