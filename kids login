@@ -1,0 +1,147 @@
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { User, ShieldCheck, Zap, Lock, Mail, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+const App = () => {
+  const [email, setEmail] = useState('test@kids.os');
+  const [password, setPassword] = useState('123');
+  const [isLoading, setIsLoading] = useState(false);
+  const [view, setView] = useState('login'); // 'login' or 'success'
+  const router = useRouter();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    // Simulate authentication process
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    setIsLoading(false);
+    setView('success');
+    
+    // In a real app, you would use a router here:
+    router.push('/login/registration/admin/dashboard/audit-login/audit-journal/user-family/dashboard/peddle-tts/client-app-blueprints/kids-os-mode');
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-black text-orange-400 font-mono relative overflow-hidden">
+      {/* Background Grid Effect */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,165,0,0.06),rgba(0,255,0,0.02),rgba(255,165,0,0.06))] z-0 pointer-events-none bg-[length:100%_2px,3px_100%]" />
+      
+      {/* Scanning Line */}
+      <div className="absolute top-0 left-0 w-full h-[2px] bg-orange-500/20 shadow-[0_0_15px_orange] animate-scan z-10" />
+
+      <div className="w-full max-w-md z-20">
+        <div className="relative group">
+          {/* Neon Border Glow */}
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-600 to-yellow-600 rounded-lg blur opacity-30 group-hover:opacity-60 transition duration-1000 group-hover:duration-200"></div>
+          
+          <div className="relative bg-black border border-orange-500/30 rounded-lg p-8 shadow-2xl">
+            {view === 'login' ? (
+              <>
+                <div className="text-center mb-8">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 border border-orange-500/50 mb-4 animate-pulse">
+                    <User className="w-8 h-8 text-orange-400" />
+                  </div>
+                  <h1 className="text-3xl font-bold tracking-tighter text-orange-500 uppercase">
+                    Junior Login
+                  </h1>
+                  <p className="text-xs text-orange-500/60 mt-2 uppercase tracking-[0.2em]">
+                    Safe-Zone Verification
+                  </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs uppercase tracking-widest text-orange-500/80 flex items-center gap-2">
+                      <Mail className="w-3 h-3" /> Family ID
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="identity@family.id"
+                      className="w-full bg-black/50 border border-orange-500/30 rounded p-3 text-orange-300 placeholder:text-orange-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs uppercase tracking-widest text-orange-500/80 flex items-center gap-2">
+                      <Lock className="w-3 h-3" /> Secret Code
+                    </label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-black/50 border border-orange-500/30 rounded p-3 text-orange-300 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full relative overflow-hidden group/btn bg-orange-600 hover:bg-orange-500 text-black font-bold py-4 rounded uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        <>
+                          Enter Fun Zone <Zap className="w-4 h-4 fill-current" />
+                        </>
+                      )}
+                    </span>
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
+                  </button>
+                </form>
+
+                <div className="mt-8 pt-6 border-t border-orange-500/10 text-center">
+                  <p className="text-[10px] text-orange-500/40 uppercase tracking-tighter">
+                    Guardian Shield Active
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="py-12 text-center animate-in fade-in zoom-in duration-500">
+                <ShieldCheck className="w-20 h-20 text-green-500 mx-auto mb-6" />
+                <h2 className="text-2xl font-bold text-green-400 uppercase tracking-widest">
+                  Welcome!
+                </h2>
+                <p className="text-green-500/60 mt-4 text-sm">
+                  Let's go have some fun! <br />Loading your world...
+                </p>
+                <div className="mt-8 w-full bg-green-950/30 h-1 rounded-full overflow-hidden">
+                  <div className="bg-green-500 h-full animate-[progress_2s_ease-in-out_infinite]" style={{ width: '60%' }} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes scan {
+          0% { transform: translateY(-100vh); }
+          100% { transform: translateY(100vh); }
+        }
+        @keyframes progress {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(200%); }
+        }
+        .animate-scan {
+          animation: scan 8s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
