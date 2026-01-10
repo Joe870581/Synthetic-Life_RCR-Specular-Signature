@@ -1,0 +1,179 @@
+'use client';
+import { useState } from 'react';
+import Image from 'next/image';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { moderateKidsContent } from '@/ai/flows/moderate-kids-social-zone-content';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ShieldAlert, Send } from 'lucide-react';
+import type { SocialPost, User } from '@/lib/mock-data';
+import { formatDistanceToNow } from 'date-fns';
+
+function PostCard({ post, author }: { post: SocialPost; author?: User }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-4">
+        <Avatar>
+          <AvatarImage src={author?.avatar} alt={author?.name} />
+          <AvatarFallback>{author?.name?.charAt(0)}</AvatarFallback>
+        </Avatar>
+        <div>
+          <p className="font-semibold">{author?.name}</p>
+          <p className="text-sm text-muted-foreground">
+            {formatDistanceToNow(post.timestamp, { addSuffix: true })}
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4">{post.content}</p>
+        {post.imageUrl && (
+          <div className="rounded-lg overflow-hidden border">
+            <Image
+              src={post.imageUrl}
+              alt="Social post image"
+              width={600}
+              height={400}
+              className="w-full object-cover"
+              data-ai-hint={post.imageHint}
+            />
+          </div>
+        )}
+      </CardContent>
+      {!post.isAppropriate && post.moderationReason && (
+        <CardFooter>
+          <Alert variant="destructive">
+            <ShieldAlert className="h-4 w-4" />
+            <AlertTitle>Content Moderated</AlertTitle>
+            <AlertDescription>{post.moderationReason}</AlertDescription>
+          </Alert>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
+
+function CreatePost({
+  currentUser,
+  onPostCreate,
+}: {
+  currentUser: User;
+  onPostCreate: (post: SocialPost) => void;
+}) {
+  const [content, setContent] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const moderationResult = await moderateKidsContent({ content });
+
+      const newPost: SocialPost = {
+        id: `post-${Date.now()}`,
+        authorId: currentUser.id,
+        content,
+        timestamp: new Date(),
+        isAppropriate: moderationResult.isAppropriate,
+        moderationReason: moderationResult.reason,
+      };
+
+      if (!moderationResult.isAppropriate) {
+        toast({
+          variant: 'destructive',
+          title: 'Post Blocked',
+          description: `Your post was blocked: ${moderationResult.reason}`,
+        });
+      } else {
+        onPostCreate(newPost);
+        setContent('');
+      }
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not create post. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-4 space-y-0">
+        <Avatar>
+          <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+          <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
+        </Avatar>
+        <p className="font-semibold text-lg">What's on your mind?</p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit}>
+          <Textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            placeholder="Share something with the family..."
+            className="mb-4 min-h-24"
+          />
+          <Button type="submit" disabled={isSubmitting || !content.trim()} className="w-full">
+            <Send className="mr-2 size-4" />
+            {isSubmitting ? 'Posting...' : 'Post'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function SocialView({
+  initialPosts,
+  users,
+  currentUser,
+  role,
+}: {
+  initialPosts: SocialPost[];
+  users: User[];
+  currentUser: User;
+  role: 'adult' | 'kid' | 'admin';
+}) {
+  const [posts, setPosts] = useState<SocialPost[]>(initialPosts);
+
+  const handlePostCreate = (newPost: SocialPost) => {
+    setPosts(prev => [newPost, ...prev]);
+  };
+  
+  const findAuthor = (authorId: string) => users.find(u => u.id === authorId);
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      {role === 'kid' && (
+        <CreatePost currentUser={currentUser} onPostCreate={handlePostCreate} />
+      )}
+      {posts.map(post => {
+        // Adults see all posts, kids only see appropriate ones
+        if (role === 'adult' || (role === 'kid' && post.isAppropriate)) {
+          return (
+            <PostCard
+              key={post.id}
+              post={post}
+              author={findAuthor(post.authorId)}
+            />
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
+}
