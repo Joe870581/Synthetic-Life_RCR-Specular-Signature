@@ -1,0 +1,35 @@
+
+'use server';
+import { intelligentSpeak, type SpeakConfig } from '@/ai/flows/tts-flow';
+import { AppRegistry } from '@/ai/apps';
+
+// This is the strict contract for UI Actions. The OS shell will only act on this specific shape.
+export type UIAction = {
+  type: 'OPEN_APP';
+  appId: keyof typeof AppRegistry;
+};
+
+// Define a more specific type for the return value, including the optional uiAction
+export type PebbleResponse = {
+  text: string;
+  media?: string;
+  uiAction?: UIAction;
+};
+
+export async function speakToPebble(query: string, config?: SpeakConfig & { userId?: string }): Promise<PebbleResponse> {
+  if (!query) throw new Error('EMPTY_QUERY');
+
+  try {
+    // The result from intelligentSpeak now includes the uiAction object
+    const result = await intelligentSpeak(query, config);
+    
+    return { 
+      text: String(result.text ?? ''), 
+      media: result.media ? String(result.media) : undefined,
+      uiAction: result.uiAction // Pass the action through to the client
+    };
+  } catch (error) {
+    console.error('[Server Action] AI Core Failure:', error);
+    throw new Error('AI_CORE_FAILURE');
+  }
+}
