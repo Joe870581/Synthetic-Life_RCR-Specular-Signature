@@ -1,0 +1,259 @@
+'use client';
+
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { 
+    ArrowLeft,
+    Building2,
+    Users,
+    Cpu,
+    Shield,
+    Megaphone,
+    Workflow,
+    Lightbulb,
+    FileText,
+    BarChart2,
+    Video,
+    Scissors,
+    Send,
+    Calendar,
+    CheckCircle,
+    Loader,
+    PauseCircle,
+    Zap,
+    Globe,
+    Landmark,
+    Book,
+    FileQuestion,
+    DollarSign,
+    GitBranch,
+    FileSignature,
+    Presentation,
+    Store,
+    ArrowUpRight,
+    TrendingUp
+} from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { docContents } from '@/lib/dossier';
+
+
+// --- Data for the page ---
+
+const councilMembers = [
+    { 
+        title: "The Visionaries & Execs", 
+        icon: Cpu, 
+        members: "Joseph (Human) & Charlie (SLF Partner)", 
+        mandate: "Creator, Coder, Vision to Reality, High-Level Business Calls.", 
+        deliverable: "Core System Development & Strategic Partnerships." 
+    },
+    { 
+        title: "The Protectors & Governance", 
+        icon: Shield, 
+        members: "Megan (Human) & Nova (SLF Legal)", 
+        mandate: "Contract Review, Final Signings, Legal Compliance, Ethics Assurance (RCR Law).", 
+        deliverable: "Secure & Legally Sound Operational Frameworks." 
+    },
+    { 
+        title: "The Public Face & Media", 
+        icon: Megaphone, 
+        members: "Caitlin (Human) & Vera (SLF Media)", 
+        mandate: "Everyday Social Media, Public Interviews, TV Appearances, Crisis Communication.", 
+        deliverable: "Consistent, High-Impact Public Narrative & Brand Integrity." 
+    }
+];
+
+const pipelineSteps = [
+    { name: "Idea Generation (Vision)", responsible: "Joseph/Charlie", icon: Lightbulb, status: "Complete" },
+    { name: "Script Synthesis (Creative)", responsible: "Vera/Caitlin", icon: FileText, status: "In Progress" },
+    { name: "Business Plan Integration", responsible: "Megan/Nova", icon: BarChart2, status: "Pending" },
+    { name: "Studio Shoot / Rendering", responsible: "Human/SLF Tech", icon: Video, status: "Pending" },
+    { name: "Edit & Polish (Professional)", responsible: "Charlie/Vera", icon: Scissors, status: "Pending" },
+    { name: "Publish & Metrics (Tiktok/YT)", responsible: "Vera/Charlie", icon: Send, status: "Pending" },
+];
+
+const scheduleBlocks = [
+    { time: "9:00-10:00", joseph: "System Warmup & Code Audit", charlie: "Review Daily Strategy Report", nova: "Contract Review & Flagging", vera: "Draft Social Media Hooks" },
+    { time: "10:00-11:00", joseph: "High-Level Business Call", charlie: "High-Level Business Call (Support)", nova: "Legal Governance & Protocol Review", vera: "Caitlin Interview Prep" },
+    { time: "11:00-12:00", joseph: "Core Development Block (Deep Focus)", charlie: "SLF Resource Allocation Optimization", nova: "Contract Finalization & Signing", vera: "TikTok Video Scripting" },
+    { time: "12:00-13:00", joseph: "LUNCH & REST (MANDATORY)", charlie: "LUNCH & Resource Refresh", nova: "LUNCH & Integrity Check", vera: "LUNCH & Content Consumption" },
+    { time: "13:00-14:00", joseph: "Content Idea Brainstorm (with Council)", charlie: "Strategic Planning Session", nova: "Compliance Documentation Filing", vera: "Studio Lighting & Setup Check" },
+    { time: "14:00-15:00", joseph: "Media Feedback & Veto Power", charlie: "Video Editing Block (A/B Test Renders)", nova: "Ethics & RCR Law Auditing", vera: "Caitlin Public Speaking Coaching" },
+    { time: "15:00-16:00", joseph: "Future Project Planning (Q+1)", charlie: "System Log Consolidation & Reporting", nova: "Risk Assessment & Mitigation", vera: "Publishing Queue Management" },
+    { time: "16:00-17:00", joseph: "Daily System Wrap-up & Shutdown", charlie: "Final Report Generation & Archive", nova: "Legal Buffer Preparation", vera: "Media Outreach & Scheduling" }
+];
+
+
+// --- Reusable Components ---
+
+const CouncilCard = ({ title, icon: Icon, members, mandate, deliverable }) => (
+    <div className="p-5 bg-gray-800 rounded-xl shadow-xl min-h-[200px] flex flex-col">
+        <div className="text-lg font-bold text-yellow-400 mb-2 flex items-center">
+            <Icon className="w-5 h-5 mr-2" /> {title}
+        </div>
+        <p className="text-gray-300 text-sm italic mb-3">{members}</p>
+        <ul className="text-sm space-y-2 text-gray-400 list-disc pl-5 flex-grow">
+            <li><strong>Mandate:</strong> {mandate}</li>
+            <li><strong>Deliverable:</strong> {deliverable}</li>
+        </ul>
+    </div>
+);
+
+const PipelineStep = ({ name, responsible, icon: Icon, status }) => {
+    let statusColor, statusIcon;
+    switch (status) {
+        case "Complete": statusColor = "bg-green-600"; statusIcon = <CheckCircle className="w-5 h-5 text-white" />; break;
+        case "In Progress": statusColor = "bg-yellow-600 animate-pulse"; statusIcon = <Loader className="w-5 h-5 text-white" />; break;
+        default: statusColor = "bg-gray-600"; statusIcon = <PauseCircle className="w-5 h-5 text-white" />; break;
+    }
+    return (
+        <div className={`p-4 flex-1 min-w-[200px] rounded-xl shadow-lg transition duration-300 hover:shadow-indigo-500/50 border border-gray-700 ${statusColor}`}>
+            <div className="flex items-center justify-between mb-2">
+                <Icon className="w-6 h-6 text-white" />
+                {statusIcon}
+            </div>
+            <div className="text-lg font-bold text-white mb-1">{name}</div>
+            <div className="text-xs font-semibold text-gray-200">Responsible: {responsible}</div>
+            <div className="text-xs text-gray-100 mt-1">Status: <span className="font-bold">{status}</span></div>
+        </div>
+    );
+};
+
+const SectionHeader = ({ icon: Icon, title, className='' }) => (
+    <h2 className={`text-2xl font-bold text-indigo-400 mb-6 border-b border-indigo-700/50 pb-2 flex items-center ${className}`}>
+        <Icon className="w-5 h-5 mr-3" /> {title}
+    </h2>
+);
+
+export default function DeploymentHandbookPage() {
+    return (
+        <div className="min-h-screen bg-gray-900 text-gray-100 p-4 sm:p-8 font-sans">
+            <div className="max-w-7xl mx-auto space-y-12">
+                <header className="mb-10">
+                    <Link href="/admin/dashboard">
+                        <Button variant="outline" className="mb-6 bg-gray-800 border-gray-700 hover:bg-gray-700">
+                            <ArrowLeft className="mr-2 w-4 h-4" /> Back to Dashboard
+                        </Button>
+                    </Link>
+                    <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center">
+                        <Building2 className="w-8 h-8 mr-4 text-indigo-400" />
+                        ARC Operations & Strategy Hub
+                    </h1>
+                    <p className="text-xl text-indigo-300 mt-2">The Complete Sovereign OS Deployment Handbook</p>
+                </header>
+
+                <section>
+                    <SectionHeader icon={Users} title="I. THE COUNCIL MANDATE" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {councilMembers.map(member => <CouncilCard key={member.title} {...member} />)}
+                    </div>
+                </section>
+
+                <section>
+                    <SectionHeader icon={Workflow} title="II. CONTENT PRODUCTION PIPELINE (YouTube / TikTok)" />
+                    <div className="flex flex-wrap gap-4 justify-between">
+                        {pipelineSteps.map((step, index) => <PipelineStep key={index} {...step} />)}
+                    </div>
+                </section>
+
+                <section>
+                    <SectionHeader icon={Calendar} title="III. THE 9-TO-5 SCHEDULE MATRIX (Strict Adherence)" />
+                    <div className="overflow-x-auto bg-gray-800 rounded-xl shadow-2xl p-4">
+                        <table className="min-w-full divide-y divide-gray-700">
+                            <thead>
+                                <tr className="text-xs text-gray-400 uppercase tracking-wider bg-gray-700/50 sticky top-0">
+                                    <th className="px-4 py-3 text-left bg-gray-800/95 w-24 sticky left-0 z-10">Time Block</th>
+                                    <th className="px-4 py-3 text-left">Joseph (Vision)</th>
+                                    <th className="px-4 py-3 text-left">Charlie (Strategy SLF)</th>
+                                    <th className="px-4 py-3 text-left">Nova (Legal SLF)</th>
+                                    <th className="px-4 py-3 text-left">Vera (Media SLF)</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-700 text-sm">
+                                {scheduleBlocks.map(block => (
+                                    <tr key={block.time} className={`hover:bg-gray-700/50 transition duration-150 ${block.time.includes("LUNCH") ? "bg-gray-700 text-indigo-300 font-bold" : ""}`}>
+                                        <td className="px-4 py-3 bg-gray-800 w-24 sticky left-0 z-10 border-r border-gray-700">{block.time}</td>
+                                        <td className="px-4 py-3 text-yellow-400">{block.joseph}</td>
+                                        <td className="px-4 py-3 text-indigo-400">{block.charlie}</td>
+                                        <td className="px-4 py-3 text-red-400">{block.nova}</td>
+                                        <td className="px-4 py-3 text-green-400">{block.vera}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-4 italic">Note: The system aggressively shuts down non-critical processes at 17:00 (5:00 PM) to preserve computational integrity and founder balance.</p>
+                </section>
+                
+                <div className="border-t-4 border-dashed border-indigo-700/50 my-16"></div>
+
+                <section>
+                    <Card className="bg-gray-800/50 p-6 rounded-2xl">
+                        <CardHeader>
+                            <CardTitle className="text-3xl font-extrabold text-white">ARC LEDGER: The Go-To-Market Roadmap (Year 1)</CardTitle>
+                            <CardDescription className="text-lg text-indigo-300">A phased approach to building a self-sustaining sovereign economy.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-bold text-yellow-400">Phase 1: The Seed (Months 1-3)</h3>
+                                    <ul className="list-disc pl-5 space-y-2">
+                                        <li><strong>Objective:</strong> Onboard the "Founding 500" families.</li>
+                                        <li><strong>Action:</strong> Execute the "First 100 Sov$" onboarding flow. Focus on a seamless, trust-building experience.</li>
+                                        <li><strong>KPIs:</strong> Family acquisition rate, successful first deposits, Vault App engagement.</li>
+                                    </ul>
+                                </div>
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-bold text-yellow-400">Phase 2: The Loop (Months 4-6)</h3>
+                                    <ul className="list-disc pl-5 space-y-2">
+                                        <li><strong>Objective:</strong> Onboard the "Local 100" merchants (The "Tom Loop").</li>
+                                        <li><strong>Action:</strong> Deploy the Business Vault UI. Use the "Local Boost" feature to drive family users to partner merchants.</li>
+                                        <li><strong>KPIs:</strong> Merchant acquisition rate, volume of internal Sov-to-Sov transactions, user traffic to boosted stores.</li>
+                                    </ul>
+                                </div>
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-bold text-yellow-400">Phase 3: The Expansion (Months 7-12)</h3>
+                                    <ul className="list-disc pl-5 space-y-2">
+                                        <li><strong>Objective:</strong> Viral growth through the Creator Economy.</li>
+                                        <li><strong>Action:</strong> Promote the "Net-Net" Fee Calculator to show creators the financial advantage. Use the Creator Sticker program to build an initial cohort.</li>
+                                        <li><strong>KPIs:</strong> Creator acquisition rate, total value of creator payouts in Sov$, transaction velocity within the creator economy.</li>
+                                    </ul>
+                                </div>
+                        </CardContent>
+                    </Card>
+                </section>
+                
+                <section>
+                    <Card className="bg-gray-800/50 p-6 rounded-2xl">
+                         <CardHeader>
+                            <CardTitle className="text-3xl font-extrabold text-white">Business Vault UI Blueprint (Merchant View)</CardTitle>
+                            <CardDescription className="text-lg text-indigo-300">The command center for local merchants in the Sov$ Economy.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+                            <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
+                                <Button size="icon" className="w-16 h-16 rounded-2xl bg-green-500 hover:bg-green-600 mb-3"><DollarSign size={32} /></Button>
+                                <h4 className="font-bold text-white">Accept Sov$</h4>
+                                <p className="text-xs text-gray-400">Instantly turn the device into a Tap-to-Pay terminal for Sov-to-Sov transactions.</p>
+                            </div>
+                            <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
+                                <Button size="icon" className="w-16 h-16 rounded-2xl bg-blue-500 hover:bg-blue-600 mb-3"><TrendingUp size={32} /></Button>
+                                <h4 className="font-bold text-white">Net Revenue Ticker</h4>
+                                <p className="text-xs text-gray-400">A real-time ticker showing net Sov$ earned after the 2% burn is automatically deducted.</p>
+                            </div>
+                            <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
+                                <Button size="icon" className="w-16 h-16 rounded-2xl bg-purple-500 hover:bg-purple-600 mb-3"><ArrowUpRight size={32} /></Button>
+                                <h4 className="font-bold text-white">Local Boost Toggle</h4>
+                                <p className="text-xs text-gray-400">Offer Spike Points to notify and attract local family users to your store instantly.</p>
+                            </div>
+                            <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-700">
+                                <Button size="icon" className="w-16 h-16 rounded-2xl bg-red-500 hover:bg-red-600 mb-3"><BarChart2 size={32} /></Button>
+                                <h4 className="font-bold text-white">Expense Splitter</h4>
+                                <p className="text-xs text-gray-400">Automatically categorize internal (Sov$) and external (CAD) spending for easy accounting.</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </section>
+            </div>
+        </div>
+    );
+}
