@@ -1,0 +1,122 @@
+
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { ShieldAlert, X, Volume2, MapPin } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+export default function EmergencyBroadcastPage() {
+    const [countdown, setCountdown] = useState(3);
+    const [isCancelled, setIsCancelled] = useState(false);
+    const [isEscalated, setIsEscalated] = useState(false);
+    const timerRef = useRef(null);
+
+    useEffect(() => {
+        if (countdown > 0 && !isCancelled) {
+            timerRef.current = setTimeout(() => {
+                setCountdown(prev => prev - 1);
+            }, 1000);
+        } else if (countdown === 0 && !isCancelled) {
+            setIsEscalated(true);
+        }
+
+        return () => clearTimeout(timerRef.current);
+    }, [countdown, isCancelled]);
+
+    const handleCancel = () => {
+        setIsCancelled(true);
+        clearTimeout(timerRef.current);
+    };
+
+    const renderContent = () => {
+        if (isCancelled) {
+            return (
+                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
+                    <div className="w-24 h-24 bg-green-500/20 border-4 border-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <ShieldCheck className="w-12 h-12 text-green-400" />
+                    </div>
+                    <h2 className="text-4xl font-black text-white">Alert Cancelled</h2>
+                    <p className="text-slate-400 mt-2">The emergency broadcast has been aborted. All systems returning to normal.</p>
+                </motion.div>
+            );
+        }
+
+        if (isEscalated) {
+            return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                    <div className="w-24 h-24 bg-red-500/20 border-4 border-red-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                        <MapPin className="w-12 h-12 text-red-400" />
+                    </div>
+                    <h2 className="text-4xl font-black text-white">GUARDIANS NOTIFIED</h2>
+                    <p className="text-slate-400 mt-2">Live location tracking is active. Help is on the way.</p>
+                </motion.div>
+            );
+        }
+        
+        return (
+            <div className="text-center">
+                <motion.div 
+                    initial={{ scale: 1.2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                    className="w-48 h-48 rounded-full border-8 border-red-500 flex items-center justify-center mx-auto mb-10 shadow-[0_0_60px_rgba(239,68,68,0.5)]"
+                >
+                    <AnimatePresence mode="wait">
+                        <motion.span
+                            key={countdown}
+                            initial={{ scale: 1.5, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.5, opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="text-8xl font-black text-white"
+                        >
+                            {countdown}
+                        </motion.span>
+                    </AnimatePresence>
+                </motion.div>
+
+                <h1 className="text-3xl md:text-5xl font-black uppercase tracking-wider text-white">
+                    Emergency Broadcast
+                </h1>
+                
+                <div className="mt-6 flex items-center justify-center gap-4 text-red-400 animate-pulse">
+                    <Volume2 size={24} />
+                    <p className="text-lg font-bold uppercase tracking-widest">
+                        "Child in danger, need help"
+                    </p>
+                </div>
+
+                <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleCancel}
+                    className="mt-12 w-full max-w-sm mx-auto py-5 bg-white text-black rounded-2xl text-xl font-bold tracking-wider uppercase transition-all shadow-2xl hover:bg-gray-200"
+                >
+                    Cancel Emergency
+                </motion.button>
+            </div>
+        );
+    };
+
+    return (
+        <div 
+            className={cn(
+                "fixed inset-0 flex items-center justify-center p-8 text-white transition-all duration-1000",
+                isCancelled ? "bg-green-900/90 backdrop-blur-sm" : "bg-black/90 backdrop-blur-sm"
+            )}
+        >
+            <div 
+                className={cn(
+                    "absolute inset-0 bg-gradient-to-tr from-red-500/40 via-transparent to-red-500/40 transition-opacity duration-1000",
+                    isCancelled || isEscalated ? "opacity-0" : "opacity-100 animate-pulse"
+                )}
+                style={{ animationDuration: '3s' }}
+            />
+             <div className="relative z-10 w-full max-w-lg">
+                {renderContent()}
+            </div>
+        </div>
+    );
+}
