@@ -1,0 +1,20 @@
+
+// dguard_v2.c (T_Sense Measurement)
+
+// ... inside dguard_tick() ...
+uint32_t s0 = hal_millis(); // Monotonic time at start
+float dist=0.f, speed=0.f;
+bool breach=false;
+
+bool ok = hal_range_sensor_read_m(&dist); 
+if (ok) ok = dguard_classify_spatial(&dist, &speed, &breach);
+
+uint16_t tsense = (uint16_t)(hal_millis() - s0);
+
+if (!ok) {
+    hal_emit_beam_off();
+    set_veto(t, ST_VETO_FORCE, CAUSE_TIMING_FAULT, tsense, 0, 0, 0, ERR_SENSOR_FAULT);
+    dguard_publish_json(t);
+    return;
+}
+// ... continue with VETO logic ...
