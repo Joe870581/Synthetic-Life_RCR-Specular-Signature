@@ -1,0 +1,90 @@
+
+import { NextRequest, NextResponse } from 'next/server';
+import { PlaidApi, Configuration, PlaidEnvironments, Products, CountryCode } from 'plaid';
+
+function getPlaidConfig() {
+    const clientId = process.env.PLAID_CLIENT_ID;
+    const secret = process.env.PLAID_SECRET_SANDBOX;
+
+    if (!clientId || !secret) {
+        throw new Error('Plaid credentials not configured on server in .env file.');
+    }
+
+    return {
+        PLAID_CLIENT_ID: clientId,
+        PLAID_SECRET: secret,
+        PLAID_ENV: 'sandbox',
+    };
+}
+
+
+export async function POST(request: NextRequest) {
+  try {
+    const { PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV } = getPlaidConfig();
+    
+    const configuration = new Configuration({
+      basePath: PlaidEnvironments[PLAID_ENV],
+      baseOptions: {
+        headers: {
+          'PLAID-CLIENT-ID': PLAID_CLIENT_ID,
+          'PLAID-SECRET': PLAID_SECRET,
+        },
+      },
+    });
+
+    const plaidClient = new PlaidApi(configuration);
+    
+    const { action, public_token, user_id } = await request.json();
+
+    if (action === 'create_link_token') {
+       if (!user_id || typeof user_id !== 'string' || user_id.trim() === '') {
+            return NextResponse.json({ success: false, error: 'A valid, non-empty user_id is required to create a link token.' }, { status: 400 });
+       }
+       
+      const products = [Products.Auth, Products.Transactions, Products.Identity];
+      
+      const countryCodes = [
+        CountryCode.Us,
+        CountryCode.Ca,
+        CountryCode.Gb,
+        CountryCode.De,
+        CountryCode.Fr,
+        CountryCode.It,
+        CountryCode.Jp
+      ];
+
+
+      const linkTokenResponse = await plaidClient.linkTokenCreate({
+        user: {
+          client_user_id: user_id,
+        },
+        client_name: 'Sovereign OS',
+        products: products,
+        country_codes: countryCodes, 
+        language: 'en',
+      });
+      return NextResponse.json(linkTokenResponse.data);
+
+    } else if (action === 'exchange_public_token') {
+        if (!public_token) {
+            return NextResponse.json({ success: false, error: 'public_token is required' }, { status: 400 });
+        }
+        const response = await plaidClient.itemPublicTokenExchange({ public_token });
+        const { access_token, item_id } = response.data;
+        
+        console.log(`[PLAID] Access token generated for item ${item_id}`);
+        // In a real app, you would securely save the access_token and item_id
+        // associated with the user in your database.
+        // For this demo, we are just confirming the exchange was successful.
+        return NextResponse.json({ success: true, message: "Token exchanged successfully.", item_id, access_token });
+    
+    } else {
+      return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+    }
+
+  } catch (error: any) {
+    const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+    console.error('Plaid API Error:', error.response ? error.response.data : error);
+    return NextResponse.json({ success: false, error: errorMessage || 'An unknown error occurred' }, { status: 500 });
+  }
+}
