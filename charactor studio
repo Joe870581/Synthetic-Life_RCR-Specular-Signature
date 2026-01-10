@@ -1,0 +1,424 @@
+
+'use client';
+
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, useContext } from 'react';
+import { 
+  Camera, 
+  Mic, 
+  ShieldCheck, 
+  UserCheck, 
+  AlertTriangle, 
+  ChevronRight, 
+  Volume2,
+  Lock,
+  History,
+  ShieldAlert,
+  Rocket,
+  User,
+  Activity,
+  BrainCircuit,
+  Cake,
+  Gamepad2,
+  Save,
+  Palette,
+  PersonStanding,
+  GitBranch,
+  TrendingUp,
+  Fingerprint,
+  Watch,
+  X,
+  Loader2,
+  UserCog,
+  FileText,
+  Landmark,
+  Phone as PhoneIcon,
+  Heart,
+  Zap,
+  Link as LinkIcon,
+  Bot,
+  Clock,
+  Send,
+  Users as UsersIcon,
+  LayoutGrid,
+  Laptop,
+  Tablet,
+  Trash2,
+  Smartphone,
+  Layers // Added the missing import
+} from 'lucide-react';
+import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FamilyDataContext, type FamilyMember, useFamilyData, FamilyDataProvider, type Device } from '@/contexts/FamilyDataContext';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
+import { simpleSpeak, type SpeakConfig } from '@/ai/flows/tts-flow';
+import { addToLasso, getRecentLassoMemoryArray, queryArchive } from '@/lib/memory';
+import Link from 'next/link';
+
+// --- UTILITY ---
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+
+// --- PEDALS / Sovereign Orb Component ---
+const Pebble = ({ state, eyeTransform }) => (
+    <div className={`w-24 h-24 backdrop-blur-3xl border-2 flex flex-col items-center justify-center cursor-pointer transition-all duration-700
+        bg-white/10 border-white/20 scale-110 shadow-2xl
+        rounded-[40%_60%_70%_30%/45%_45%_55%_55%] hover:scale-105 active:scale-90`}
+    >
+        <div className="flex gap-3">
+            <div className="w-2 h-4 bg-black rounded-full overflow-hidden border border-white/5">
+                <div className={`w-1 h-2 rounded-full blur-[1px] mt-1 ml-0.5 transition-colors bg-cyan-400`} style={eyeTransform} />
+            </div>
+            <div className="w-2 h-4 bg-black rounded-full overflow-hidden border border-white/5">
+                <div className={`w-1 h-2 rounded-full blur-[1px] mt-1 ml-0.5 transition-colors bg-cyan-400`} style={eyeTransform} />
+            </div>
+        </div>
+        {(state === 'speaking' || state === 'thinking') && (
+            <div className="flex gap-0.5 absolute bottom-4">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="w-1 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />
+                ))}
+            </div>
+        )}
+    </div>
+);
+
+const BiometricButton = ({ icon: Icon, label, status, onClick, disabled }) => {
+    const isCompleted = status === 'Completed';
+    return (
+        <button 
+            onClick={onClick}
+            disabled={disabled || isCompleted}
+            className="relative flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-700 w-full hover:bg-slate-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+        >
+            <Icon className="relative z-10 w-6 h-6 text-purple-400" />
+            <span className="relative z-10 text-sm font-semibold flex-1 text-left">{label}</span>
+            <div className="relative z-10" />
+            <span className={cn("relative z-10 text-xs font-mono px-2 py-0.5 rounded-full font-bold", 
+                isCompleted ? 'bg-green-500/10 text-green-400' :
+                'bg-slate-700 text-slate-400')}>
+                {status}
+            </span>
+             {isCompleted && (<motion.div layoutId={`biometric-complete-${label}`} className="absolute inset-0 bg-green-500/10" />)}
+        </button>
+    );
+};
+
+const BiometricEnrollmentModal = ({ isOpen, onClose, type, onComplete }) => {
+    const [progress, setProgress] = useState(0);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setProgress(0);
+
+        const interval = setInterval(() => {
+            setProgress(prev => {
+                if (prev < 100) {
+                    return prev + 10;
+                } else {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        onComplete(type);
+                        onClose();
+                    }, 1000);
+                    return 100;
+                }
+            });
+        }, 250);
+
+        return () => clearInterval(interval);
+    }, [isOpen, type, onClose, onComplete]);
+
+    if (!isOpen) return null;
+
+    const icon = type === 'face' ? <Camera size={64} /> : <Mic size={64} />;
+    const title = type === 'face' ? 'Face ID Enrollment' : 'Voice ID Enrollment';
+    const description = type === 'face' ? 'Position your face in the camera to be scanned.' : 'Speak clearly into the microphone to record your voice.';
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-lg flex items-center justify-center p-4 z-[102]">
+            <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-md bg-slate-900 border-2 border-blue-500/50 rounded-3xl p-8 shadow-2xl space-y-6"
+            >
+                <div className="flex flex-col items-center justify-center">
+                    <div className="text-blue-400">{icon}</div>
+                    <h3 className="text-2xl font-black text-blue-300 mt-4">{title}</h3>
+                    <p className="text-sm text-slate-400 text-center">{description}</p>
+                    <div className="w-full bg-slate-800 rounded-full h-2 mt-6 overflow-hidden">
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            className="bg-blue-500 h-full"
+                            transition={{ duration: 0.5, ease: 'linear' }}
+                        />
+                    </div>
+                    {progress === 100 && <div className="text-green-400 mt-2">Enrollment Complete!</div>}
+                </div>
+            </motion.div>
+        </div>
+    );
+  };
+
+
+// --- MAIN APP COMPONENT ---
+const AppContent = () => {
+    const { toast } = useToast();
+    const searchParams = useSearchParams();
+    const userId = searchParams.get('userId');
+    const { familyState, updateFamilyMember, addDevice, removeDevice, addMemoryEvent, isLoaded } = useFamilyData();
+    const familyMembers = Object.values(familyState.members);
+    const router = useRouter();
+    
+    const [editingMember, setEditingMember] = useState<Partial<FamilyMember> | null>(null);
+    const [activeTab, setActiveTab] = useState('identity');
+    const [isSaving, setIsSaving] = useState(false);
+    
+    const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
+    const [biometricEnrollmentType, setBiometricEnrollmentType] = useState<'face' | 'voice' | ''>('');
+    
+    const mascotRef = useRef(null);
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const [isThinking, setIsThinking] = useState(false);
+    
+    const currentUser = useMemo(() => {
+        if (!isLoaded || familyMembers.length === 0) return null;
+        return familyMembers.find(m => m.id === userId) || familyMembers[0] || null;
+    }, [userId, familyMembers, isLoaded]);
+
+    useEffect(() => {
+        if (currentUser) {
+            setEditingMember(currentUser);
+        }
+    }, [currentUser]);
+
+    const realAge = useMemo(() => {
+        if (!editingMember || !editingMember.dob) return 0;
+        return new Date().getFullYear() - new Date(editingMember.dob).getFullYear();
+    }, [editingMember]);
+
+    const securityZone = realAge < 16 ? 'Youth Safe Zone' : 'Adult Workspace';
+
+    const avatarSeed = useMemo(() => {
+        if (!editingMember) return 'default';
+        let seed = editingMember.name || 'Sovereign';
+        if (editingMember.presentation === 'feminine') seed += "&top=longHair";
+        else seed += "&top=shortFlat";
+        if (editingMember.hasFacialHair && realAge >= 16) seed += "&facialHairProbability=100&facialHair=beardLight";
+        else seed += "&facialHairProbability=0";
+        seed += "&mouth=smile";
+        return seed;
+    }, [editingMember, realAge]);
+
+
+    const handleSave = async () => {
+        if (!currentUser || !editingMember) return;
+        setIsSaving(true);
+        await updateFamilyMember(currentUser.id, editingMember);
+        addMemoryEvent({ level: 'SYSTEM', detail: `User ${currentUser.name} synced their identity profile.`, userId: currentUser.id});
+        toast({ title: "Profile Synced", description: "Your identity settings have been saved to your Pebble." });
+        setTimeout(() => setIsSaving(false), 1500);
+    };
+  
+    const handleBiometricEnrollmentComplete = useCallback(async (type: 'face' | 'voice') => {
+        if (!editingMember) return;
+        const fieldName = `${type}IdStatus` as const;
+        const updatedData = { ...editingMember, [fieldName]: 'Completed' as const };
+        setEditingMember(updatedData);
+        await updateFamilyMember(editingMember.id!, updatedData);
+        addMemoryEvent({ level: 'SYSTEM', detail: `${type.charAt(0).toUpperCase() + type.slice(1)} ID enrolled for ${editingMember.name}.`, userId: editingMember.id! });
+        toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} ID Enrolled`, description: "Biometric anchor has been established."});
+    }, [editingMember, updateFamilyMember, toast, addMemoryEvent]);
+  
+    const handleTestVoice = async (voice: string) => {
+        await simpleSpeak(`This is a test of the ${voice} voice model.`, { voice });
+    };
+
+    const eyeTransform = useMemo(() => {
+        if (!mascotRef.current) return {};
+        const rect = mascotRef.current.getBoundingClientRect();
+        const mascotX = rect.left + rect.width / 2;
+        const mascotY = rect.top + rect.height / 2;
+        const dx = mousePos.x - mascotX;
+        const dy = mousePos.y - mascotY;
+        const angle = Math.atan2(dy, dx);
+        const dist = Math.min(4, Math.sqrt(dx*dx + dy*dy) / 100);
+        return { transform: `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)` };
+    }, [mousePos]);
+
+    if (!isLoaded || !currentUser || !editingMember) {
+        return <div className="h-full w-full flex items-center justify-center text-slate-500"><Loader2 className="animate-spin mr-2" /> Loading Profile...</div>;
+    }
+    
+    const targetUrl = currentUser.osLink ? `${currentUser.osLink}/${currentUser.id}?sessionId=${searchParams.get('sessionId')}` : '#';
+
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'identity':
+                return (
+                     <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
+                        <div className="space-y-4">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">TrueOath Biometrics</h4>
+                            <BiometricButton icon={Camera} label="Enroll Face ID" status={editingMember.faceIdStatus || 'Pending'} onClick={() => { setBiometricEnrollmentType('face'); setIsBiometricModalOpen(true); }} disabled={false} />
+                            <BiometricButton icon={Mic} label="Register Voice ID" status={editingMember.voiceIdStatus || 'Pending'} onClick={() => { setBiometricEnrollmentType('voice'); setIsBiometricModalOpen(true); }} disabled={false} />
+                        </div>
+                         <div className="space-y-4 pt-6 border-t border-white/10">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Presentation</h4>
+                            <div className="grid grid-cols-3 gap-2">
+                                {['masculine', 'feminine', 'neutral'].map(p => (
+                                    <button key={p} onClick={() => setEditingMember(prev => ({...prev, presentation: p}))} className={cn("p-2 rounded-lg text-xs font-bold border-2", editingMember.presentation === p ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 bg-slate-800/50')}>
+                                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-4 pt-6 border-t border-white/10">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Facial Hair</h4>
+                                <Switch checked={editingMember.hasFacialHair} onCheckedChange={(c) => setEditingMember(prev => ({...prev, hasFacialHair: c}))} disabled={realAge < 16} />
+                            </div>
+                        </div>
+                    </motion.div>
+                );
+            case 'personal-os':
+                 const voices = realAge < 16 ? 
+                    [{id: 'Puck', name: 'Puck (Playful)'}, {id: 'Enif', name: 'Enif (Friendly)'}] : 
+                    [{id: 'Algenib', name: 'Algenib (Calm, Male)'}, {id: 'Gacrux', name: 'Gacrux (Warm, Female)'}];
+                return (
+                    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="text-center flex flex-col items-center justify-center h-full gap-4">
+                        <div ref={mascotRef} className="w-24 h-24">
+                           <Pebble state={isThinking ? 'thinking' : 'idle'} eyeTransform={eyeTransform} />
+                        </div>
+                        <h3 className="text-xl font-black uppercase text-purple-300">Personal OS Hub</h3>
+                        <div className="w-full space-y-4 pt-4">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">TTS Voice (Age-Locked)</h4>
+                            <div className="grid grid-cols-2 gap-2">
+                                {voices.map(v => (
+                                    <button key={v.id} onClick={() => setEditingMember(prev => ({...prev, voiceConfig: { voice: v.id }}))} className={`p-2 rounded-lg text-xs font-bold border-2 ${editingMember.voiceConfig?.voice === v.id ? 'border-purple-500 bg-purple-500/10' : 'border-slate-700 bg-slate-800/50'}`}>
+                                        {v.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <Link href={targetUrl} className="w-full">
+                            <Button className="w-full h-14 text-base font-bold bg-purple-600 hover:bg-purple-500">
+                               Enter {currentUser.type === 'child' ? 'Kids Pebble' : 'Adult Hub'}
+                            </Button>
+                        </Link>
+                         <Link href={'/Family-Shared/clock-setting'} className="w-full">
+                             <Button variant="outline" className="w-full h-12 text-sm">
+                                <Clock className="mr-2"/> Family Clock Sync
+                            </Button>
+                        </Link>
+                    </motion.div>
+                );
+            case 'devices':
+                const DeviceCard = ({ device, onRemove }: { device: Device, onRemove: (id: string) => void }) => {
+                    const icons = { phone: Smartphone, laptop: Laptop, tablet: Tablet, watch: Watch };
+                    const Icon = icons[device.type] || Laptop;
+                    return (
+                        <div className="flex items-center justify-between p-2 pl-3 bg-slate-800 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <Icon size={16}/>
+                                <span className="text-xs font-semibold">{device.name}</span>
+                            </div>
+                            <button onClick={() => onRemove(device.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 size={12}/></button>
+                        </div>
+                    )
+                };
+                return (
+                    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-4">
+                        <h3 className="font-bold text-slate-400 uppercase tracking-widest text-xs">Registered Core Devices</h3>
+                        <p className="text-xs text-slate-500 -mt-2">Each member can register one of each core device type.</p>
+                        <div className="space-y-2">
+                            {(editingMember.devices || []).map(device => <DeviceCard key={device.id} device={device} onRemove={(id) => removeDevice(editingMember.id, id)} />)}
+                             {(editingMember.devices || []).length === 0 && <p className="text-center text-slate-600 text-xs italic py-4">No devices registered.</p>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/10">
+                            <Button onClick={() => addDevice(editingMember.id, {type: 'phone', name: `${editingMember.name?.split(' ')[0]}'s Phone`})} variant="outline" disabled={editingMember.devices?.some(d => d.type === 'phone')}><Smartphone className="mr-2"/> Phone</Button>
+                            <Button onClick={() => addDevice(editingMember.id, {type: 'laptop', name: `${editingMember.name?.split(' ')[0]}'s Laptop`})} variant="outline" disabled={editingMember.devices?.some(d => d.type === 'laptop')}><Laptop className="mr-2"/> Laptop</Button>
+                            <Button onClick={() => addDevice(editingMember.id, {type: 'tablet', name: `${editingMember.name?.split(' ')[0]}'s Tablet`})} variant="outline" disabled={editingMember.devices?.some(d => d.type === 'tablet')}><Tablet className="mr-2"/> Tablet</Button>
+                            <Button onClick={() => addDevice(editingMember.id, {type: 'watch', name: `${editingMember.name?.split(' ')[0]}'s Watch`})} variant="outline" disabled={editingMember.devices?.some(d => d.type === 'watch')}><Watch className="mr-2"/> Watch</Button>
+                        </div>
+                    </motion.div>
+                );
+            default: return null;
+        }
+    };
+    
+    const tabs = [
+        { id: 'identity', label: 'Identity', icon: Fingerprint },
+        { id: 'personal-os', label: 'Personal OS', icon: BrainCircuit },
+        { id: 'devices', label: 'Devices', icon: Layers },
+    ];
+
+    return (
+        <div className="h-full bg-slate-950 flex flex-col font-sans overflow-hidden">
+            <BiometricEnrollmentModal isOpen={isBiometricModalOpen} onClose={() => setIsBiometricModalOpen(false)} type={biometricEnrollmentType as any} onComplete={handleBiometricEnrollmentComplete} />
+            <header className="px-8 py-4 flex items-center justify-between border-b border-white/5 backdrop-blur-3xl bg-slate-950/50 z-50">
+              <div className="flex items-center gap-3">
+                 <div className="p-2.5 bg-blue-600/20 rounded-xl text-blue-500 border border-blue-500/20">
+                   <UserCog size={22} />
+                 </div>
+                 <div>
+                   <h1 className="text-[10px] font-black tracking-[0.5em] uppercase text-white/90">Identity Studio</h1>
+                   <div className={`flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest mt-1 ${realAge < 16 ? 'text-pink-400' : 'text-green-400'}`}>
+                     <ShieldCheck size={10} /> {securityZone}
+                   </div>
+                 </div>
+              </div>
+              <Button onClick={handleSave} disabled={isSaving} className="bg-white text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-500 hover:text-white transition-all shadow-xl active:scale-95">
+                 {isSaving ? <Loader2 className="animate-spin" /> : 'Sync to Pebble'}
+               </Button>
+            </header>
+            <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                <section className="flex-1 flex flex-col items-center justify-center p-12 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(37,99,235,0.08)_0%,_transparent_70%)]" />
+                    <div className="relative w-full max-w-lg z-10">
+                        <div className="relative aspect-square">
+                           <motion.div className="relative w-full h-full rounded-[6rem] bg-slate-900/60 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-2xl group">
+                              <Image 
+                                key={avatarSeed}
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`}
+                                width={512}
+                                height={512} 
+                                className="w-full h-full object-cover transition-all duration-700"
+                                alt="Living Identity"
+                                priority
+                              />
+                           </motion.div>
+                        </div>
+                    </div>
+                </section>
+
+                <aside className="w-full md:w-[480px] bg-slate-900/40 backdrop-blur-3xl border-l border-white/5 flex flex-col z-20">
+                    <div className="grid grid-cols-3 border-b border-white/5">
+                        {tabs.map(tab => (
+                          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={cn("flex flex-col items-center gap-2 py-6 transition-all relative group", activeTab === tab.id ? "text-white bg-white/5" : "text-slate-500 hover:text-slate-300")}>
+                            <tab.icon size={18} className={cn("transition-transform group-hover:scale-110", activeTab === tab.id && "text-blue-500")} />
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">{tab.label}</span>
+                            {activeTab === tab.id && <motion.div layoutId="tabLine-character-studio" className="absolute bottom-0 inset-x-0 h-0.5 bg-blue-500" />}
+                          </button>
+                        ))}
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-8 sm:p-12">
+                        <AnimatePresence mode="wait">{renderTabContent()}</AnimatePresence>
+                    </div>
+                </aside>
+            </main>
+        </div>
+    );
+};
+
+const App = (props) => (
+    <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+        <FamilyDataProvider>
+            <AppContent {...props} />
+        </FamilyDataProvider>
+    </Suspense>
+);
+
+export default App;
