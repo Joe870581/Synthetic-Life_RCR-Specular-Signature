@@ -1,0 +1,64 @@
+
+'use client';
+
+import React from 'react';
+import { Zap, Package, GitBranch, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+export default function V2KitPage() {
+    return (
+        <div className="min-h-screen bg-slate-950 text-white p-8 font-sans">
+            <div className="max-w-4xl mx-auto">
+                <header className="text-center mb-12">
+                    <div className="inline-block p-4 bg-slate-800 rounded-2xl border border-purple-500/50 mb-4">
+                        <Package size={40} className="text-purple-400" />
+                    </div>
+                    <h1 className="text-5xl font-black italic tracking-tighter">V2 Pebble Bridge Kit</h1>
+                    <p className="text-lg text-slate-400 mt-2">Unlock the full power of Sovereign Self-Charging.</p>
+                </header>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-8">
+                    <div>
+                        <h2 className="text-2xl font-bold text-purple-300">Plug-and-Play Installation</h2>
+                        <p className="text-slate-400 mt-2">This kit is designed for a simple, 3-step setup process. No coding or soldering required.</p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-8 text-center">
+                        <div className="space-y-3">
+                            <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-3xl font-black text-purple-400 border-4 border-slate-700">1</div>
+                            <h3 className="font-bold">Connect to Power</h3>
+                            <p className="text-sm text-slate-500">Plug the included USB-C cable into the Pebble Bridge and any standard wall adapter.</p>
+                        </div>
+                         <div className="space-y-3">
+                            <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-3xl font-black text-purple-400 border-4 border-slate-700">2</div>
+                            <h3 className="font-bold">Connect to Wi-Fi</h3>
+                            <p className="text-sm text-slate-500">Use your phone to connect the Bridge to your home Wi-Fi network. It will automatically link to your Sovereign OS account.</p>
+                        </div>
+                         <div className="space-y-3">
+                            <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-3xl font-black text-purple-400 border-4 border-slate-700">3</div>
+                            <h3 className="font-bold">Place Your Charger</h3>
+                            <p className="text-sm text-slate-500">Place your existing Qi or MagSafe charger on top of the Bridge. That's it. Your setup is complete.</p>
+                        </div>
+                    </div>
+                    
+                    <div className="pt-8 border-t border-slate-800">
+                        <h3 className="text-lg font-semibold mb-4 text-center">Technical Specifications</h3>
+                         <div className="grid grid-cols-2 gap-4 text-sm font-mono">
+                            <div className="p-4 bg-black/30 rounded-lg"><span className="text-slate-500">Controller:</span> ESP32-S3</div>
+                            <div className="p-4 bg-black/30 rounded-lg"><span className="text-slate-500">Connectivity:</span> Wi-Fi 2.4GHz, BLE 5.0</div>
+                            <div className="p-4 bg-black/30 rounded-lg"><span className="text-slate-500">Power Relay:</span> 5V-12V, 3A Max</div>
+                            <div className="p-4 bg-black/30 rounded-lg"><span className="text-slate-500">Firmware:</span> SovereignGuard v2.1</div>
+                         </div>
+                    </div>
+                </div>
+
+                <div className="text-center mt-12">
+                     <Button size="lg" className="bg-purple-600 hover:bg-purple-500">
+                         <Download className="mr-2"/> Download Firmware
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
