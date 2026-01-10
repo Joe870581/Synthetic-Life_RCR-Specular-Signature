@@ -1,0 +1,75 @@
+
+'use client';
+
+import React from 'react';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+
+interface GuardianSettingsPanelProps {
+    settings: {
+        isEnabled: boolean;
+        cooldown: number;
+        quietHours: {
+            enabled: boolean;
+            start: number;
+            end: number;
+        };
+    };
+    onUpdate: (key: string, value: any) => void;
+}
+
+export default function GuardianSettingsPanel({ settings, onUpdate }: GuardianSettingsPanelProps) {
+  const { isEnabled, cooldown, quietHours } = settings;
+
+  return (
+    <div className="space-y-6">
+      <h3 className="font-black text-white text-lg text-green-400">Guardian AI Settings</h3>
+      
+      <div className="flex justify-between items-center p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+        <label htmlFor="ai-enabled" className="font-bold text-slate-300">Enable Proactive AI</label>
+        <Switch 
+            id="ai-enabled" 
+            checked={isEnabled} 
+            onCheckedChange={(checked) => onUpdate('isEnabled', checked)} 
+        />
+      </div>
+
+      <div className="space-y-3 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+        <label className="text-sm font-bold text-slate-300">Heartbeat Frequency</label>
+        <p className="text-xs text-slate-400 -mt-1">How often the AI checks for things to say.</p>
+        <div className="flex items-center gap-4">
+            <Slider 
+                value={[cooldown / 1000]} 
+                min={5} max={60} step={5} 
+                onValueChange={(v) => onUpdate('cooldown', v[0] * 1000)}
+                disabled={!isEnabled}
+            />
+            <span className="text-sm font-mono w-16 text-center">{cooldown / 1000}s</span>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+        <div className="flex items-center justify-between">
+            <label htmlFor="quiet-hours-enabled" className="font-bold text-slate-300">Quiet Hours</label>
+            <Switch 
+                id="quiet-hours-enabled" 
+                checked={quietHours.enabled} 
+                onCheckedChange={(checked) => onUpdate('quietHours', { ...quietHours, enabled: checked })} 
+            />
+        </div>
+        <div className="flex justify-between gap-4 text-xs">
+          <div>
+            <label>Start (24h)</label>
+            <Slider value={[quietHours.start]} min={0} max={23} onValueChange={v => onUpdate('quietHours', {...quietHours, start: v[0]})} disabled={!quietHours.enabled} />
+            <p className="text-center font-mono mt-1">{quietHours.start}:00</p>
+          </div>
+          <div>
+            <label>End (24h)</label>
+            <Slider value={[quietHours.end]} min={0} max={23} onValueChange={v => onUpdate('quietHours', {...quietHours, end: v[0]})} disabled={!quietHours.enabled} />
+            <p className="text-center font-mono mt-1">{quietHours.end}:00</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
