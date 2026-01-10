@@ -1,0 +1,151 @@
+
+'use client';
+
+import React from 'react';
+import { 
+    Users, Shield, KeyRound, Database, GitBranch, Share2, Server, ArrowDown, ArrowRight, Laptop, GitCommit, CheckCircle, Workflow
+} from 'lucide-react';
+
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
+// --- Main Container ---
+const Section = ({ children, className = '' }) => (
+    <div className={cn("bg-slate-800/40 border border-slate-700/50 rounded-2xl shadow-2xl p-8", className)}>
+        {children}
+    </div>
+);
+
+const SectionTitle = ({ children, icon: Icon, className = '' }) => (
+    <h3 className={cn("text-2xl font-black text-slate-300 uppercase tracking-tight mb-6 flex items-center gap-3", className)}>
+       {Icon && <Icon className="w-6 h-6 text-indigo-400"/>} {children}
+    </h3>
+);
+
+// --- Diagram Elements ---
+const Ring = ({ title, color, children, className = ''}) => (
+    <div className={cn("border-2 rounded-3xl p-6 space-y-4", color, className)}>
+        <h4 className="text-sm font-bold uppercase tracking-widest text-center opacity-80">{title}</h4>
+        {children}
+    </div>
+)
+
+const ProcessBox = ({ children, className = '' }) => (
+    <div className={cn("bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-center", className)}>
+        <div className="font-semibold text-sm tracking-tight text-white">{children}</div>
+    </div>
+);
+
+const IconBox = ({ icon: Icon, label, className = '' }) => (
+    <div className={cn("flex flex-col items-center gap-1.5 text-center", className)}>
+        <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center border border-slate-600">
+            <Icon className="w-6 h-6 text-slate-300" />
+        </div>
+        <p className="text-[10px] font-bold text-slate-400 max-w-[80px] leading-tight">{label}</p>
+    </div>
+);
+
+
+const Arrow = ({ direction = 'down', className = '' }) => {
+    const icons = {
+        down: <ArrowDown className="w-6 h-6" />,
+        right: <ArrowRight className="w-6 h-6" />,
+    };
+    return (
+        <div className={cn("flex items-center justify-center text-slate-600 my-2", className)}>
+            {icons[direction]}
+        </div>
+    );
+};
+
+export default function OrbitalViewPage() {
+    return (
+        <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-8 font-sans">
+            <div className="max-w-7xl mx-auto">
+                <header className="text-center mb-12">
+                    <h1 className="text-4xl font-black tracking-tighter">Sovereign OS Orbital View</h1>
+                    <p className="text-lg text-indigo-400 font-semibold mt-1">Data Flow & Security Layers</p>
+                </header>
+
+                <Section>
+                    <SectionTitle icon={Workflow} title="End-to-End Data Lifecycle" />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                        
+                        {/* OUTER RING */}
+                        <Ring title="Outer Ring: Public Access" color="border-blue-500/30">
+                            <ProcessBox>
+                                <IconBox icon={Users} label="Family Members & Guests" />
+                            </ProcessBox>
+                            <Arrow />
+                            <ProcessBox>
+                                <div className="font-mono text-xs text-blue-300/60 pb-1">/login/registration</div>
+                                User-Facing Applications
+                            </ProcessBox>
+                        </Ring>
+
+                        {/* MID-RING */}
+                        <Ring title="Mid-Ring: Guardian Logic" color="border-yellow-500/30">
+                            <ProcessBox>
+                                <IconBox icon={Shield} label="Quorum Consensus" />
+                            </ProcessBox>
+                            <Arrow />
+                            <ProcessBox>
+                                <div className="font-mono text-xs text-yellow-300/60 pb-1">firestore.rules</div>
+                                Validation & Security Rules
+                            </ProcessBox>
+                             <Arrow />
+                            <ProcessBox>
+                                <IconBox icon={Database} label="Pending Ledger" />
+                            </ProcessBox>
+                        </Ring>
+
+                        {/* INNER CORE */}
+                         <Ring title="Inner Core: The Vault" color="border-red-500/30">
+                            <ProcessBox>
+                                <IconBox icon={GitBranch} label="Server-Side Functions" />
+                            </ProcessBox>
+                            <Arrow />
+                            <ProcessBox>
+                                <div className="font-mono text-xs text-red-300/60 pb-1">Encrypted at Rest</div>
+                                Final Ledger & Bank Tokens
+                            </ProcessBox>
+                            <Arrow />
+                            <ProcessBox>
+                               <IconBox icon={KeyRound} label="Private Keys" />
+                            </ProcessBox>
+                        </Ring>
+
+                    </div>
+                </Section>
+                
+                <div className="text-center font-black text-slate-700 tracking-widest py-10">
+                    S-OS v2.0
+                </div>
+
+                 <Section>
+                    <SectionTitle icon={GitCommit} title="Atomic Commit Flow" />
+                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                        <ProcessBox className="text-center p-4">
+                            <Laptop className="mx-auto w-8 h-8 text-blue-400 mb-2"/>
+                            <p>1. Client initiates action (e.g., bank link, transaction)</p>
+                        </ProcessBox>
+                        <Arrow direction="right" className="hidden md:flex"/>
+                         <ProcessBox className="text-center p-4">
+                            <Server className="mx-auto w-8 h-8 text-yellow-400 mb-2"/>
+                            <p>2. Guardian Quorum validates intent against security rules</p>
+                        </ProcessBox>
+                        <Arrow direction="right" className="hidden md:flex"/>
+                        <ProcessBox className="text-center p-4">
+                             <Database className="mx-auto w-8 h-8 text-green-400 mb-2"/>
+                            <p>3. Valid intent is written to Pending Ledger</p>
+                        </ProcessBox>
+                        <Arrow direction="right" className="hidden md:flex"/>
+                        <ProcessBox className="text-center p-4">
+                            <CheckCircle className="mx-auto w-8 h-8 text-indigo-400 mb-2"/>
+                            <p>4. Server-side function executes and finalizes the transaction</p>
+                        </ProcessBox>
+                     </div>
+                </Section>
+            </div>
+        </div>
+    );
+}
