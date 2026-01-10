@@ -1,0 +1,17 @@
+'use client';
+import { RoleProvider } from '@/contexts/role-context';
+import ChoresPage from '@/app/dashboard/chores/page';
+
+// This new page component simply wraps the existing ChoresPage
+// logic within a RoleProvider to ensure the `useRole` hook functions correctly.
+function FamilyCrmPageInternal() {
+    return <ChoresPage />;
+}
+
+export default function FamilyCrmPage() {
+    return (
+        <RoleProvider>
+            <FamilyCrmPageInternal />
+        </RoleProvider>
+    )
+}
