@@ -1,9 +1,1 @@
-[
-  {
-    "id": "test-123",
-    "email": "viewer@test.com",
-    "role": "Viewer",
-    "status": "invited",
-    "invitedAt": "2026-03-27T22:00:00Z"
-  }
-]
+[]
